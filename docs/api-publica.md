@@ -81,8 +81,8 @@ OpenAPI 3.1 (`@nestjs/swagger`) em `/api/public/docs`; seção "API" no painel p
 ## Plano de entrega
 
 1. **Fase 1 — núcleo (FEITA, exceto OpenAPI e tags/exclusão de contato):** `ApiKeyGuard` + escopos, criar/revogar chaves, `/me`, contatos, conversas, `POST /messages`, rate limit, OpenAPI.
-2. **Fase 2 — eventos (FEITA; `message.status` e `email.received` pendentes):** endpoints de webhook, fila, HMAC, retentativas, log de entregas.
-3. **Fase 3 — e-mail e agenda:** rotas `email/*` e `calendar/*` sobre `google.service`, escopos sensíveis, auditoria reforçada.
+2. **Fase 2 — eventos (FEITA; `message.status` pendente):** endpoints de webhook, fila, HMAC, retentativas, log de entregas.
+3. **Fase 3 — e-mail e agenda (FEITA):** rotas `email/*` e `calendar/*` sobre `google.service`, escopos sensíveis, auditoria reforçada.
 4. **Fase 4 — painel e endurecimento:** tela de chaves/webhooks, idempotência, cotas por plano, testes de carga.
 5. **Depois:** SDKs Node/Python, OAuth2 para apps de terceiros, `/v2` se preciso.
 
@@ -102,3 +102,13 @@ OpenAPI 3.1 (`@nestjs/swagger`) em `/api/public/docs`; seção "API" no painel p
 - Fila **no banco** (tabela `WebhookDelivery`, verificada a cada 5 s), sem depender de Redis; sobrevive a reinícios.
 - Retentativas após 1 min, 5 min, 30 min, 2 h e 12 h; depois a entrega fica `FAILED`. Após 10 entregas falhas seguidas o endpoint é desativado (reativa ao reenviar uma entrega).
 - Proteção SSRF: só `https` (em produção), sem credenciais na URL, bloqueio de endereços internos (10.x, 127.x, 192.168.x, 169.254.x, IPv6 local), sem seguir redirecionamentos.
+
+## E-mail e agenda — como ficou (Fase 3)
+
+- Escopos `email:read`, `email:send`, `calendar:read`, `calendar:write`. **Nenhum vem por padrão**: o cliente escolhe ao criar a chave.
+- Rotas: `GET /email/accounts`, `GET /email/messages?account=&q=&limit=`, `GET /email/messages/:id`, `POST /email/send`, `GET /calendar/events?from=&to=&account=`, `POST /calendar/events`. Sem rotas de exclusão.
+- O parâmetro `account` escolhe uma das contas Google conectadas; sem ele, usa a primeira.
+- Proteções: e-mail com um único destinatário e sem quebras de linha no assunto (evita injeção de cabeçalhos), teto de envios por hora por chave (`API_EMAIL_SEND_PER_HOUR`, padrão 30), intervalo máximo de 92 dias na agenda, até 20 convidados por evento.
+- Auditoria: cada chamada registra chave, workspace, ação e conta no log (`[AUDIT-API]`), sem o conteúdo dos e-mails.
+- Erros do Google viram mensagens genéricas (404, 400 ou 502), sem vazar detalhes internos.
+- Novo evento de webhook `email.received` (só metadados: conta, id, remetente, assunto), emitido pelo vigia de e-mails.

@@ -11,6 +11,7 @@ export const WEBHOOK_EVENTS = [
   "conversation.status_changed",
   "contact.created",
   "contact.updated",
+  "email.received",
   "webhook.test",
 ] as const;
 

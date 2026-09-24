@@ -32,7 +32,7 @@
 </head>
 <body>
 <div class="wrap">
-  <span class="badge">Em andamento · Fases 1 e 2 feitas, restante pendente</span>
+  <span class="badge">Em andamento · Fases 1 a 3 feitas, restante pendente</span>
   <h1>API pública do openclaw</h1>
   <p>Projeto para clientes integrarem CRM, site, BI, e-mails, agenda e WhatsApp ao openclaw. Fonte: <code>docs/api-publica.md</code>.</p>
 
@@ -83,8 +83,8 @@ openclaw ─► fila (Bull) ─► entregador de webhooks ─► URL do cliente 
   <h2>Plano de entrega</h2>
   <ol class="plan">
     <li><b>Núcleo (feito, falta OpenAPI):</b> <span> ApiKeyGuard + escopos, chaves, /me, contatos, conversas, POST /messages, rate limit, OpenAPI.</span></li>
-    <li><b>Eventos (feito):</b> <span>endpoints de webhook, fila, HMAC, retentativas, log. Pendentes: <code>message.status</code> e <code>email.received</code>.</span></li>
-    <li><b>E-mail e agenda:</b> <span>rotas <code>email/*</code> e <code>calendar/*</code> sobre o serviço Google, com auditoria reforçada.</span></li>
+    <li><b>Eventos (feito):</b> <span>endpoints de webhook, fila, HMAC, retentativas, log. Pendente: <code>message.status</code>.</span></li>
+    <li><b>E-mail e agenda (feito):</b> <span>rotas <code>email/*</code> e <code>calendar/*</code> sobre o serviço Google, com auditoria reforçada.</span></li>
     <li><b>Painel e endurecimento:</b> <span>tela de chaves e webhooks, idempotência, cotas por plano, testes de carga.</span></li>
     <li><b>Depois:</b> <span>SDKs Node/Python, OAuth2 para apps de terceiros.</span></li>
   </ol>

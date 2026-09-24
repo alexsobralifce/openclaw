@@ -1,8 +1,9 @@
 import { Body, Controller, Delete, Get, Param, Patch, Post, Put, Query, Req, UseFilters, UseGuards } from "@nestjs/common";
 import { ApiKeyGuard } from "./api-key.guard";
 import { PublicApiService } from "./public-api.service";
+import { GooglePublicService } from "./google-public.service";
 import { WebhooksService } from "../webhooks/webhooks.service";
-import { ContactDto, CreateWebhookDto, ListQuery, SendMessageDto, UpdateContactDto, UpdateConversationDto, UpsertContactDto } from "./dto";
+import { CalendarListQuery, ContactDto, CreateEventDto, CreateWebhookDto, EmailAccountQuery, EmailListQuery, SendEmailDto, ListQuery, SendMessageDto, UpdateContactDto, UpdateConversationDto, UpsertContactDto } from "./dto";
 import { RequireScopes } from "./scopes";
 import { PublicExceptionFilter } from "./public-exception.filter";
 
@@ -12,6 +13,7 @@ export class PublicApiController {
   constructor(
     private api: PublicApiService,
     private webhooks: WebhooksService,
+    private google: GooglePublicService,
   ) {}
 
   @Get("health")
@@ -81,6 +83,46 @@ export class PublicApiController {
   @Get("conversations/:id/messages")
   listMessages(@Req() req: any, @Param("id") id: string, @Query() q: ListQuery) {
     return this.api.listMessages(req.apiKey.workspaceId, id, q);
+  }
+
+  // ─── E-mail (Gmail do cliente) ───────────────────────────────
+
+  @UseGuards(ApiKeyGuard) @RequireScopes("email:read")
+  @Get("email/accounts")
+  emailAccounts(@Req() req: any) {
+    return this.google.accounts(req.apiKey.workspaceId);
+  }
+
+  @UseGuards(ApiKeyGuard) @RequireScopes("email:read")
+  @Get("email/messages")
+  listEmails(@Req() req: any, @Query() q: EmailListQuery) {
+    return this.google.listEmails(req.apiKey.id, req.apiKey.workspaceId, q);
+  }
+
+  @UseGuards(ApiKeyGuard) @RequireScopes("email:read")
+  @Get("email/messages/:id")
+  readEmail(@Req() req: any, @Param("id") id: string, @Query() q: EmailAccountQuery) {
+    return this.google.readEmail(req.apiKey.id, req.apiKey.workspaceId, id, q.account);
+  }
+
+  @UseGuards(ApiKeyGuard) @RequireScopes("email:send")
+  @Post("email/send")
+  sendEmail(@Req() req: any, @Body() body: SendEmailDto) {
+    return this.google.sendEmail(req.apiKey.id, req.apiKey.workspaceId, body);
+  }
+
+  // ─── Agenda (Google Agenda do cliente) ───────────────────────
+
+  @UseGuards(ApiKeyGuard) @RequireScopes("calendar:read")
+  @Get("calendar/events")
+  listEvents(@Req() req: any, @Query() q: CalendarListQuery) {
+    return this.google.listEvents(req.apiKey.id, req.apiKey.workspaceId, q);
+  }
+
+  @UseGuards(ApiKeyGuard) @RequireScopes("calendar:write")
+  @Post("calendar/events")
+  createEvent(@Req() req: any, @Body() body: CreateEventDto) {
+    return this.google.createEvent(req.apiKey.id, req.apiKey.workspaceId, body);
   }
 
   // ─── Webhooks de saída ───────────────────────────────────────

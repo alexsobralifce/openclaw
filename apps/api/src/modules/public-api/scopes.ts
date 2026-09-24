@@ -7,6 +7,10 @@ export const SCOPES = [
   "conversations:write",
   "messages:read",
   "messages:send",
+  "email:read",
+  "email:send",
+  "calendar:read",
+  "calendar:write",
   "webhooks:manage",
 ] as const;
 export type Scope = (typeof SCOPES)[number];

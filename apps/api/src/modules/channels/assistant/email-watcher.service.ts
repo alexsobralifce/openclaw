@@ -3,6 +3,7 @@ import { prisma } from "@openclaw/database";
 import { GoogleService } from "../../integrations/google/google.service";
 import { AssistantService } from "./assistant.service";
 import { MenuService } from "./menu.service";
+import { WebhooksService } from "../../webhooks/webhooks.service";
 
 const INTERVAL_MS = Number(process.env.EMAIL_POLL_SECONDS || 60) * 1000;
 
@@ -16,6 +17,7 @@ export class EmailWatcherService implements OnModuleInit, OnModuleDestroy {
     private google: GoogleService,
     private assistant: AssistantService,
     private menu: MenuService,
+    private webhooks: WebhooksService,
   ) {}
 
   onModuleInit() {
@@ -69,6 +71,9 @@ export class EmailWatcherService implements OnModuleInit, OnModuleDestroy {
       const newest = Math.max(...news.map((m: any) => m.internalDate));
       updates.push({ id: ch.id, config: { ...cfg, lastSeenMs: newest } });
     }
+
+    // Metadados (sem o corpo) para clientes que assinam email.received
+    for (const m of fresh) this.webhooks.emit(workspaceId, "email.received", { account: m.account, id: m.id, from: m.de, subject: m.assunto });
 
     if (fresh.length) {
       const wa = await prisma.channel.findFirst({ where: { workspaceId, type: "WHATSAPP", isActive: true } });
