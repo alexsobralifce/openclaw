@@ -118,6 +118,20 @@ export function Sidebar() {
           </svg>
           Guia de comandos
         </a>
+        <a
+          href="/api-publica.html"
+          target="_blank"
+          rel="noopener"
+          className="w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm text-gray-500 hover:text-teal-400 hover:bg-gray-800 transition-colors"
+        >
+          <svg width="16" height="16" fill="none" viewBox="0 0 24 24">
+            <path d="M16 18l6-6-6-6M8 6l-6 6 6 6" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
+          </svg>
+          API pública
+          <span className="ml-auto rounded-full bg-amber-500/15 px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wide text-amber-400">
+            Pendente
+          </span>
+        </a>
         <button
           onClick={logout}
           className="w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm text-gray-500 hover:text-red-400 hover:bg-red-500/10 transition-colors"
