@@ -1,6 +1,7 @@
 # API pública do openclaw
 
-> **Status: PENDENTE** — projeto definido, implementação não iniciada.
+> **Status: EM ANDAMENTO** — Fase 1 (núcleo) implementada; fases 2 a 4 pendentes.
+> Antes de usar: rodar `pnpm db:push` (novos campos em `ApiKey`).
 > Página no painel: `/api-publica.html` (menu lateral › *API pública*).
 
 ## Decisões já tomadas
@@ -79,7 +80,7 @@ OpenAPI 3.1 (`@nestjs/swagger`) em `/api/public/docs`; seção "API" no painel p
 
 ## Plano de entrega
 
-1. **Fase 1 — núcleo (~1 semana):** `ApiKeyGuard` + escopos, criar/revogar chaves, `/me`, contatos, conversas, `POST /messages`, rate limit, OpenAPI.
+1. **Fase 1 — núcleo (FEITA, exceto OpenAPI e tags/exclusão de contato):** `ApiKeyGuard` + escopos, criar/revogar chaves, `/me`, contatos, conversas, `POST /messages`, rate limit, OpenAPI.
 2. **Fase 2 — eventos (~1 semana):** endpoints de webhook, fila, HMAC, retentativas, log de entregas.
 3. **Fase 3 — e-mail e agenda:** rotas `email/*` e `calendar/*` sobre `google.service`, escopos sensíveis, auditoria reforçada.
 4. **Fase 4 — painel e endurecimento:** tela de chaves/webhooks, idempotência, cotas por plano, testes de carga.

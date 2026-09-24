@@ -1,5 +1,5 @@
 import { NestFactory } from "@nestjs/core";
-import { ValidationPipe } from "@nestjs/common";
+import { RequestMethod, ValidationPipe } from "@nestjs/common";
 import { AppModule } from "./app.module";
 
 function assertProductionConfig() {
@@ -13,7 +13,8 @@ async function bootstrap() {
   assertProductionConfig();
   const app = await NestFactory.create(AppModule);
 
-  app.setGlobalPrefix("api/v1");
+  // A API pública tem versionamento e prefixo próprios (/api/public/v1)
+  app.setGlobalPrefix("api/v1", { exclude: [{ path: "api/public/v1/(.*)", method: RequestMethod.ALL }] });
   app.useGlobalPipes(new ValidationPipe({ whitelist: true, transform: true }));
   app.enableCors({
     origin: process.env.WEB_URL || "http://localhost:3000",

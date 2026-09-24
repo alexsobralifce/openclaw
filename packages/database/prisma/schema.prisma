@@ -225,6 +225,11 @@ model ApiKey {
   id        String    @id @default(cuid())
   name      String
   keyHash   String    @unique
+  prefix    String    @default("")
+  scopes    String[]  @default([])
+  rateLimit Int       @default(60)
+  expiresAt DateTime?
+  revokedAt DateTime?
   lastUsed  DateTime?
   createdAt DateTime  @default(now())
 

@@ -6,6 +6,7 @@ import { InboxModule } from "./modules/inbox/inbox.module";
 import { ContactsModule } from "./modules/contacts/contacts.module";
 import { ChannelsModule } from "./modules/channels/channels.module";
 import { GoogleModule } from "./modules/integrations/google/google.module";
+import { PublicApiModule } from "./modules/public-api/public-api.module";
 import { AutomationsModule } from "./modules/automations/automations.module";
 
 @Module({
@@ -18,6 +19,7 @@ import { AutomationsModule } from "./modules/automations/automations.module";
     ChannelsModule,
     AutomationsModule,
     GoogleModule,
+    PublicApiModule,
   ],
 })
 export class AppModule {}

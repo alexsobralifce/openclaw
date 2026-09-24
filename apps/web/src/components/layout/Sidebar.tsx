@@ -129,7 +129,7 @@ export function Sidebar() {
           </svg>
           API pública
           <span className="ml-auto rounded-full bg-amber-500/15 px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wide text-amber-400">
-            Pendente
+            Em andamento
           </span>
         </a>
         <button
