@@ -149,6 +149,9 @@ export class ChannelsController {
       // Mensagens do dono (texto ou áudio) viram comandos do assistente
       if (this.assistant.isOwnerJid(data.key?.remoteJid) || this.assistant.isOwnerJid(data.key?.remoteJidAlt) || this.assistant.isOwnerJid(data.key?.senderPn)) {
         if (this.assistant.isOwnEcho(data.key?.id)) return { ok: true };
+        // Mensagens enviadas pelo número conectado para o dono (respostas do assistente, áudios) não são comandos,
+        // a não ser que o dono use o próprio número conectado ("mensagem para si mesmo").
+        if (data.key?.fromMe && !this.assistant.isOwnerJid(body?.sender)) return { ok: true };
         let text: string = data.message?.conversation || data.message?.extendedTextMessage?.text || "";
         let heard = false;
         if (!text && data.message?.audioMessage) {

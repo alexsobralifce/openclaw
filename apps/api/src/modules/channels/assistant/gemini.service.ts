@@ -27,20 +27,29 @@ export class GeminiService {
     return !!process.env.GEMINI_API_KEY;
   }
 
-  private async call(model: string, body: object): Promise<any> {
-    const res = await fetch(`${BASE}/${model}:generateContent`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json", "x-goog-api-key": process.env.GEMINI_API_KEY as string },
-      body: JSON.stringify(body),
-    });
-    if (!res.ok) throw new Error(`Gemini ${res.status}: ${(await res.text()).slice(0, 250)}`);
-    return res.json();
+  private async call(model: string, body: object, timeoutMs = 30_000, retries = 2): Promise<any> {
+    let lastErr = "";
+    for (let attempt = 0; attempt <= retries; attempt++) {
+      // Esta chave só é aceita na URL; nunca registrar a URL em logs.
+      const res = await fetch(`${BASE}/${model}:generateContent?key=${process.env.GEMINI_API_KEY}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+        signal: AbortSignal.timeout(timeoutMs),
+      });
+      if (res.ok) return res.json();
+      lastErr = `Gemini ${res.status}: ${(await res.text()).slice(0, 200)}`;
+      // 503/429: alta demanda, tenta de novo
+      if (res.status !== 503 && res.status !== 429) break;
+      await new Promise((r) => setTimeout(r, 800 * (attempt + 1)));
+    }
+    throw new Error(lastErr);
   }
 
   /** O modelo recebe o áudio diretamente e devolve a transcrição. */
   async transcribe(audio: Buffer, mimeType: string): Promise<string> {
     const mime = mimeType.split(";")[0].trim() || "audio/ogg";
-    const data = await this.call(process.env.GEMINI_MODEL || "gemini-2.5-flash", {
+    const body = {
       contents: [
         {
           parts: [
@@ -49,22 +58,37 @@ export class GeminiService {
           ],
         },
       ],
-    });
-    return (data.candidates?.[0]?.content?.parts ?? []).map((p: any) => p.text ?? "").join("").trim();
+    };
+    // Resposta rápida ou nada: se o Gemini demorar, quem chamou usa outro serviço (Whisper).
+    const models = [process.env.GEMINI_MODEL || "gemini-3.8-flash", ...(process.env.GEMINI_FALLBACK_MODEL ? [process.env.GEMINI_FALLBACK_MODEL] : [])];
+    let lastErr: any;
+    for (const model of models) {
+      try {
+        const data = await this.call(model, body, 15_000, 0);
+        const text = (data.candidates?.[0]?.content?.parts ?? []).map((p: any) => p.text ?? "").join("").trim();
+        if (text) return text;
+      } catch (e) {
+        lastErr = e;
+      }
+    }
+    throw lastErr ?? new Error("Gemini não devolveu texto");
   }
 
   /** Converte texto em voz (WAV). */
   async speak(text: string): Promise<Buffer> {
-    const data = await this.call(process.env.GEMINI_TTS_MODEL || "gemini-2.5-flash-preview-tts", {
+    const data = await this.call(process.env.GEMINI_TTS_MODEL || "gemini-3.8-flash-tts", {
       contents: [{ parts: [{ text }] }],
       generationConfig: {
         responseModalities: ["AUDIO"],
         speechConfig: { voiceConfig: { prebuiltVoiceConfig: { voiceName: process.env.GEMINI_VOICE || "Kore" } } },
       },
-    });
-    const b64 = data.candidates?.[0]?.content?.parts?.find((p: any) => p.inlineData || p.inline_data);
-    const raw = b64?.inlineData?.data ?? b64?.inline_data?.data;
-    if (!raw) throw new Error("Gemini não devolveu áudio");
-    return pcmToWav(Buffer.from(raw, "base64"));
+    }, 20_000, 1);
+    const part = data.candidates?.[0]?.content?.parts?.find((p: any) => p.inlineData || p.inline_data);
+    const inline = part?.inlineData ?? part?.inline_data;
+    if (!inline?.data) throw new Error("Gemini não devolveu áudio");
+    const bytes = Buffer.from(inline.data, "base64");
+    const mime: string = (inline.mimeType ?? inline.mime_type ?? "").toLowerCase();
+    // Alguns modelos já devolvem WAV; outros, PCM cru de 24 kHz.
+    return mime.includes("wav") || bytes.subarray(0, 4).toString() === "RIFF" ? bytes : pcmToWav(bytes);
   }
 }
