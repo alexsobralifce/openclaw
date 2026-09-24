@@ -38,6 +38,8 @@ const padTo = (t: string, n: number) => short(t, n).padEnd(n);
 
 const short = (s: string, n: number) => (s.length > n ? s.slice(0, n - 1) + "…" : s);
 const personName = (from: string) => (from || "").replace(/<.*>/, "").replace(/["']/g, "").trim() || from;
+/** Nome amigável da conta: Gmail pessoal vira "Pessoal"; a outra (institucional) vira "IFCE". */
+const accountLabel = (acc: string) => (/@gmail\.com$/i.test(acc) ? "Pessoal" : /ifce/i.test(acc) ? "IFCE" : acc.split("@")[0]);
 const emailOf = (from: string) => /<([^>]+)>/.exec(from)?.[1] ?? from;
 const dateStr = (offsetDays: number) =>
   new Date(Date.now() + offsetDays * 864e5).toLocaleDateString("sv-SE", { timeZone: TZ });
@@ -75,6 +77,7 @@ export class MenuService {
       if (/(sair do modo (direcao|carro)|desligar (o )?modo (direcao|carro)|desativar (o )?modo (direcao|carro)|parei de dirigir|^cheguei)/.test(flat)) return await this.drivingSet(workspaceId, false);
       if (/(modo carro|android auto)/.test(flat)) return await this.carSet(workspaceId);
       if (/(modo direcao|vou dirigir|estou dirigindo|to dirigindo)/.test(flat)) return await this.drivingSet(workspaceId, true);
+      if (/^(ler |ver |abrir |checar )?(os |meus )?(novos )?e-?mails?( novos)?$/.test(flat)) return await this.emailsEntry(workspaceId);
       if (GREETING.test(text)) return await this.mainMenu(workspaceId, true);
       if (!st) return n !== null ? await this.mainMenu(workspaceId, false) : null;
       return await this.route(workspaceId, st, text, n);
@@ -101,6 +104,13 @@ export class MenuService {
         return n === 0 ? this.mainMenu(ws, false) : null;
 
       // E-mails
+      case "email_account": {
+        if (n === 0) return this.mainMenu(ws, false);
+        const flat = text.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+        const acc = n !== null ? d.accounts[n - 1] : d.accounts.find((a: string) => flat.includes(accountLabel(a).toLowerCase()));
+        if (acc) return this.emailList(ws, acc);
+        return n !== null ? this.invalid() : null;
+      }
       case "emails": {
         if (n === 0) return this.mainMenu(ws, false);
         if (n === null) return null;
@@ -283,9 +293,11 @@ export class MenuService {
 
   private async mainOptions(ws: string) {
     const accounts = await this.google.listAccounts(ws);
-    const options: any[] = accounts.map((account: string) => ({ type: "emails", account }));
-    const labels: { icon: string; label: string; sub?: string }[] = accounts.map((a: string) => ({ icon: "📧", label: "E-mails", sub: a }));
+    const options: any[] = [];
+    const labels: { icon: string; label: string; sub?: string }[] = [];
     if (accounts.length) {
+      options.push(accounts.length === 1 ? { type: "emails", account: accounts[0] } : { type: "emails_pick" });
+      labels.push({ icon: "📧", label: "E-mails", sub: accounts.map(accountLabel).join(" · ") });
       options.push({ type: "agenda" });
       labels.push({ icon: "📅", label: "Google Agenda" });
     }
@@ -316,7 +328,7 @@ export class MenuService {
         head("📩", "Novo e-mail"),
         `👤 *De:* ${personName(m.de)}`,
         `📌 *Assunto:* ${short(m.assunto ?? "(sem assunto)", 80)}`,
-        `📥 *Conta:* ${m.account}`,
+        `📥 *Conta:* ${accountLabel(m.account)}`,
         DIV,
         opts([1, "📖", "Ler"], [2, "🗑️", "Apagar"], [3, "↩️", "Responder"], [4, "🚫", "Spam"]),
       ].join("\n");
@@ -329,7 +341,7 @@ export class MenuService {
   }
 
   private emailCard(n: number, m: any, showAccount = false) {
-    const acc = showAccount && m.account ? `\n     📥 _${m.account.split("@")[0]}_` : "";
+    const acc = showAccount && m.account ? `\n     📥 _${accountLabel(m.account)}_` : "";
     return `${key(n)} 👤 *${short(personName(m.de), 30)}*\n     📌 ${short(m.assunto ?? "(sem assunto)", 55)}${acc}`;
   }
 
@@ -351,6 +363,7 @@ export class MenuService {
 
   private async runAction(ws: string, opt: any) {
     if (opt.type === "emails") return this.emailList(ws, opt.account);
+    if (opt.type === "emails_pick") return this.emailsEntry(ws);
     if (opt.type === "agenda") return this.agendaMenu(ws);
     if (opt.type === "clients") return this.clientList(ws);
     if (opt.type === "memory") return this.memoryList(ws);
@@ -399,12 +412,22 @@ export class MenuService {
 
   // E-mails
 
+  /** Com mais de uma conta, pergunta qual (Pessoal ou IFCE); com uma, abre direto. */
+  private async emailsEntry(ws: string) {
+    const accounts = await this.google.listAccounts(ws);
+    if (accounts.length === 0) return this.noGoogle();
+    if (accounts.length === 1) return this.emailList(ws, accounts[0]);
+    this.set(ws, "email_account", { accounts });
+    const list = accounts.map((a: string, i: number) => `${key(i + 1)} 📥 ${accountLabel(a)}`).join("\n");
+    return [head("📧", "Qual conta?", accounts.map(accountLabel).join(" ou ")), list, opts(BACK), foot("Diga o nome da conta ou o número")].join("\n");
+  }
+
   private async emailList(ws: string, account: string) {
     const items = await this.google.gmailSearch(ws, "is:unread in:inbox", account, 6);
     this.set(ws, "emails", { account, items });
-    if (!items.length) return [head("🎉", "Caixa limpa!", account), "Nenhum e-mail não lido.", DIV, opts(BACK)].join("\n");
+    if (!items.length) return [head("🎉", "Caixa limpa!", accountLabel(account)), "Nenhum e-mail não lido.", DIV, opts(BACK)].join("\n");
     const cards = items.map((m: any, i: number) => this.emailCard(i + 1, m));
-    return [head("📧", "E-mails não lidos", account), cards.join("\n\n"), foot("Responda com o número para abrir"), opts(BACK)].join("\n");
+    return [head("📧", "E-mails não lidos", accountLabel(account)), cards.join("\n\n"), foot("Responda com o número para abrir"), opts(BACK)].join("\n");
   }
 
   private emailActions() {
