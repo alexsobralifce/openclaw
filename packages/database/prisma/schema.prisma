@@ -1,0 +1,247 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ─── MULTI-TENANCY ───────────────────────────────────────────────
+
+model Workspace {
+  id        String   @id @default(cuid())
+  name      String
+  slug      String   @unique
+  plan      Plan     @default(FREE)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  users         WorkspaceMember[]
+  contacts      Contact[]
+  conversations Conversation[]
+  channels      Channel[]
+  automations   Automation[]
+  tags          Tag[]
+  apiKeys       ApiKey[]
+  memories      Memory[]
+}
+
+enum Plan {
+  FREE
+  STARTER
+  GROWTH
+  ENTERPRISE
+}
+
+// ─── USUÁRIOS ────────────────────────────────────────────────────
+
+model User {
+  id           String   @id @default(cuid())
+  email        String   @unique
+  name         String
+  passwordHash String?
+  avatarUrl    String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  workspaces    WorkspaceMember[]
+  messages      Message[]
+  conversations ConversationAssignee[]
+}
+
+model WorkspaceMember {
+  id          String          @id @default(cuid())
+  role        WorkspaceRole   @default(AGENT)
+  createdAt   DateTime        @default(now())
+
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  workspaceId String
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId      String
+
+  @@unique([workspaceId, userId])
+}
+
+enum WorkspaceRole {
+  OWNER
+  ADMIN
+  AGENT
+}
+
+// ─── CRM ─────────────────────────────────────────────────────────
+
+model Contact {
+  id          String   @id @default(cuid())
+  name        String
+  email       String?
+  phone       String?
+  avatarUrl   String?
+  externalId  String?
+  notes       String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  workspaceId String
+
+  conversations Conversation[]
+  tags          ContactTag[]
+
+  @@unique([workspaceId, phone])
+  @@unique([workspaceId, email])
+}
+
+model Tag {
+  id    String @id @default(cuid())
+  name  String
+  color String @default("#6366f1")
+
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  workspaceId String
+
+  contacts ContactTag[]
+
+  @@unique([workspaceId, name])
+}
+
+model ContactTag {
+  contact   Contact @relation(fields: [contactId], references: [id], onDelete: Cascade)
+  contactId String
+  tag       Tag     @relation(fields: [tagId], references: [id], onDelete: Cascade)
+  tagId     String
+
+  @@id([contactId, tagId])
+}
+
+// ─── INBOX / CONVERSAS ───────────────────────────────────────────
+
+model Conversation {
+  id        String             @id @default(cuid())
+  status    ConversationStatus @default(OPEN)
+  subject   String?
+  createdAt DateTime           @default(now())
+  updatedAt DateTime           @updatedAt
+
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  workspaceId String
+  contact     Contact   @relation(fields: [contactId], references: [id])
+  contactId   String
+  channel     Channel   @relation(fields: [channelId], references: [id])
+  channelId   String
+
+  messages  Message[]
+  assignees ConversationAssignee[]
+}
+
+enum ConversationStatus {
+  OPEN
+  PENDING
+  RESOLVED
+  SNOOZED
+}
+
+model ConversationAssignee {
+  conversation   Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  conversationId String
+  user           User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId         String
+
+  @@id([conversationId, userId])
+}
+
+model Message {
+  id          String      @id @default(cuid())
+  body        String
+  type        MessageType @default(TEXT)
+  direction   Direction
+  externalId  String?
+  metadata    Json?
+  createdAt   DateTime    @default(now())
+
+  conversation   Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  conversationId String
+  author         User?        @relation(fields: [authorId], references: [id])
+  authorId       String?
+}
+
+enum MessageType {
+  TEXT
+  IMAGE
+  AUDIO
+  VIDEO
+  FILE
+  TEMPLATE
+  ACTIVITY
+}
+
+enum Direction {
+  INBOUND
+  OUTBOUND
+}
+
+// ─── CANAIS ──────────────────────────────────────────────────────
+
+model Channel {
+  id          String      @id @default(cuid())
+  name        String
+  type        ChannelType
+  config      Json
+  isActive    Boolean     @default(true)
+  createdAt   DateTime    @default(now())
+
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  workspaceId String
+
+  conversations Conversation[]
+}
+
+enum ChannelType {
+  WHATSAPP
+  INSTAGRAM
+  FACEBOOK
+  EMAIL
+  WEBCHAT
+}
+
+// ─── AUTOMAÇÕES ──────────────────────────────────────────────────
+
+model Automation {
+  id        String   @id @default(cuid())
+  name      String
+  trigger   Json
+  actions   Json
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  workspaceId String
+}
+
+// ─── API KEYS ─────────────────────────────────────────────────────
+
+model ApiKey {
+  id        String    @id @default(cuid())
+  name      String
+  keyHash   String    @unique
+  lastUsed  DateTime?
+  createdAt DateTime  @default(now())
+
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  workspaceId String
+}
+
+// ─── MEMÓRIA DO ASSISTENTE ───────────────────────────────────────
+
+model Memory {
+  id          String   @id @default(cuid())
+  content     String
+  kind        String   @default("fact")
+  createdAt   DateTime @default(now())
+
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  workspaceId String
+
+  @@index([workspaceId, createdAt])
+}

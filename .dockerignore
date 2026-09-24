@@ -1,0 +1,12 @@
+node_modules
+**/node_modules
+.git
+.claude
+.turbo
+**/dist
+**/.next
+.env
+.env.*
+!.env.example
+*.log
+switch-claude-account.sh

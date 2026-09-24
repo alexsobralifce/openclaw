@@ -1,0 +1,10 @@
+FROM node:20-slim
+RUN npm i -g pnpm@12.6.0
+WORKDIR /app
+COPY . .
+RUN pnpm install --frozen-lockfile
+ARG NEXT_PUBLIC_API_URL
+ENV NEXT_PUBLIC_API_URL=$NEXT_PUBLIC_API_URL
+RUN pnpm --filter @openclaw/types build && pnpm --filter @openclaw/web build
+ENV NODE_ENV=production
+CMD ["sh", "-c", "cd apps/web && npx next start -p ${PORT:-3000}"]

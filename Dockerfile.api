@@ -1,0 +1,12 @@
+FROM node:20-slim
+RUN apt-get update && apt-get install -y --no-install-recommends openssl ca-certificates && rm -rf /var/lib/apt/lists/*
+RUN npm i -g pnpm@12.6.0
+WORKDIR /app
+COPY . .
+RUN pnpm install --frozen-lockfile
+RUN pnpm --filter @openclaw/database db:generate \
+ && pnpm --filter @openclaw/database build \
+ && pnpm --filter @openclaw/types build \
+ && pnpm --filter @openclaw/api build
+ENV NODE_ENV=production
+CMD ["sh", "-c", "cd packages/database && npx prisma db push --skip-generate && cd ../../apps/api && node dist/main"]
