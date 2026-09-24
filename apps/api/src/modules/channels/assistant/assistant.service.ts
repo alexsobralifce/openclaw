@@ -189,8 +189,10 @@ export class AssistantService {
     const owner = AssistantService.ownerNumber();
     let res: any;
 
+    // Modo carro: texto limpo e curto, que o Android Auto lê em voz alta
+    if (await this.menu.isCar(workspaceId)) text = toSpeech(text);
     // Modo direção: fala a resposta em áudio (cai para texto se a voz falhar)
-    if (this.gemini.enabled() && (await this.menu.isDriving(workspaceId))) {
+    else if (this.gemini.enabled() && (await this.menu.isDriving(workspaceId))) {
       try {
         const wav = await this.gemini.speak(toSpeech(text));
         res = await this.evolution.sendAudio(instanceName, owner, wav.toString("base64"));
@@ -246,7 +248,7 @@ export class AssistantService {
       this.logger.error(`Assistente falhou: ${err.message}`);
       answer = "Erro ao processar o comando. Tente novamente.";
     }
-    if (opts.heard) answer = `🎙️ _"${text}"_\n\n${answer}`;
+    if (opts.heard && !(await this.menu.isCar(workspaceId))) answer = `🎙️ _"${text}"_\n\n${answer}`;
     await this.sendToOwner(workspaceId, instanceName, answer);
   }
 

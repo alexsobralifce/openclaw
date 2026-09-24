@@ -72,7 +72,8 @@ export class MenuService {
 
     try {
       const flat = clean.normalize("NFD").replace(/[\u0300-\u036f]/g, "");
-      if (/(sair do modo direcao|desligar (o )?modo direcao|desativar (o )?modo direcao|parei de dirigir|^cheguei)/.test(flat)) return await this.drivingSet(workspaceId, false);
+      if (/(sair do modo (direcao|carro)|desligar (o )?modo (direcao|carro)|desativar (o )?modo (direcao|carro)|parei de dirigir|^cheguei)/.test(flat)) return await this.drivingSet(workspaceId, false);
+      if (/(modo carro|android auto)/.test(flat)) return await this.carSet(workspaceId);
       if (/(modo direcao|vou dirigir|estou dirigindo|to dirigindo)/.test(flat)) return await this.drivingSet(workspaceId, true);
       if (GREETING.test(text)) return await this.mainMenu(workspaceId, true);
       if (!st) return n !== null ? await this.mainMenu(workspaceId, false) : null;
@@ -450,6 +451,7 @@ export class MenuService {
   // Modo direção
 
   private driving = new Map<string, boolean>();
+  private car = new Map<string, boolean>();
 
   async isDriving(ws: string): Promise<boolean> {
     if (this.driving.has(ws)) return this.driving.get(ws) as boolean;
@@ -459,10 +461,34 @@ export class MenuService {
     return on;
   }
 
-  private async drivingSet(ws: string, on: boolean) {
+  /** Modo carro: respostas em texto falável, para o Android Auto ler em voz alta (ele não toca áudios). */
+  async isCar(ws: string): Promise<boolean> {
+    if (this.car.has(ws)) return this.car.get(ws) as boolean;
     const wa = await prisma.channel.findFirst({ where: { workspaceId: ws, type: "WHATSAPP" } });
-    if (wa) await prisma.channel.update({ where: { id: wa.id }, data: { config: { ...(wa.config as any), drivingMode: on } } });
-    this.driving.set(ws, on);
+    const on = !!(wa?.config as any)?.carMode;
+    this.car.set(ws, on);
+    return on;
+  }
+
+  private async saveMode(ws: string, patch: { drivingMode: boolean; carMode: boolean }) {
+    const wa = await prisma.channel.findFirst({ where: { workspaceId: ws, type: "WHATSAPP" } });
+    if (wa) await prisma.channel.update({ where: { id: wa.id }, data: { config: { ...(wa.config as any), ...patch } } });
+    this.driving.set(ws, patch.drivingMode);
+    this.car.set(ws, patch.carMode);
+  }
+
+  private async carSet(ws: string) {
+    await this.saveMode(ws, { drivingMode: false, carMode: true });
+    this.set(ws, "main", { options: (await this.mainOptions(ws)).options });
+    return [
+      head("🚘", "Modo carro ligado", "Para o Android Auto ler as respostas"),
+      "Respondo em *texto curto*, sem áudio, para o carro ler em voz alta. Comande pelo Google Assistente: _\"Ok Google, enviar mensagem no WhatsApp para Assistente: ler e-mails\"_.",
+      "Para sair, diga *sair do modo carro*.",
+    ].join("\n");
+  }
+
+  private async drivingSet(ws: string, on: boolean) {
+    await this.saveMode(ws, { drivingMode: on, carMode: false });
     this.set(ws, "main", { options: (await this.mainOptions(ws)).options });
     if (!on) return `✅ *Modo direção desligado.*\nVoltei a responder por texto.`;
     const warn = process.env.GEMINI_API_KEY ? "" : "\n⚠️ _A voz ainda não está configurada no servidor; por enquanto respondo por texto._";
