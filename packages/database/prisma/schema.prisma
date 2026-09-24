@@ -273,6 +273,22 @@ model WebhookDelivery {
   @@index([status, nextAttemptAt])
 }
 
+// ─── IDEMPOTÊNCIA (API PÚBLICA) ──────────────────────────────────
+
+model IdempotencyKey {
+  id          String   @id @default(cuid())
+  apiKeyId    String
+  key         String
+  requestHash String
+  status      String   @default("IN_PROGRESS") // IN_PROGRESS | DONE
+  response    Json?
+  createdAt   DateTime @default(now())
+  expiresAt   DateTime
+
+  @@unique([apiKeyId, key])
+  @@index([expiresAt])
+}
+
 // ─── MEMÓRIA DO ASSISTENTE ───────────────────────────────────────
 
 model Memory {

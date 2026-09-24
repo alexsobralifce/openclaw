@@ -1,6 +1,8 @@
-import { Body, Controller, Delete, Get, Param, Patch, Post, Put, Query, Req, UseFilters, UseGuards } from "@nestjs/common";
+import { Body, Controller, Delete, Get, Headers, Param, Patch, Post, Put, Query, Req, Res, UseFilters, UseGuards } from "@nestjs/common";
 import { ApiKeyGuard } from "./api-key.guard";
 import { PublicApiService } from "./public-api.service";
+import { openApiSpec } from "./openapi";
+import { IdempotencyService } from "./idempotency.service";
 import { GooglePublicService } from "./google-public.service";
 import { WebhooksService } from "../webhooks/webhooks.service";
 import { CalendarListQuery, ContactDto, CreateEventDto, CreateWebhookDto, EmailAccountQuery, EmailListQuery, SendEmailDto, ListQuery, SendMessageDto, UpdateContactDto, UpdateConversationDto, UpsertContactDto } from "./dto";
@@ -14,11 +16,24 @@ export class PublicApiController {
     private api: PublicApiService,
     private webhooks: WebhooksService,
     private google: GooglePublicService,
+    private idem: IdempotencyService,
   ) {}
+
+  /** Executa com suporte ao cabeçalho Idempotency-Key e sinaliza respostas repetidas. */
+  private async once<T>(req: any, res: any, key: string | undefined, body: unknown, fn: () => Promise<T>) {
+    const { result, replayed } = await this.idem.run(`${req.apiKey.id}`, key, { path: req.path, body }, fn);
+    if (replayed) res.setHeader("Idempotent-Replayed", "true");
+    return result;
+  }
 
   @Get("health")
   health() {
     return { status: "ok" };
+  }
+
+  @Get("openapi.json")
+  openapi() {
+    return openApiSpec();
   }
 
   @UseGuards(ApiKeyGuard)
@@ -107,8 +122,8 @@ export class PublicApiController {
 
   @UseGuards(ApiKeyGuard) @RequireScopes("email:send")
   @Post("email/send")
-  sendEmail(@Req() req: any, @Body() body: SendEmailDto) {
-    return this.google.sendEmail(req.apiKey.id, req.apiKey.workspaceId, body);
+  sendEmail(@Req() req: any, @Res({ passthrough: true }) res: any, @Headers("idempotency-key") idem: string | undefined, @Body() body: SendEmailDto) {
+    return this.once(req, res, idem, body, () => this.google.sendEmail(req.apiKey.id, req.apiKey.workspaceId, body));
   }
 
   // ─── Agenda (Google Agenda do cliente) ───────────────────────
@@ -121,8 +136,8 @@ export class PublicApiController {
 
   @UseGuards(ApiKeyGuard) @RequireScopes("calendar:write")
   @Post("calendar/events")
-  createEvent(@Req() req: any, @Body() body: CreateEventDto) {
-    return this.google.createEvent(req.apiKey.id, req.apiKey.workspaceId, body);
+  createEvent(@Req() req: any, @Res({ passthrough: true }) res: any, @Headers("idempotency-key") idem: string | undefined, @Body() body: CreateEventDto) {
+    return this.once(req, res, idem, body, () => this.google.createEvent(req.apiKey.id, req.apiKey.workspaceId, body));
   }
 
   // ─── Webhooks de saída ───────────────────────────────────────
@@ -165,7 +180,7 @@ export class PublicApiController {
 
   @UseGuards(ApiKeyGuard) @RequireScopes("messages:send")
   @Post("messages")
-  send(@Req() req: any, @Body() body: SendMessageDto) {
-    return this.api.sendMessage(req.apiKey.workspaceId, body);
+  send(@Req() req: any, @Res({ passthrough: true }) res: any, @Headers("idempotency-key") idem: string | undefined, @Body() body: SendMessageDto) {
+    return this.once(req, res, idem, body, () => this.api.sendMessage(req.apiKey.workspaceId, body));
   }
 }

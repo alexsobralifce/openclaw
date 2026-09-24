@@ -1,8 +1,9 @@
-import { BadRequestException, Injectable, Logger, NotFoundException, OnModuleDestroy, OnModuleInit } from "@nestjs/common";
+import { BadRequestException, ForbiddenException, Injectable, Logger, NotFoundException, OnModuleDestroy, OnModuleInit } from "@nestjs/common";
 import { createHmac, randomBytes } from "crypto";
 import { prisma } from "@openclaw/database";
 import { decryptSecret, encryptSecret } from "./crypto";
 import { assertPublicUrl } from "./url-guard";
+import { limitsFor } from "../public-api/plan-limits";
 
 export const WEBHOOK_EVENTS = [
   "message.received",
@@ -43,6 +44,11 @@ export class WebhooksService implements OnModuleInit, OnModuleDestroy {
     const events = data.events?.length ? data.events : ["*"];
     const bad = events.filter((e) => e !== "*" && !(WEBHOOK_EVENTS as readonly string[]).includes(e));
     if (bad.length) throw new BadRequestException(`Eventos inválidos: ${bad.join(", ")}`);
+    const ws = await prisma.workspace.findUniqueOrThrow({ where: { id: workspaceId }, select: { plan: true } });
+    const limits = limitsFor(ws.plan);
+    if ((await prisma.webhookEndpoint.count({ where: { workspaceId } })) >= limits.webhooks) {
+      throw new ForbiddenException(`Seu plano permite até ${limits.webhooks} webhooks. Remova um ou mude de plano.`);
+    }
     await assertPublicUrl(data.url).catch((e) => {
       throw new BadRequestException(e.message);
     });

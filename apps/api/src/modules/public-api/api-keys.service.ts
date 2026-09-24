@@ -1,7 +1,8 @@
-import { BadRequestException, Injectable, NotFoundException } from "@nestjs/common";
+import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from "@nestjs/common";
 import { createHash, randomBytes } from "crypto";
 import { prisma } from "@openclaw/database";
 import { SCOPES } from "./scopes";
+import { limitsFor } from "./plan-limits";
 
 const hash = (raw: string) => createHash("sha256").update(raw).digest("hex");
 
@@ -12,6 +13,12 @@ export class ApiKeysService {
     const invalid = data.scopes.filter((s) => !(SCOPES as readonly string[]).includes(s));
     if (invalid.length) throw new BadRequestException(`Escopos inválidos: ${invalid.join(", ")}`);
     if (!data.scopes.length) throw new BadRequestException("Informe ao menos um escopo");
+
+    const ws = await prisma.workspace.findUniqueOrThrow({ where: { id: workspaceId }, select: { plan: true } });
+    const limits = limitsFor(ws.plan);
+    const active = await prisma.apiKey.count({ where: { workspaceId, revokedAt: null } });
+    if (active >= limits.keys) throw new ForbiddenException(`Seu plano permite até ${limits.keys} chaves ativas. Revogue uma chave ou mude de plano.`);
+    if ((data.rateLimit ?? 60) > limits.rateLimit) throw new BadRequestException(`Seu plano permite até ${limits.rateLimit} requisições por minuto por chave`);
 
     const raw = `oc_live_${randomBytes(32).toString("base64url")}`;
     const key = await prisma.apiKey.create({

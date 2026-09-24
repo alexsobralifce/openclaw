@@ -44,6 +44,15 @@ const nav = [
     ),
   },
   {
+    href: "/dashboard/api",
+    label: "API",
+    icon: (
+      <svg width="20" height="20" fill="none" viewBox="0 0 24 24">
+        <path d="M16 18l6-6-6-6M8 6l-6 6 6 6" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
+      </svg>
+    ),
+  },
+  {
     href: "/dashboard/settings",
     label: "Config.",
     icon: (
@@ -127,10 +136,7 @@ export function Sidebar() {
           <svg width="16" height="16" fill="none" viewBox="0 0 24 24">
             <path d="M16 18l6-6-6-6M8 6l-6 6 6 6" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
           </svg>
-          API pública
-          <span className="ml-auto rounded-full bg-amber-500/15 px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wide text-amber-400">
-            Em andamento
-          </span>
+          Documentação da API
         </a>
         <button
           onClick={logout}

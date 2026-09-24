@@ -54,6 +54,24 @@ export const api = {
   google: {
     authUrl: () => request<{ url: string; connected: boolean }>("/integrations/google/auth-url"),
   },
+  apiKeys: {
+    scopes: () => request<string[]>("/api-keys/scopes"),
+    list: () => request<any[]>("/api-keys"),
+    create: (data: { name: string; scopes: string[]; expiresAt?: string }) =>
+      request<any>("/api-keys", { method: "POST", body: JSON.stringify(data) }),
+    revoke: (id: string) => request<any>(`/api-keys/${id}`, { method: "DELETE" }),
+  },
+  webhooks: {
+    events: () => request<string[]>("/webhooks/events"),
+    list: () => request<any[]>("/webhooks"),
+    create: (data: { url: string; events: string[] }) =>
+      request<any>("/webhooks", { method: "POST", body: JSON.stringify(data) }),
+    remove: (id: string) => request<any>(`/webhooks/${id}`, { method: "DELETE" }),
+    test: (id: string) => request<any>(`/webhooks/${id}/test`, { method: "POST" }),
+    deliveries: (id: string) => request<{ data: any[] }>(`/webhooks/${id}/deliveries`),
+    retry: (id: string, deliveryId: string) =>
+      request<any>(`/webhooks/${id}/deliveries/${deliveryId}/retry`, { method: "POST" }),
+  },
   channels: {
     list: () => request<any[]>("/channels"),
     createWhatsapp: (name: string) =>

@@ -1,7 +1,7 @@
 # API pública do openclaw
 
 > **Status: EM ANDAMENTO** — Fase 1 (núcleo) implementada; fases 2 a 4 pendentes.
-> Antes de usar: rodar `pnpm db:push` (campos em `ApiKey` e tabelas `WebhookEndpoint`/`WebhookDelivery`).
+> Antes de usar: rodar `pnpm db:push` (campos em `ApiKey` e tabelas `WebhookEndpoint`, `WebhookDelivery` e `IdempotencyKey`).
 > Página no painel: `/api-publica.html` (menu lateral › *API pública*).
 
 ## Decisões já tomadas
@@ -83,7 +83,7 @@ OpenAPI 3.1 (`@nestjs/swagger`) em `/api/public/docs`; seção "API" no painel p
 1. **Fase 1 — núcleo (FEITA, exceto OpenAPI e tags/exclusão de contato):** `ApiKeyGuard` + escopos, criar/revogar chaves, `/me`, contatos, conversas, `POST /messages`, rate limit, OpenAPI.
 2. **Fase 2 — eventos (FEITA; `message.status` pendente):** endpoints de webhook, fila, HMAC, retentativas, log de entregas.
 3. **Fase 3 — e-mail e agenda (FEITA):** rotas `email/*` e `calendar/*` sobre `google.service`, escopos sensíveis, auditoria reforçada.
-4. **Fase 4 — painel e endurecimento:** tela de chaves/webhooks, idempotência, cotas por plano, testes de carga.
+4. **Fase 4 — painel e endurecimento (FEITA):** tela de chaves/webhooks, idempotência, cotas por plano, testes de carga.
 5. **Depois:** SDKs Node/Python, OAuth2 para apps de terceiros, `/v2` se preciso.
 
 ## Riscos
@@ -112,3 +112,12 @@ OpenAPI 3.1 (`@nestjs/swagger`) em `/api/public/docs`; seção "API" no painel p
 - Auditoria: cada chamada registra chave, workspace, ação e conta no log (`[AUDIT-API]`), sem o conteúdo dos e-mails.
 - Erros do Google viram mensagens genéricas (404, 400 ou 502), sem vazar detalhes internos.
 - Novo evento de webhook `email.received` (só metadados: conta, id, remetente, assunto), emitido pelo vigia de e-mails.
+
+## Painel, idempotência, planos e OpenAPI — como ficou (Fase 4)
+
+- **Painel:** menu *API* (`/dashboard/api`) para criar/revogar chaves (escopos sensíveis destacados, chave mostrada uma vez) e para criar/testar/remover webhooks, ver entregas e reenviar as que falharam. O menu ainda tem o link *Documentação da API*.
+- **Rotas do painel (JWT):** `/api/v1/api-keys` e `/api/v1/webhooks` (mesmo serviço da API pública).
+- **Idempotência:** cabeçalho `Idempotency-Key` (8 a 128 caracteres) em `POST /messages`, `POST /email/send` e `POST /calendar/events`. Repetir a mesma requisição devolve a resposta original (`Idempotent-Replayed: true`); mesma chave com corpo diferente dá `422`; requisição idêntica em andamento dá `409`. Registros expiram em 24 h. Se a execução falhar, a chave é liberada para nova tentativa.
+- **Limites por plano** (`plan-limits.ts`): FREE 2 chaves, 2 webhooks, 60 req/min; STARTER 5, 5, 300; GROWTH 20, 20, 1000; ENTERPRISE 100, 100, 6000. Acima disso, `403` (ou `400` para req/min).
+- **OpenAPI 3.0:** `GET /api/public/v1/openapi.json` (público), gerado em `openapi.ts`.
+- **Testes:** roteiro ponta a ponta contra Postgres real e WhatsApp simulado cobriu chaves, escopos, planos, contatos, paginação, idempotência, envio, eventos de webhook com assinatura HMAC, log de entregas, revogação e rate limit.
