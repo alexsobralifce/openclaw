@@ -79,6 +79,13 @@ export class EvolutionService {
     });
   }
 
+  async sendAudio(instanceName: string, to: string, base64Audio: string) {
+    return this.req<any>(`/message/sendWhatsAppAudio/${instanceName}`, {
+      method: "POST",
+      body: JSON.stringify({ number: to, audio: base64Audio, encoding: true }),
+    });
+  }
+
   async sendMedia(instanceName: string, to: string, mediaUrl: string, caption?: string) {
     return this.req<any>(`/message/sendMedia/${instanceName}`, {
       method: "POST",

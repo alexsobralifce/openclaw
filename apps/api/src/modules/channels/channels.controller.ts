@@ -159,7 +159,7 @@ export class ChannelsController {
             this.logger.error(`Transcrição falhou: ${err.message}`);
           }
           if (!text) {
-            await this.assistant.sendToOwner(instanceName, "Não consegui entender o áudio. Pode tentar de novo ou escrever?");
+            await this.assistant.sendToOwner(channel.workspaceId, instanceName, "Não consegui entender o áudio. Pode tentar de novo ou escrever?");
             return { ok: true };
           }
         }

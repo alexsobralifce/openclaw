@@ -17,13 +17,13 @@ interface State {
 
 const WORDS: Record<string, number> = { zero: 0, um: 1, uma: 1, dois: 2, duas: 2, "três": 3, tres: 3, quatro: 4, cinco: 5, seis: 6, sete: 7, oito: 8 };
 const ALIASES: Record<string, Record<string, number>> = {
-  notif: { ler: 1, abrir: 1, apagar: 2, excluir: 2, responder: 3 },
-  email: { responder: 1, apagar: 2, excluir: 2, marcar: 3, "marcar como lido": 3 },
-  email_draft: { enviar: 1, mandar: 1, refazer: 2, cancelar: 0 },
+  notif: { ler: 1, abrir: 1, apagar: 2, excluir: 2, responder: 3, spam: 4, "marcar como spam": 4, "e spam": 4 },
+  email: { responder: 1, apagar: 2, excluir: 2, marcar: 3, "marcar como lido": 3, spam: 4, "marcar como spam": 4 },
+  email_draft: { enviar: 1, mandar: 1, "pode enviar": 1, confirmar: 1, sim: 1, refazer: 2, cancelar: 0 },
   client_draft: { enviar: 1, mandar: 1, refazer: 2, cancelar: 0 },
   event_confirm: { confirmar: 1, confirma: 1, sim: 1, refazer: 2, cancelar: 0 },
   client: { responder: 1, resolver: 2 },
-  confirm_ai: { confirmar: 1, confirma: 1, sim: 1, cancelar: 0, nao: 0, não: 0 },
+  confirm_ai: { confirmar: 1, confirma: 1, sim: 1, "pode enviar": 1, cancelar: 0, nao: 0, não: 0 },
 };
 
 const DIV = "━━━━━━━━━━━━━━━━━━";
@@ -62,7 +62,7 @@ export class MenuService {
     const text = raw.trim();
     let st = this.states.get(workspaceId);
     if (st && Date.now() - st.at > TTL) st = undefined;
-    const clean = text.toLowerCase().replace(/[.!?,;:]/g, "").trim();
+    const clean = text.toLowerCase().replace(/[.!?,;:"“”']/g, "").trim();
     const isInput = !!st && st.screen.endsWith("_input");
     let n: number | null = null;
     if (/^\d{1,2}$/.test(clean)) n = Number(clean);
@@ -71,6 +71,9 @@ export class MenuService {
     else if (st && !isInput) n = ALIASES[st.screen]?.[clean] ?? null;
 
     try {
+      const flat = clean.normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+      if (/(sair do modo direcao|desligar (o )?modo direcao|desativar (o )?modo direcao|parei de dirigir|^cheguei)/.test(flat)) return await this.drivingSet(workspaceId, false);
+      if (/(modo direcao|vou dirigir|estou dirigindo|to dirigindo)/.test(flat)) return await this.drivingSet(workspaceId, true);
       if (GREETING.test(text)) return await this.mainMenu(workspaceId, true);
       if (!st) return n !== null ? await this.mainMenu(workspaceId, false) : null;
       return await this.route(workspaceId, st, text, n);
@@ -107,6 +110,7 @@ export class MenuService {
         if (n === 0) return this.mainMenu(ws, false);
         if (n === 1) return this.emailOpen(ws, d.account, d.id);
         if (n === 2) return this.emailTrash(ws, d.account, d.id, false);
+        if (n === 4) return this.emailSpam(ws, d.account, d.id, false);
         if (n === 3) {
           const m: any = await this.google.gmailRead(ws, d.id, d.account);
           this.set(ws, "email_reply_input", { ...m, account: d.account });
@@ -121,6 +125,7 @@ export class MenuService {
           return `${head("🎙️", "Responder e-mail")}\nMe diga por texto ou áudio o que responder, que eu escrevo o e-mail.\n_Ex.: "confirmo presença" ou "peça mais prazo"_\n${DIV}\n${opts(BACK)}`;
         }
         if (n === 2) return this.emailTrash(ws, d.account, d.id, true);
+        if (n === 4) return this.emailSpam(ws, d.account, d.id, true);
         if (n === 3) {
           await this.google.gmailMarkRead(ws, d.id, d.account);
           return `✅ *Marcado como lido.*\n\n${await this.emailList(ws, d.account)}`;
@@ -289,6 +294,8 @@ export class MenuService {
     labels.push({ icon: "🤖", label: "Perguntar à IA" });
     options.push({ type: "memory" });
     labels.push({ icon: "🧠", label: "Minha memória" });
+    options.push({ type: "driving" });
+    labels.push({ icon: "🚗", label: "Modo direção" });
     return { options, labels };
   }
 
@@ -310,7 +317,7 @@ export class MenuService {
         `📌 *Assunto:* ${short(m.assunto ?? "(sem assunto)", 80)}`,
         `📥 *Conta:* ${m.account}`,
         DIV,
-        opts([1, "📖", "Ler"], [2, "🗑️", "Apagar"], [3, "↩️", "Responder"]),
+        opts([1, "📖", "Ler"], [2, "🗑️", "Apagar"], [3, "↩️", "Responder"], [4, "🚫", "Spam"]),
       ].join("\n");
     }
     const multi = new Set(items.map((i) => i.account)).size > 1;
@@ -346,6 +353,7 @@ export class MenuService {
     if (opt.type === "agenda") return this.agendaMenu(ws);
     if (opt.type === "clients") return this.clientList(ws);
     if (opt.type === "memory") return this.memoryList(ws);
+    if (opt.type === "driving") return this.drivingSet(ws, !(await this.isDriving(ws)));
     this.set(ws, "free");
     return [head("🤖", "Assistente livre"), "Pode falar! Escreva ou mande um áudio 🎙️ com o que precisa.", DIV, opts(BACK)].join("\n");
   }
@@ -399,7 +407,7 @@ export class MenuService {
   }
 
   private emailActions() {
-    return opts([1, "↩️", "Responder"], [2, "🗑️", "Apagar"], [3, "✅", "Marcar como lido"], [0, "⬅️", "Voltar à lista"]);
+    return opts([1, "↩️", "Responder"], [2, "🗑️", "Apagar"], [3, "✅", "Marcar como lido"], [4, "🚫", "Spam"], [0, "⬅️", "Voltar à lista"]);
   }
 
   private async emailOpen(ws: string, account: string, id: string) {
@@ -429,6 +437,40 @@ export class MenuService {
     if (showList) return `${msg}\n\n${await this.emailList(ws, account)}`;
     this.set(ws, "main", { options: (await this.mainOptions(ws)).options });
     return `${msg}\n\n💡 _Digite *menu* quando quiser ver mais._`;
+  }
+
+  private async emailSpam(ws: string, account: string, id: string, showList: boolean) {
+    await this.google.gmailSpam(ws, id, account);
+    const msg = "🚫 *Marcado como spam.* Ele saiu da sua caixa de entrada.";
+    if (showList) return `${msg}\n\n${await this.emailList(ws, account)}`;
+    this.set(ws, "main", { options: (await this.mainOptions(ws)).options });
+    return `${msg}\n\n💡 _Digite *menu* quando quiser ver mais._`;
+  }
+
+  // Modo direção
+
+  private driving = new Map<string, boolean>();
+
+  async isDriving(ws: string): Promise<boolean> {
+    if (this.driving.has(ws)) return this.driving.get(ws) as boolean;
+    const wa = await prisma.channel.findFirst({ where: { workspaceId: ws, type: "WHATSAPP" } });
+    const on = !!(wa?.config as any)?.drivingMode;
+    this.driving.set(ws, on);
+    return on;
+  }
+
+  private async drivingSet(ws: string, on: boolean) {
+    const wa = await prisma.channel.findFirst({ where: { workspaceId: ws, type: "WHATSAPP" } });
+    if (wa) await prisma.channel.update({ where: { id: wa.id }, data: { config: { ...(wa.config as any), drivingMode: on } } });
+    this.driving.set(ws, on);
+    this.set(ws, "main", { options: (await this.mainOptions(ws)).options });
+    if (!on) return `✅ *Modo direção desligado.*\nVoltei a responder por texto.`;
+    const warn = process.env.GEMINI_API_KEY ? "" : "\n⚠️ _A voz ainda não está configurada no servidor; por enquanto respondo por texto._";
+    return [
+      head("🚗", "Modo direção ligado", "Mãos no volante, eu falo por você"),
+      "Vou avisar dos e-mails por *áudio*. Responda também por áudio, dizendo *ler*, *apagar*, *responder* ou *spam*.",
+      "Para sair, diga *sair do modo direção*.",
+    ].join("\n") + warn;
   }
 
   private async emailReopen(ws: string, d: any) {

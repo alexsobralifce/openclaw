@@ -168,6 +168,14 @@ export class GoogleService {
     return { ok: true };
   }
 
+  async gmailSpam(workspaceId: string, id: string, account?: string) {
+    await this.g(workspaceId, account, `https://gmail.googleapis.com/gmail/v1/users/me/messages/${id}/modify`, {
+      method: "POST",
+      body: JSON.stringify({ addLabelIds: ["SPAM"], removeLabelIds: ["INBOX", "UNREAD"] }),
+    });
+    return { ok: true };
+  }
+
   async gmailTrash(workspaceId: string, id: string, account?: string) {
     await this.g(workspaceId, account, `https://gmail.googleapis.com/gmail/v1/users/me/messages/${id}/trash`, { method: "POST" });
     return { ok: true };

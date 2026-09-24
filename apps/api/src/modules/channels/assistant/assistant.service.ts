@@ -4,6 +4,8 @@ import { EvolutionService } from "../evolution/evolution.service";
 import { GoogleService } from "../../integrations/google/google.service";
 import { MenuService } from "./menu.service";
 import { MemoryService } from "./memory.service";
+import { GeminiService } from "./gemini.service";
+import { toSpeech } from "./speech";
 import { suspiciousReasons } from "./security";
 
 const TOOLS = [
@@ -155,6 +157,7 @@ export class AssistantService {
     private google: GoogleService,
     private menu: MenuService,
     private memory: MemoryService,
+    private gemini: GeminiService,
   ) {
     this.menu.setExecutor((ws, a) => this.execute(ws, a.name, a.args));
   }
@@ -182,8 +185,21 @@ export class AssistantService {
     return !!id && this.sentIds.has(id);
   }
 
-  async sendToOwner(instanceName: string, text: string) {
-    const res = await this.evolution.sendText(instanceName, AssistantService.ownerNumber(), text);
+  async sendToOwner(workspaceId: string, instanceName: string, text: string) {
+    const owner = AssistantService.ownerNumber();
+    let res: any;
+
+    // Modo direção: fala a resposta em áudio (cai para texto se a voz falhar)
+    if (this.gemini.enabled() && (await this.menu.isDriving(workspaceId))) {
+      try {
+        const wav = await this.gemini.speak(toSpeech(text));
+        res = await this.evolution.sendAudio(instanceName, owner, wav.toString("base64"));
+      } catch (e: any) {
+        this.logger.error(`Voz falhou, enviando texto: ${e.message}`);
+      }
+    }
+    if (!res) res = await this.evolution.sendText(instanceName, owner, text);
+
     const id = res?.key?.id;
     if (id) {
       this.sentIds.add(id);
@@ -191,14 +207,26 @@ export class AssistantService {
     }
   }
 
+  /** Baixa o áudio do WhatsApp e o envia ao modelo para virar texto (Gemini; Whisper como reserva). */
   async transcribe(instanceName: string, key: object): Promise<string> {
-    const apiKey = process.env.OPENAI_API_KEY;
-    if (!apiKey) throw new Error("OPENAI_API_KEY não configurada");
     const media = await this.evolution.getMediaBase64(instanceName, key);
     const mime = media.mimetype || "audio/ogg";
+    const audio = Buffer.from(media.base64, "base64");
+
+    if (this.gemini.enabled()) {
+      try {
+        const text = await this.gemini.transcribe(audio, mime);
+        if (text) return text;
+      } catch (e: any) {
+        this.logger.error(`Gemini falhou na transcrição, tentando Whisper: ${e.message}`);
+      }
+    }
+
+    const apiKey = process.env.OPENAI_API_KEY;
+    if (!apiKey) throw new Error("Nenhum serviço de transcrição configurado");
     const ext = mime.includes("mp4") ? "mp4" : mime.includes("mpeg") ? "mp3" : "ogg";
     const form = new FormData();
-    form.append("file", new Blob([Buffer.from(media.base64, "base64")], { type: mime }), `audio.${ext}`);
+    form.append("file", new Blob([audio], { type: mime }), `audio.${ext}`);
     form.append("model", process.env.OPENAI_TRANSCRIBE_MODEL || "whisper-1");
     form.append("language", "pt");
     const res = await fetch("https://api.openai.com/v1/audio/transcriptions", {
@@ -219,7 +247,7 @@ export class AssistantService {
       answer = "Erro ao processar o comando. Tente novamente.";
     }
     if (opts.heard) answer = `🎙️ _"${text}"_\n\n${answer}`;
-    await this.sendToOwner(instanceName, answer);
+    await this.sendToOwner(workspaceId, instanceName, answer);
   }
 
   private async think(workspaceId: string, text: string): Promise<string> {

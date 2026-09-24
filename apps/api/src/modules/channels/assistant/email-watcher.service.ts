@@ -75,7 +75,7 @@ export class EmailWatcherService implements OnModuleInit, OnModuleDestroy {
       const instance = (wa?.config as any)?.instanceName;
       if (instance) {
         const text = await this.menu.notifyNew(workspaceId, fresh);
-        await this.assistant.sendToOwner(instance, text);
+        await this.assistant.sendToOwner(workspaceId, instance, text);
       } else {
         this.logger.warn("Novo e-mail, mas não há canal WhatsApp para avisar.");
       }
