@@ -11,3 +11,5 @@ prisma/generated
 .claude
 switch-claude-account.sh
 *.tsbuildinfo
+.agents
+skills-lock.json

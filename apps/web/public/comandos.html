@@ -1,0 +1,393 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="color-scheme" content="light dark">
+<meta name="robots" content="noindex">
+<title>Comandos do openclaw</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:wght@600;700;800&family=DM+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #f2f7f5;
+    --surface: #ffffff;
+    --surface-2: #eaf2ef;
+    --ink: #0e1f1b;
+    --muted: #52686a;
+    --line: #d3e2dc;
+    --accent: #0a8a7c;
+    --accent-ink: #ffffff;
+    --chip: #dff3ee;
+    --chip-ink: #06564c;
+    --warn: #a4530a;
+    --warn-bg: #fdf0dc;
+    --bubble-me: #d9fdd3;
+    --bubble-bot: #ffffff;
+    --font-display: "Bricolage Grotesque", "Segoe UI", system-ui, sans-serif;
+    --font-body: "DM Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+    --font-mono: "IBM Plex Mono", ui-monospace, "SF Mono", Menlo, monospace;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      color-scheme: dark;
+      --bg: #08100e; --surface: #0e1a17; --surface-2: #132320; --ink: #e7f0ed; --muted: #92a9a3;
+      --line: #1f342f; --accent: #2dd4bf; --accent-ink: #03211c; --chip: #113029; --chip-ink: #7ce9d8;
+      --warn: #f5a524; --warn-bg: #2b2110; --bubble-me: #005c4b; --bubble-bot: #202c33;
+    }
+  }
+  :root[data-theme="dark"] {
+    color-scheme: dark;
+    --bg: #08100e; --surface: #0e1a17; --surface-2: #132320; --ink: #e7f0ed; --muted: #92a9a3;
+    --line: #1f342f; --accent: #2dd4bf; --accent-ink: #03211c; --chip: #113029; --chip-ink: #7ce9d8;
+    --warn: #f5a524; --warn-bg: #2b2110; --bubble-me: #005c4b; --bubble-bot: #202c33;
+  }
+
+  * { box-sizing: border-box; }
+  body { background: var(--bg); color: var(--ink); font-family: var(--font-body); font-size: 15px; line-height: 1.55; }
+  a { color: var(--accent); }
+  h1, h2, h3 { font-family: var(--font-display); text-wrap: balance; line-height: 1.12; margin: 0; }
+  p { margin: 0; }
+
+  .wrap { max-width: 1120px; margin-inline: auto; padding-inline: clamp(16px, 4vw, 32px); padding-block: 28px 72px; }
+
+  /* Cabeçalho */
+  .top { display: grid; gap: 20px; padding-bottom: 28px; border-bottom: 1px solid var(--line); }
+  .eyebrow { font-family: var(--font-mono); font-size: 12px; letter-spacing: .12em; text-transform: uppercase; color: var(--accent); }
+  h1 { font-size: clamp(32px, 6vw, 52px); font-weight: 800; letter-spacing: -.02em; }
+  .lead { max-width: 62ch; color: var(--muted); font-size: 17px; }
+  .lines { display: flex; flex-wrap: wrap; gap: 10px 28px; font-size: 14px; }
+  .lines b { font-weight: 600; }
+  .num { font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
+  .search { display: flex; gap: 10px; align-items: center; max-width: 520px; }
+  .search input {
+    flex: 1; min-width: 0; font: inherit; color: var(--ink); background: var(--surface);
+    border: 1px solid var(--line); border-radius: 10px; padding: 11px 14px;
+  }
+  .search input:focus-visible, a:focus-visible, .rail a:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+  /* Estrutura */
+  .grid { display: grid; gap: 40px; padding-top: 28px; grid-template-columns: minmax(0, 1fr); }
+  @media (min-width: 900px) { .grid { grid-template-columns: 190px minmax(0, 1fr); } }
+  .rail { position: sticky; top: env(safe-area-inset-top, 0px); z-index: 5; background: var(--bg); align-self: start; }
+  .rail ul { list-style: none; margin: 0; padding: 8px 0; display: flex; gap: 6px; overflow-x: auto; }
+  .rail a { display: block; white-space: nowrap; text-decoration: none; color: var(--muted); font-weight: 500; padding: 7px 12px; border-radius: 8px; border: 1px solid var(--line); background: var(--surface); }
+  .rail a:hover { color: var(--ink); border-color: var(--accent); }
+  @media (min-width: 900px) {
+    .rail { top: 20px; }
+    .rail ul { flex-direction: column; overflow: visible; padding: 0; gap: 2px; }
+    .rail a { border: 0; background: transparent; padding: 8px 10px; }
+    .rail a:hover { background: var(--surface-2); }
+  }
+
+  .sec { display: grid; gap: 18px; padding-bottom: 44px; scroll-margin-top: 70px; }
+  .sec > h2 { font-size: clamp(24px, 3.4vw, 32px); font-weight: 700; letter-spacing: -.01em; }
+  .sec > .sub { color: var(--muted); max-width: 64ch; margin-top: -8px; }
+
+  /* Chips: o que você diz */
+  .say {
+    font-family: var(--font-mono); font-size: 13px; font-weight: 500; background: var(--chip); color: var(--chip-ink);
+    padding: 2px 8px; border-radius: 6px; white-space: nowrap; display: inline-block; margin: 1px 0;
+  }
+  .path { font-family: var(--font-mono); font-size: 12px; color: var(--muted); }
+
+  /* Tabelas */
+  .tw { overflow-x: auto; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); }
+  table { width: 100%; border-collapse: collapse; }
+  th { text-align: left; font-family: var(--font-mono); font-weight: 500; font-size: 11.5px; letter-spacing: .1em; text-transform: uppercase; color: var(--muted); padding: 10px 16px; background: var(--surface-2); border-bottom: 1px solid var(--line); }
+  td { padding: 11px 16px; vertical-align: top; border-bottom: 1px solid var(--line); }
+  tr:last-child td { border-bottom: 0; }
+  td:first-child { width: 42%; min-width: 190px; }
+  .menu td:first-child { width: 64px; min-width: 0; }
+
+  /* Trilhas */
+  .trails { display: grid; gap: 18px; }
+  .trail { display: grid; gap: 12px; }
+  .trail header { display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px 14px; }
+  .trail h3 { font-size: 20px; font-weight: 700; }
+
+  .note { background: var(--warn-bg); color: var(--ink); border-radius: 10px; padding: 12px 16px; border-left: 3px solid var(--warn); }
+  .note b { color: var(--warn); }
+
+  /* Conversa de exemplo */
+  .chat { display: grid; gap: 8px; background: var(--surface-2); border: 1px solid var(--line); border-radius: 14px; padding: 16px; max-width: 560px; }
+  .b { max-width: 88%; padding: 8px 12px; border-radius: 12px; font-size: 14px; }
+  .b small { display: block; font-family: var(--font-mono); font-size: 10.5px; letter-spacing: .08em; text-transform: uppercase; opacity: .65; margin-bottom: 2px; }
+  .b.me { justify-self: end; background: var(--bubble-me); border-bottom-right-radius: 3px; }
+  .b.bot { justify-self: start; background: var(--bubble-bot); border-bottom-left-radius: 3px; border: 1px solid var(--line); }
+
+  .two { display: grid; gap: 18px; grid-template-columns: repeat(auto-fit, minmax(min(100%, 300px), 1fr)); }
+  .facts { display: grid; gap: 14px; grid-template-columns: repeat(auto-fit, minmax(min(100%, 240px), 1fr)); }
+  .fact { padding-top: 12px; border-top: 2px solid var(--accent); }
+  .fact h3 { font-size: 16px; margin-bottom: 4px; }
+  .fact p { color: var(--muted); font-size: 14px; }
+  ul.plain { margin: 0; padding-left: 20px; display: grid; gap: 6px; }
+
+  #none { color: var(--muted); padding: 24px 0; }
+  @media (prefers-reduced-motion: no-preference) { html { scroll-behavior: smooth; } }
+</style>
+
+
+<style>
+  html { color-scheme: light; }
+  body { margin: 0; }
+  img { max-width: 100%; }
+  [hidden] { display: none !important; }
+  @media (prefers-color-scheme: dark) { html { color-scheme: dark; } }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header class="top">
+    <p class="eyebrow">Guia de bolso do assistente</p>
+    <h1>Comandos do openclaw</h1>
+    <p class="lead">Tudo o que você controla pelo WhatsApp: e-mails, agenda, clientes e a IA. Responda com um <strong>número</strong>, uma <strong>palavra</strong> ou um <strong>áudio</strong>.</p>
+    <div class="lines">
+      <span>Você escreve do <b>número cadastrado como dono</b></span>
+      <span>Para o <b>número do assistente</b> (o que você conectou por QR Code)</span>
+    </div>
+    <div class="search">
+      <input id="q" type="search" placeholder="Buscar um comando: apagar, spam, agenda…" aria-label="Buscar um comando" autocomplete="off">
+    </div>
+  </header>
+
+  <div class="grid">
+    <nav class="rail" aria-label="Seções">
+      <ul>
+        <li><a href="#comeco">Começar</a></li>
+        <li><a href="#trilhas">Trilhas</a></li>
+        <li><a href="#voz">Por voz</a></li>
+        <li><a href="#direcao">Modo direção</a></li>
+        <li><a href="#avisos">Avisos</a></li>
+        <li><a href="#seguranca">Segurança</a></li>
+        <li><a href="#painel">Painel web</a></li>
+      </ul>
+    </nav>
+
+    <main>
+      <p id="none" hidden>Nenhum comando encontrado. Tente outra palavra, como “e-mail”, “agenda” ou “voltar”.</p>
+
+      <!-- COMEÇAR -->
+      <section class="sec" id="comeco">
+        <h2>Comece por aqui</h2>
+        <div class="facts">
+          <div class="fact"><h3>Abra o menu</h3><p>Mande <span class="say">oi</span>, <span class="say">menu</span> ou <span class="say">ajuda</span>. Vale também “bom dia”, “boa tarde” e “boa noite”.</p></div>
+          <div class="fact"><h3>Responda curto</h3><p>Só o número da opção. Ou fale: “um”, “dois”, “três”… O “voltar” funciona como <span class="say">0</span>.</p></div>
+          <div class="fact"><h3>Ou fale livremente</h3><p>Fora de um menu, qualquer frase vai para a IA: “o que tenho na agenda amanhã?”.</p></div>
+          <div class="fact"><h3>Perdeu o fio?</h3><p>O menu esquece a tela depois de 30 min parado. Um número solto reabre o menu principal.</p></div>
+        </div>
+
+        <h3 style="font-size:18px;margin-top:6px">Menu principal</h3>
+        <div class="tw"><table class="menu">
+          <thead><tr><th>Nº</th><th>Opção</th><th>O que abre</th></tr></thead>
+          <tbody>
+            <tr data-s><td><span class="say">1</span></td><td>E-mails (1ª conta)</td><td>Não lidos da conta que aparece ao lado do número</td></tr>
+            <tr data-s><td><span class="say">2</span></td><td>E-mails (2ª conta)</td><td>Não lidos da segunda conta Google</td></tr>
+            <tr data-s><td><span class="say">3</span></td><td>Google Agenda</td><td>Hoje, amanhã, 7 dias e criar evento</td></tr>
+            <tr data-s><td><span class="say">4</span></td><td>Conversas de clientes</td><td>Conversas abertas e pendentes</td></tr>
+            <tr data-s><td><span class="say">5</span></td><td>Perguntar à IA</td><td>Modo livre: escreva ou fale o que precisa</td></tr>
+            <tr data-s><td><span class="say">6</span></td><td>Minha memória</td><td>O que o assistente guardou sobre você</td></tr>
+            <tr data-s><td><span class="say">7</span></td><td>Modo direção</td><td>Liga ou desliga o assistente por áudio</td></tr>
+          </tbody>
+        </table></div>
+        <p class="sub" style="color:var(--muted)">A numeração acompanha as contas Google conectadas: cada conta ganha a sua linha de e-mails e o restante desce. Confira sempre o número ao lado do nome.</p>
+      </section>
+
+      <!-- TRILHAS -->
+      <section class="sec" id="trilhas">
+        <h2>Trilhas de funcionalidades</h2>
+        <p class="sub">Cada trilha mostra o caminho a seguir e o que dizer em cada passo.</p>
+        <div class="trails">
+
+          <article class="trail">
+            <header><h3>E-mails</h3><span class="path">menu › 1 ou 2</span></header>
+            <div class="tw"><table>
+              <thead><tr><th>Você diz</th><th>O que acontece</th></tr></thead>
+              <tbody>
+                <tr data-s><td><span class="say">1</span> ou <span class="say">2</span></td><td>Lista até 6 e-mails não lidos da conta escolhida, com remetente e assunto.</td></tr>
+                <tr data-s><td>o número do e-mail</td><td>Abre com um resumo feito pela IA. Se o texto tiver truques suspeitos, aparece um aviso.</td></tr>
+                <tr data-s><td><span class="say">1</span> <span class="say">responder</span></td><td>Você diz o que responder (texto ou áudio). A IA escreve o e-mail e mostra o rascunho.</td></tr>
+                <tr data-s><td><span class="say">2</span> <span class="say">apagar</span></td><td>Manda para a lixeira do Gmail. Dá para recuperar por 30 dias.</td></tr>
+                <tr data-s><td><span class="say">3</span> <span class="say">marcar como lido</span></td><td>Tira o e-mail da lista de não lidos.</td></tr>
+                <tr data-s><td><span class="say">4</span> <span class="say">spam</span></td><td>Move para a pasta de spam e tira da caixa de entrada.</td></tr>
+                <tr data-s><td><span class="say">0</span> <span class="say">voltar</span></td><td>Volta para a lista.</td></tr>
+                <tr data-s><td>No rascunho: <span class="say">1</span> <span class="say">enviar</span></td><td>Envia o e-mail. <span class="say">2</span> refaz o texto e <span class="say">0</span> cancela.</td></tr>
+              </tbody>
+            </table></div>
+          </article>
+
+          <article class="trail">
+            <header><h3>Google Agenda</h3><span class="path">menu › 3</span></header>
+            <div class="tw"><table>
+              <thead><tr><th>Você diz</th><th>O que acontece</th></tr></thead>
+              <tbody>
+                <tr data-s><td><span class="say">1</span> hoje</td><td>Compromissos de hoje, das suas contas juntas.</td></tr>
+                <tr data-s><td><span class="say">2</span> amanhã</td><td>Compromissos de amanhã.</td></tr>
+                <tr data-s><td><span class="say">3</span> próximos 7 dias</td><td>Agenda da semana, agrupada por dia. Com duas contas, uma letra (A, B) indica de qual é cada evento.</td></tr>
+                <tr data-s><td><span class="say">4</span> criar evento</td><td>Descreva do seu jeito: <em>“reunião com o João amanhã às 15h por 1 hora”</em>. Sem duração, o evento dura 1 hora.</td></tr>
+                <tr data-s><td>Na confirmação: <span class="say">1</span> <span class="say">confirmar</span></td><td>Cria o evento. Com duas contas, o assistente pergunta em qual agenda. <span class="say">2</span> refaz e <span class="say">0</span> cancela.</td></tr>
+              </tbody>
+            </table></div>
+          </article>
+
+          <article class="trail">
+            <header><h3>Conversas de clientes</h3><span class="path">menu › 4</span></header>
+            <div class="tw"><table>
+              <thead><tr><th>Você diz</th><th>O que acontece</th></tr></thead>
+              <tbody>
+                <tr data-s><td><span class="say">4</span></td><td>Lista até 8 conversas em aberto (verde) ou pendentes (amarelo) com a última mensagem.</td></tr>
+                <tr data-s><td>o número da conversa</td><td>Mostra as últimas 5 mensagens.</td></tr>
+                <tr data-s><td><span class="say">1</span> <span class="say">responder</span></td><td>Você diz em poucas palavras o que responder, a IA escreve, você confirma com <span class="say">1</span> <span class="say">enviar</span>.</td></tr>
+                <tr data-s><td><span class="say">2</span> <span class="say">resolver</span></td><td>Marca a conversa como resolvida e volta à lista.</td></tr>
+              </tbody>
+            </table></div>
+          </article>
+
+          <article class="trail">
+            <header><h3>Perguntar à IA</h3><span class="path">menu › 5, ou simplesmente escreva</span></header>
+            <div class="tw"><table>
+              <thead><tr><th>Exemplos do que dizer</th><th>O que acontece</th></tr></thead>
+              <tbody>
+                <tr data-s><td><em>“quais e-mails não lidos na conta da faculdade?”</em></td><td>Busca e resume os e-mails da conta indicada.</td></tr>
+                <tr data-s><td><em>“o que tenho na agenda sexta?”</em></td><td>Lê os eventos do dia pedido.</td></tr>
+                <tr data-s><td><em>“liste as conversas pendentes”</em></td><td>Mostra as conversas de clientes.</td></tr>
+                <tr data-s><td><em>“marque reunião com o João sexta às 15h”</em></td><td>Monta o evento e pede a sua confirmação antes de criar.</td></tr>
+                <tr data-s><td><em>“responda a Maria dizendo que o pedido sai amanhã”</em></td><td>Escreve a mensagem e pede a sua confirmação antes de enviar.</td></tr>
+                <tr data-s><td>Na confirmação: <span class="say">1</span> <span class="say">confirmar</span> ou <span class="say">0</span> <span class="say">cancelar</span></td><td>Nada é enviado nem criado sem esse “sim”.</td></tr>
+              </tbody>
+            </table></div>
+          </article>
+
+          <article class="trail">
+            <header><h3>Minha memória</h3><span class="path">menu › 6</span></header>
+            <div class="tw"><table>
+              <thead><tr><th>Você diz</th><th>O que acontece</th></tr></thead>
+              <tbody>
+                <tr data-s><td><em>“lembre que respondo o João de forma informal”</em></td><td>Guarda a preferência. Os próximos rascunhos já saem no seu jeito.</td></tr>
+                <tr data-s><td><span class="say">6</span></td><td>Lista o que ele sabe sobre você. Diga o número de um item para <strong>esquecer</strong> aquele item.</td></tr>
+                <tr data-s><td><em>“esqueça o que eu disse sobre o João”</em></td><td>Apaga a memória correspondente.</td></tr>
+              </tbody>
+            </table></div>
+            <p class="path" style="font-family:var(--font-body);font-size:13px">Por segurança, o assistente não guarda memória no mesmo comando em que leu e-mails ou mensagens de terceiros. Peça em uma mensagem separada.</p>
+          </article>
+
+        </div>
+      </section>
+
+      <!-- POR VOZ -->
+      <section class="sec" id="voz">
+        <h2>Por voz</h2>
+        <p class="sub">Grave um áudio normalmente no WhatsApp. O assistente transcreve (Gemini) e mostra o que entendeu, com 🎙️, antes de responder. Tudo o que vale por texto vale por voz.</p>
+        <div class="tw"><table>
+          <thead><tr><th>Onde você está</th><th>O que dizer</th></tr></thead>
+          <tbody>
+            <tr data-s><td>Abrir o menu</td><td><span class="say">oi</span> <span class="say">olá</span> <span class="say">menu</span> <span class="say">ajuda</span> <span class="say">bom dia</span></td></tr>
+            <tr data-s><td>Escolher uma opção</td><td><span class="say">um</span> <span class="say">dois</span> <span class="say">três</span> <span class="say">quatro</span> <span class="say">cinco</span> <span class="say">seis</span> <span class="say">sete</span> <span class="say">zero</span> · <span class="say">voltar</span></td></tr>
+            <tr data-s><td>Aviso de e-mail novo</td><td><span class="say">ler</span> <span class="say">apagar</span> <span class="say">responder</span> <span class="say">spam</span></td></tr>
+            <tr data-s><td>Dentro de um e-mail</td><td><span class="say">responder</span> <span class="say">apagar</span> <span class="say">marcar como lido</span> <span class="say">spam</span></td></tr>
+            <tr data-s><td>Rascunho de e-mail ou mensagem</td><td><span class="say">enviar</span> <span class="say">pode enviar</span> <span class="say">refazer</span> <span class="say">cancelar</span></td></tr>
+            <tr data-s><td>Confirmar evento</td><td><span class="say">confirmar</span> <span class="say">sim</span> <span class="say">refazer</span> <span class="say">cancelar</span></td></tr>
+            <tr data-s><td>Confirmar uma ação da IA</td><td><span class="say">confirmar</span> <span class="say">sim</span> <span class="say">pode enviar</span> · <span class="say">cancelar</span> <span class="say">não</span></td></tr>
+            <tr data-s><td>Conversa de cliente aberta</td><td><span class="say">responder</span> <span class="say">resolver</span></td></tr>
+            <tr data-s><td>Quando ele pede “diga o que responder”</td><td>Fale a frase inteira, do seu jeito. Ex.: <em>“confirmo presença, obrigado pelo convite”</em>.</td></tr>
+          </tbody>
+        </table></div>
+      </section>
+
+      <!-- MODO DIREÇÃO -->
+      <section class="sec" id="direcao">
+        <h2>Modo direção</h2>
+        <p class="sub">Mãos no volante: o assistente avisa e responde por <strong>áudio</strong>, e você comanda falando. Fica ligado até você desligar.</p>
+        <div class="two">
+          <div class="tw"><table>
+            <thead><tr><th>Ligar</th></tr></thead>
+            <tbody>
+              <tr data-s><td style="width:auto"><span class="say">vou dirigir</span> <span class="say">modo direção</span> <span class="say">estou dirigindo</span> <span class="say">tô dirigindo</span> ou menu › <span class="say">7</span></td></tr>
+            </tbody>
+          </table></div>
+          <div class="tw"><table>
+            <thead><tr><th>Desligar</th></tr></thead>
+            <tbody>
+              <tr data-s><td style="width:auto"><span class="say">cheguei</span> <span class="say">parei de dirigir</span> <span class="say">sair do modo direção</span> <span class="say">desligar modo direção</span></td></tr>
+            </tbody>
+          </table></div>
+        </div>
+        <div class="chat" data-s>
+          <div class="b bot"><small>Assistente · áudio</small>Novo e-mail. De: Prefeitura Municipal. Assunto: Convite para reunião. Diga: ler, apagar, responder ou spam.</div>
+          <div class="b me"><small>Você · áudio</small>Responder.</div>
+          <div class="b bot"><small>Assistente · áudio</small>Me diga o que responder.</div>
+          <div class="b me"><small>Você · áudio</small>Confirmo presença, obrigado pelo convite.</div>
+          <div class="b bot"><small>Assistente · áudio</small>Rascunho pronto. Diga: enviar, refazer ou cancelar.</div>
+          <div class="b me"><small>Você · áudio</small>Enviar.</div>
+        </div>
+        <div class="note"><b>Se a voz demorar ou falhar</b>, o assistente responde por texto para você não ficar sem retorno.</div>
+      </section>
+
+      <!-- AVISOS -->
+      <section class="sec" id="avisos">
+        <h2>Avisos automáticos</h2>
+        <div class="tw"><table>
+          <thead><tr><th>Quando</th><th>O que você recebe</th></tr></thead>
+          <tbody>
+            <tr data-s><td>Chega um e-mail novo</td><td>Aviso com remetente e assunto, e as opções <span class="say">1</span> ler · <span class="say">2</span> apagar · <span class="say">3</span> responder · <span class="say">4</span> spam. A checagem acontece a cada minuto, em todas as contas.</td></tr>
+            <tr data-s><td>Chegam vários juntos</td><td>Uma lista numerada. Diga o número do e-mail que quer abrir.</td></tr>
+            <tr data-s><td>Você está no meio de outra tarefa</td><td>Um aviso curto, sem opções, para não atrapalhar. Quando terminar, diga <span class="say">menu</span>.</td></tr>
+            <tr data-s><td>E-mails antigos</td><td>Só chegam avisos dos e-mails novos, depois da conexão da conta.</td></tr>
+          </tbody>
+        </table></div>
+      </section>
+
+      <!-- SEGURANÇA -->
+      <section class="sec" id="seguranca">
+        <h2>Segurança e limites</h2>
+        <ul class="plain" data-s>
+          <li><strong>Só o seu número manda.</strong> Mensagens de qualquer outro número seguem o fluxo normal de cliente e nunca viram comandos.</li>
+          <li><strong>Nada sai sem o seu “sim”.</strong> Enviar e-mail, criar evento e responder cliente pedidos à IA sempre passam por <span class="say">1</span> confirmar / <span class="say">0</span> cancelar.</li>
+          <li><strong>E-mails não dão ordens.</strong> Textos de e-mails e de clientes são tratados como dados. Trechos que tentam mandar na IA são sinalizados com um aviso.</li>
+          <li><strong>Apagar é reversível</strong> (lixeira por 30 dias) e spam vai para a pasta de spam do Gmail.</li>
+        </ul>
+        <div class="note" data-s><b>Se o Google parar de responder</b>, reconecte a conta em <em>Canais › Conectar Google</em>. Enquanto o app do Google estiver em modo de teste, a autorização pode expirar em cerca de 7 dias. Publicar o app no Google Auth Platform evita isso.</div>
+      </section>
+
+      <!-- PAINEL -->
+      <section class="sec" id="painel">
+        <h2>Painel web</h2>
+        <p class="sub">Endereço: <a href="https://web-production-0bb3d.up.railway.app" target="_blank" rel="noopener">web-production-0bb3d.up.railway.app</a></p>
+        <div class="tw"><table>
+          <thead><tr><th>Onde</th><th>Para quê</th></tr></thead>
+          <tbody>
+            <tr data-s><td>Inbox</td><td>Conversas de clientes em tempo real. Abra uma conversa, responda e use <span class="say">Pendente</span>, <span class="say">Resolver</span> e <span class="say">Reabrir</span>.</td></tr>
+            <tr data-s><td>Canais › WhatsApp</td><td>Cria o canal e mostra o QR Code para conectar o número. O status vira <em>Conectado</em>.</td></tr>
+            <tr data-s><td>Canais › Conectar Google</td><td>Conecta uma conta Google. Repita para ligar a segunda conta. “Remover” desconecta.</td></tr>
+            <tr data-s><td>Canto superior direito</td><td>Seu avatar, com a conta e o botão <em>Sair</em>.</td></tr>
+          </tbody>
+        </table></div>
+      </section>
+    </main>
+  </div>
+</div>
+
+<script>
+  (function () {
+    var q = document.getElementById('q');
+    var none = document.getElementById('none');
+    if (!q) return;
+    q.addEventListener('input', function () {
+      var v = q.value.trim().toLowerCase();
+      var items = document.querySelectorAll('[data-s]');
+      items.forEach(function (el) { el.hidden = !!v && el.textContent.toLowerCase().indexOf(v) === -1; });
+      ['.trail', 'section.sec'].forEach(function (sel) {
+        document.querySelectorAll(sel).forEach(function (box) {
+          var rows = box.querySelectorAll('[data-s]');
+          box.hidden = !!v && rows.length > 0 && Array.prototype.every.call(rows, function (r) { return r.hidden; });
+        });
+      });
+      var any = Array.prototype.some.call(items, function (r) { return !r.hidden; });
+      none.hidden = !v || any;
+    });
+  })();
+</script>
+
+</body>
+</html>
