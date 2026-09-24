@@ -1,14 +1,18 @@
-import { Body, Controller, Get, Param, Patch, Post, Put, Query, Req, UseFilters, UseGuards } from "@nestjs/common";
+import { Body, Controller, Delete, Get, Param, Patch, Post, Put, Query, Req, UseFilters, UseGuards } from "@nestjs/common";
 import { ApiKeyGuard } from "./api-key.guard";
 import { PublicApiService } from "./public-api.service";
-import { ContactDto, ListQuery, SendMessageDto, UpdateContactDto, UpdateConversationDto, UpsertContactDto } from "./dto";
+import { WebhooksService } from "../webhooks/webhooks.service";
+import { ContactDto, CreateWebhookDto, ListQuery, SendMessageDto, UpdateContactDto, UpdateConversationDto, UpsertContactDto } from "./dto";
 import { RequireScopes } from "./scopes";
 import { PublicExceptionFilter } from "./public-exception.filter";
 
 @Controller("api/public/v1")
 @UseFilters(PublicExceptionFilter)
 export class PublicApiController {
-  constructor(private api: PublicApiService) {}
+  constructor(
+    private api: PublicApiService,
+    private webhooks: WebhooksService,
+  ) {}
 
   @Get("health")
   health() {
@@ -77,6 +81,44 @@ export class PublicApiController {
   @Get("conversations/:id/messages")
   listMessages(@Req() req: any, @Param("id") id: string, @Query() q: ListQuery) {
     return this.api.listMessages(req.apiKey.workspaceId, id, q);
+  }
+
+  // ─── Webhooks de saída ───────────────────────────────────────
+
+  @UseGuards(ApiKeyGuard) @RequireScopes("webhooks:manage")
+  @Get("webhooks")
+  listWebhooks(@Req() req: any) {
+    return this.webhooks.list(req.apiKey.workspaceId).then((data) => ({ data }));
+  }
+
+  @UseGuards(ApiKeyGuard) @RequireScopes("webhooks:manage")
+  @Post("webhooks")
+  createWebhook(@Req() req: any, @Body() body: CreateWebhookDto) {
+    return this.webhooks.create(req.apiKey.workspaceId, body);
+  }
+
+  @UseGuards(ApiKeyGuard) @RequireScopes("webhooks:manage")
+  @Delete("webhooks/:id")
+  deleteWebhook(@Req() req: any, @Param("id") id: string) {
+    return this.webhooks.remove(req.apiKey.workspaceId, id);
+  }
+
+  @UseGuards(ApiKeyGuard) @RequireScopes("webhooks:manage")
+  @Post("webhooks/:id/test")
+  testWebhook(@Req() req: any, @Param("id") id: string) {
+    return this.webhooks.test(req.apiKey.workspaceId, id);
+  }
+
+  @UseGuards(ApiKeyGuard) @RequireScopes("webhooks:manage")
+  @Get("webhooks/:id/deliveries")
+  webhookDeliveries(@Req() req: any, @Param("id") id: string) {
+    return this.webhooks.deliveries(req.apiKey.workspaceId, id);
+  }
+
+  @UseGuards(ApiKeyGuard) @RequireScopes("webhooks:manage")
+  @Post("webhooks/:id/deliveries/:deliveryId/retry")
+  retryDelivery(@Req() req: any, @Param("id") id: string, @Param("deliveryId") deliveryId: string) {
+    return this.webhooks.retry(req.apiKey.workspaceId, id, deliveryId);
   }
 
   @UseGuards(ApiKeyGuard) @RequireScopes("messages:send")

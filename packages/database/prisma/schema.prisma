@@ -24,6 +24,7 @@ model Workspace {
   automations   Automation[]
   tags          Tag[]
   apiKeys       ApiKey[]
+  webhooks      WebhookEndpoint[]
   memories      Memory[]
 }
 
@@ -235,6 +236,41 @@ model ApiKey {
 
   workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   workspaceId String
+}
+
+// ─── WEBHOOKS DE SAÍDA ───────────────────────────────────────────
+
+model WebhookEndpoint {
+  id           String   @id @default(cuid())
+  url          String
+  secret       String   // cifrado em repouso (AES-256-GCM)
+  events       String[]
+  isActive     Boolean  @default(true)
+  failureCount Int      @default(0)
+  createdAt    DateTime @default(now())
+
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  workspaceId String
+
+  deliveries WebhookDelivery[]
+}
+
+model WebhookDelivery {
+  id            String   @id @default(cuid())
+  eventId       String
+  type          String
+  payload       Json
+  status        String   @default("PENDING") // PENDING | SUCCESS | FAILED
+  attempts      Int      @default(0)
+  responseCode  Int?
+  lastError     String?
+  nextAttemptAt DateTime @default(now())
+  createdAt     DateTime @default(now())
+
+  endpoint   WebhookEndpoint @relation(fields: [endpointId], references: [id], onDelete: Cascade)
+  endpointId String
+
+  @@index([status, nextAttemptAt])
 }
 
 // ─── MEMÓRIA DO ASSISTENTE ───────────────────────────────────────

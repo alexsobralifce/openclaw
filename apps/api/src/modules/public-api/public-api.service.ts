@@ -2,6 +2,7 @@ import { BadRequestException, ConflictException, Injectable, NotFoundException }
 import { prisma } from "@openclaw/database";
 import { EvolutionService } from "../channels/evolution/evolution.service";
 import { InboxGateway } from "../inbox/inbox.gateway";
+import { WebhooksService } from "../webhooks/webhooks.service";
 import { ListQuery } from "./dto";
 
 const digits = (v?: string) => (v ?? "").replace(/\D/g, "");
@@ -35,6 +36,7 @@ export class PublicApiService {
   constructor(
     private evolution: EvolutionService,
     private gateway: InboxGateway,
+    private webhooks: WebhooksService,
   ) {}
 
   async me(workspaceId: string, scopes: string[]) {
@@ -61,7 +63,9 @@ export class PublicApiService {
 
   async createContact(workspaceId: string, data: { name: string; email?: string; phone?: string; externalId?: string; notes?: string }) {
     try {
-      return await prisma.contact.create({ data: { workspaceId, ...data, phone: data.phone ? digits(data.phone) : undefined } });
+      const c = await prisma.contact.create({ data: { workspaceId, ...data, phone: data.phone ? digits(data.phone) : undefined } });
+      this.webhooks.emit(workspaceId, "contact.created", { contact: c });
+      return c;
     } catch (e) {
       return conflict(e);
     }
@@ -71,7 +75,9 @@ export class PublicApiService {
     await this.getContact(workspaceId, id);
     if (data.phone) data.phone = digits(data.phone);
     try {
-      return await prisma.contact.update({ where: { id }, data });
+      const c = await prisma.contact.update({ where: { id }, data });
+      this.webhooks.emit(workspaceId, "contact.updated", { contact: c });
+      return c;
     } catch (e) {
       return conflict(e);
     }
@@ -83,11 +89,14 @@ export class PublicApiService {
     if (p.length < 8) throw new BadRequestException("Telefone inválido");
     const defined = Object.fromEntries(Object.entries(data).filter(([, v]) => v !== undefined));
     try {
-      return await prisma.contact.upsert({
+      const existed = !!(await prisma.contact.findUnique({ where: { workspaceId_phone: { workspaceId, phone: p } }, select: { id: true } }));
+      const c = await prisma.contact.upsert({
         where: { workspaceId_phone: { workspaceId, phone: p } },
         create: { workspaceId, phone: p, name: data.name ?? p, ...defined },
         update: defined,
       });
+      this.webhooks.emit(workspaceId, existed ? "contact.updated" : "contact.created", { contact: c });
+      return c;
     } catch (e) {
       return conflict(e);
     }
@@ -116,6 +125,7 @@ export class PublicApiService {
       status: conv.status,
       assigneeIds: conv.assignees.map((a) => a.userId),
     });
+    this.webhooks.emit(workspaceId, "conversation.status_changed", { conversationId: id, status: conv.status });
     const { assignees, ...rest } = conv;
     return rest;
   }
@@ -151,14 +161,18 @@ export class PublicApiService {
       throw new BadRequestException(`Falha ao enviar pelo WhatsApp: ${String(e.message).slice(0, 200)}`);
     }
 
+    const known = await prisma.contact.findUnique({ where: { workspaceId_phone: { workspaceId, phone } }, select: { id: true } });
     const contact = await prisma.contact.upsert({
       where: { workspaceId_phone: { workspaceId, phone } },
       create: { workspaceId, phone, name: phone },
       update: {},
     });
-    const conversation =
-      (await prisma.conversation.findFirst({ where: { workspaceId, contactId: contact.id, channelId: channel.id, status: "OPEN" } })) ??
-      (await prisma.conversation.create({ data: { workspaceId, contactId: contact.id, channelId: channel.id } }));
+    if (!known) this.webhooks.emit(workspaceId, "contact.created", { contact });
+    let conversation = await prisma.conversation.findFirst({ where: { workspaceId, contactId: contact.id, channelId: channel.id, status: "OPEN" } });
+    if (!conversation) {
+      conversation = await prisma.conversation.create({ data: { workspaceId, contactId: contact.id, channelId: channel.id } });
+      this.webhooks.emit(workspaceId, "conversation.created", { conversation });
+    }
 
     const message = await prisma.message.create({
       data: { conversationId: conversation.id, body: data.text, direction: "OUTBOUND", type: "TEXT", externalId: res?.key?.id },
@@ -168,6 +182,11 @@ export class PublicApiService {
       message: { id: message.id, body: message.body, type: message.type, direction: message.direction, createdAt: message.createdAt.toISOString(), authorId: null },
     });
 
+    this.webhooks.emit(workspaceId, "message.sent", {
+      conversationId: conversation.id,
+      contactId: contact.id,
+      message: { id: message.id, body: message.body, type: message.type, direction: message.direction, createdAt: message.createdAt },
+    });
     return { id: message.id, conversationId: conversation.id, contactId: contact.id, status: "sent", createdAt: message.createdAt };
   }
 }

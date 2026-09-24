@@ -8,6 +8,7 @@ import { ChannelsService } from "./channels.service";
 import { EvolutionService } from "./evolution/evolution.service";
 import { WhatsappWorker } from "./workers/whatsapp.worker";
 import { AssistantService } from "./assistant/assistant.service";
+import { WebhooksService } from "../webhooks/webhooks.service";
 import { prisma } from "@openclaw/database";
 
 @Controller("channels")
@@ -19,6 +20,7 @@ export class ChannelsController {
     private evolution: EvolutionService,
     private whatsapp: WhatsappWorker,
     private assistant: AssistantService,
+    private webhooks: WebhooksService,
   ) {}
 
   // ─── Autenticado ──────────────────────────────────────────────
@@ -94,7 +96,7 @@ export class ChannelsController {
 
     // Salva a mensagem enviada no banco
     if (body.conversationId) {
-      await prisma.message.create({
+      const saved = await prisma.message.create({
         data: {
           conversationId: body.conversationId,
           body: body.text,
@@ -103,6 +105,10 @@ export class ChannelsController {
           externalId: result?.key?.id,
           authorId: req.user.id,
         },
+      });
+      this.webhooks.emit(workspaceId, "message.sent", {
+        conversationId: body.conversationId,
+        message: { id: saved.id, body: saved.body, type: saved.type, direction: saved.direction, createdAt: saved.createdAt },
       });
     }
 

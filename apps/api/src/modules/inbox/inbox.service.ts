@@ -1,11 +1,15 @@
 import { Injectable } from "@nestjs/common";
 import { prisma } from "@openclaw/database";
 import { InboxGateway } from "./inbox.gateway";
+import { WebhooksService } from "../webhooks/webhooks.service";
 import type { IncomingMessage } from "@openclaw/types";
 
 @Injectable()
 export class InboxService {
-  constructor(private gateway: InboxGateway) {}
+  constructor(
+    private gateway: InboxGateway,
+    private webhooks: WebhooksService,
+  ) {}
 
   async listConversations(workspaceId: string, status?: string) {
     return prisma.conversation.findMany({
@@ -46,6 +50,7 @@ export class InboxService {
       status: conversation.status,
       assigneeIds: conversation.assignees.map((a) => a.userId),
     });
+    this.webhooks.emit(workspaceId, "conversation.status_changed", { conversationId: id, status: conversation.status });
     return conversation;
   }
 
@@ -58,6 +63,7 @@ export class InboxService {
       contact = await prisma.contact.create({
         data: { workspaceId: msg.workspaceId, name: msg.from, phone: msg.from },
       });
+      this.webhooks.emit(msg.workspaceId, "contact.created", { contact });
     }
 
     let conversation = await prisma.conversation.findFirst({
@@ -77,6 +83,7 @@ export class InboxService {
           channelId: msg.channelId,
         },
       });
+      this.webhooks.emit(msg.workspaceId, "conversation.created", { conversation });
     }
 
     const message = await prisma.message.create({
@@ -87,6 +94,12 @@ export class InboxService {
         direction: "INBOUND",
         externalId: msg.externalId,
       },
+    });
+
+    this.webhooks.emit(msg.workspaceId, "message.received", {
+      conversationId: conversation.id,
+      contactId: contact.id,
+      message: { id: message.id, body: message.body, type: message.type, direction: message.direction, createdAt: message.createdAt },
     });
 
     this.gateway.emitNewMessage(msg.workspaceId, {

@@ -1,7 +1,7 @@
 # API pública do openclaw
 
 > **Status: EM ANDAMENTO** — Fase 1 (núcleo) implementada; fases 2 a 4 pendentes.
-> Antes de usar: rodar `pnpm db:push` (novos campos em `ApiKey`).
+> Antes de usar: rodar `pnpm db:push` (campos em `ApiKey` e tabelas `WebhookEndpoint`/`WebhookDelivery`).
 > Página no painel: `/api-publica.html` (menu lateral › *API pública*).
 
 ## Decisões já tomadas
@@ -81,7 +81,7 @@ OpenAPI 3.1 (`@nestjs/swagger`) em `/api/public/docs`; seção "API" no painel p
 ## Plano de entrega
 
 1. **Fase 1 — núcleo (FEITA, exceto OpenAPI e tags/exclusão de contato):** `ApiKeyGuard` + escopos, criar/revogar chaves, `/me`, contatos, conversas, `POST /messages`, rate limit, OpenAPI.
-2. **Fase 2 — eventos (~1 semana):** endpoints de webhook, fila, HMAC, retentativas, log de entregas.
+2. **Fase 2 — eventos (FEITA; `message.status` e `email.received` pendentes):** endpoints de webhook, fila, HMAC, retentativas, log de entregas.
 3. **Fase 3 — e-mail e agenda:** rotas `email/*` e `calendar/*` sobre `google.service`, escopos sensíveis, auditoria reforçada.
 4. **Fase 4 — painel e endurecimento:** tela de chaves/webhooks, idempotência, cotas por plano, testes de carga.
 5. **Depois:** SDKs Node/Python, OAuth2 para apps de terceiros, `/v2` se preciso.
@@ -92,3 +92,13 @@ OpenAPI 3.1 (`@nestjs/swagger`) em `/api/public/docs`; seção "API" no painel p
 - Limites por plano (Básico R$ 70) precisam valer também na API.
 - Segredos de webhook cifrados em repouso.
 - Vazamento de chave com escopo de e-mail: rotação fácil, expiração e alerta de uso anômalo.
+
+## Webhooks de saída — como ficou (Fase 2)
+
+- Escopo `webhooks:manage`. Rotas em `/api/public/v1/webhooks`: `GET`, `POST`, `DELETE /:id`, `POST /:id/test`, `GET /:id/deliveries`, `POST /:id/deliveries/:deliveryId/retry`.
+- O segredo `whsec_…` aparece **uma vez** na criação; fica cifrado (AES-256-GCM) no banco.
+- Eventos: `message.received`, `message.sent`, `conversation.created`, `conversation.status_changed`, `contact.created`, `contact.updated`, `webhook.test` (ou `*` para todos).
+- Cabeçalhos: `X-OpenClaw-Event`, `X-OpenClaw-Delivery`, `X-OpenClaw-Signature: t=<unix>,v1=<HMAC-SHA256(segredo, "t.corpo")>`.
+- Fila **no banco** (tabela `WebhookDelivery`, verificada a cada 5 s), sem depender de Redis; sobrevive a reinícios.
+- Retentativas após 1 min, 5 min, 30 min, 2 h e 12 h; depois a entrega fica `FAILED`. Após 10 entregas falhas seguidas o endpoint é desativado (reativa ao reenviar uma entrega).
+- Proteção SSRF: só `https` (em produção), sem credenciais na URL, bloqueio de endereços internos (10.x, 127.x, 192.168.x, 169.254.x, IPv6 local), sem seguir redirecionamentos.
