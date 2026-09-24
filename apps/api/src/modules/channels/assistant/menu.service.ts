@@ -345,7 +345,7 @@ export class MenuService {
     const [icon, saud] = h < 12 ? ["☀️", "Bom dia"] : h < 18 ? ["🌤️", "Boa tarde"] : ["🌙", "Boa noite"];
     const title = greet ? `${saud}! Sou seu assistente` : "Menu principal";
     const items = labels.map((l, i) => `${key(i + 1)} ${l.icon} ${l.label}${l.sub ? `\n     _${l.sub}_` : ""}`);
-    return [head(greet ? icon : "🏠", title, "O que vamos ver agora?"), items.join("\n"), foot("Responda com o número, escreva ou mande um áudio 🎙️")].join("\n");
+    return [head(greet ? icon : "🏠", title, "O que vamos ver agora?"), items.join("\n"), foot("Responda com o número, escreva ou mande um áudio 🎙️"), "🚗 _Vai dirigir? Diga *vou dirigir* e eu falo por áudio._"].join("\n");
   }
 
   private async runAction(ws: string, opt: any) {

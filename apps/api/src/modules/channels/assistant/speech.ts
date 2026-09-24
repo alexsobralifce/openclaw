@@ -13,7 +13,7 @@ export function toSpeech(text: string): string {
       .trim();
     if (!line || /^(Conta|Para):?\s*\S+@/i.test(line)) continue;
     // não faz sentido ler endereços, datas soltas e títulos de seção em voz alta
-    if (/^\S+@\S+$/.test(line) || /^\d{1,2}\/\d{1,2}(,|\s)\s*\d{1,2}:\d{2}$/.test(line) || /^Resumo$/i.test(line)) continue;
+    if (/^\S+@\S+$/.test(line) || /^\d{1,2}\/\d{1,2}(,|\s)\s*\d{1,2}:\d{2}$/.test(line) || /^Resumo$/i.test(line) || /^Vai dirigir/i.test(line)) continue;
 
     const opt = /^([0-9])\s+(.+)$/.exec(line);
     if (opt) {
