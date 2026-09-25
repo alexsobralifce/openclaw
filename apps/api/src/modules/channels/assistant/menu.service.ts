@@ -7,7 +7,10 @@ import { suspiciousReasons } from "./security";
 
 const TZ = "America/Fortaleza";
 const TTL = 30 * 60_000;
-const GREETING = /^(oi+|ol[aá]|oie|hey|hello|e a[ií]|bom dia|boa tarde|boa noite|menu|in[ií]cio|come[cç]ar|ajuda)\b/i;
+// Saudações abrem o menu (fora de telas de digitação); "menu"/"ajuda"/... só valem como mensagem inteira.
+// (comparadas sem acentos: o \b do JavaScript não reconhece "á" como letra)
+const SALUTE = /^(oi+|ola|oie|hey|hello|e ai|bom dia|boa tarde|boa noite)\b/;
+const MENU_WORD = /^(menu|in[ií]cio|come[cç]ar|ajuda)( por favor)?$/;
 
 interface State {
   screen: string;
@@ -74,11 +77,13 @@ export class MenuService {
 
     try {
       const flat = clean.normalize("NFD").replace(/[\u0300-\u036f]/g, "");
-      if (/(sair do modo (direcao|carro)|desligar (o )?modo (direcao|carro)|desativar (o )?modo (direcao|carro)|parei de dirigir|^cheguei)/.test(flat)) return await this.drivingSet(workspaceId, false);
-      if (/(modo carro|android auto)/.test(flat)) return await this.carSet(workspaceId);
-      if (/(modo direcao|vou dirigir|estou dirigindo|to dirigindo)/.test(flat)) return await this.drivingSet(workspaceId, true);
+      // Em telas de digitação (rascunho de e-mail, evento...), o texto é conteúdo: comandos globais só valem como mensagem inteira
+      const cmd = (src: string) => new RegExp(isInput ? `^(${src})$` : `(${src})`);
+      if (cmd("sair do modo (direcao|carro)|desligar (o )?modo (direcao|carro)|desativar (o )?modo (direcao|carro)|parei de dirigir|^cheguei").test(flat)) return await this.drivingSet(workspaceId, false);
+      if (cmd("modo carro|android auto").test(flat)) return await this.carSet(workspaceId);
+      if (cmd("modo direcao|vou dirigir|estou dirigindo|to dirigindo").test(flat)) return await this.drivingSet(workspaceId, true);
       if (/^(ler |ver |abrir |checar )?(os |meus )?(novos )?e-?mails?( novos)?$/.test(flat)) return await this.emailsEntry(workspaceId);
-      if (GREETING.test(text)) return await this.mainMenu(workspaceId, true);
+      if (MENU_WORD.test(flat) || (!isInput && SALUTE.test(flat))) return await this.mainMenu(workspaceId, true);
       if (!st) return n !== null ? await this.mainMenu(workspaceId, false) : null;
       return await this.route(workspaceId, st, text, n);
     } catch (err: any) {
