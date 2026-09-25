@@ -47,7 +47,7 @@ export class UsersService implements OnModuleInit {
       }
       // Migra o dono antigo do assistente (variável de ambiente) para o cadastro do root
       const legacy = (process.env.OWNER_WHATSAPP_NUMBER || "").replace(/\D/g, "");
-      if (legacy && !root.phone && !(await prisma.user.findUnique({ where: { phone: legacy } }))) {
+      if (legacy && !root.phone && !(await prisma.user.findFirst({ where: { phone: legacy } }))) {
         await prisma.user.update({ where: { id: root.id }, data: { phone: legacy } });
         this.logger.warn(`WhatsApp do assistente (${legacy}) associado ao root`);
       }

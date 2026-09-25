@@ -43,7 +43,7 @@ model User {
   name         String
   passwordHash String?
   avatarUrl    String?
-  phone        String?      @unique // WhatsApp (só dígitos, com DDI) usado para falar com o assistente
+  phone        String? // WhatsApp (só dígitos, com DDI) usado para falar com o assistente
   // Nível na plataforma. ROOT/ADMIN aprovam cadastros e liberam serviços, sem ver o conteúdo dos workspaces.
   role         PlatformRole @default(USER)
   // ACTIVE por padrão para que contas já existentes continuem entrando; o cadastro público cria como PENDING
@@ -56,6 +56,10 @@ model User {
   workspaces    WorkspaceMember[]
   messages      Message[]
   conversations ConversationAssignee[]
+
+  // Unicidade do telefone é garantida no código (users.service / auth.service): um índice único
+  // numa coluna nova faz o `prisma db push` de produção parar pedindo --accept-data-loss
+  @@index([phone])
 }
 
 model WorkspaceMember {
