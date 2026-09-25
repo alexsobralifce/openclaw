@@ -114,7 +114,7 @@ Base: `/api/public/v1` · autenticação `Authorization: Bearer <chave>` · chav
 - Especificação: `GET /api/public/v1/openapi.json`
 - Escopos: `contacts:*`, `conversations:*`, `messages:*`, `email:*`, `calendar:*`, `webhooks:manage`
 - Envios aceitam `Idempotency-Key`
-- Limites por plano (`FREE`, `STARTER`, `GROWTH`): chaves, webhooks e requisições por minuto
+- Limites por plano (`FREE`, `STARTER`, `GROWTH`, `ENTERPRISE`): chaves, webhooks e requisições por minuto
 - Uma chave só vale se o **dono do workspace** tem o serviço liberado
 
 **Webhooks de saída:** eventos `message.received`, `message.sent`, `conversation.created`, `conversation.status_changed`, `contact.created`, `contact.updated`, `email.received`. Cada entrega leva o cabeçalho `X-OpenClaw-Signature: t=<unix>,v1=<hmac-sha256>`, calculado sobre `"<t>.<corpo>"` com o segredo do endpoint.
