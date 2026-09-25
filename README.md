@@ -145,8 +145,8 @@ railway up --service web --detach    # Dockerfile.web
 ## Limitações conhecidas
 
 - **Sem backup automático do banco.** Obrigatório antes de haver clientes reais; o checklist está em [docs/operacao.md](docs/operacao.md) (a API avisa no log ao passar de 5 usuários ativos).
-- Canais Instagram, Facebook e webchat existem no schema, mas **não têm implementação**; Stripe e Resend estão só no `.env.example`.
+- Instagram (DMs de texto, com envio e recebimento) está implementado, mas depende da aprovação do App Review da Meta para atender contas de terceiros; setup em [docs/instagram.md](docs/instagram.md). O envio de mídia e a resposta a comentários não existem (mídia recebida vira só texto + link). Facebook e webchat existem no schema, mas **não têm implementação**; Stripe e Resend estão só no `.env.example`.
 - Áudios e anexos de clientes não são baixados nem transcritos (só os comandos do dono).
 - Listas do inbox sem paginação e sem busca.
 - Migrações via `prisma db push`, sem histórico versionado.
-- Testes cobrem a lógica principal (61); não há testes de integração automatizados nem CI.
+- Testes cobrem a lógica principal (67); não há testes de integração automatizados nem CI.

@@ -3,6 +3,8 @@ import { prisma, Prisma } from "@openclaw/database";
 import { AssistantService } from "../assistant/assistant.service";
 import { findCommander, can } from "../assistant/commander";
 import { WhatsappWorker } from "../workers/whatsapp.worker";
+import { InstagramWorker } from "../workers/instagram.worker";
+import { InstagramEvent, parseInstagramWebhook } from "../instagram/parse";
 import { AutomationRunner } from "../../automations/automation-runner.service";
 import { commandText, isVoiceOrAudio } from "../whatsapp/parse";
 import { isGroupOrBroadcast, phoneFromJid, samePhone, senderPhone } from "../whatsapp/phone";
@@ -15,6 +17,9 @@ const TICK_MS = 2_000;
 const CLAIM_MS = 5 * 60_000;
 const BATCH = 20;
 const KEEP_DONE_DAYS = 7;
+
+// Eventos do Instagram usam "ig:<id da conta>" no lugar do nome da instância do Evolution
+const IG_PREFIX = "ig:";
 
 export const nextAttemptDelay = (attempts: number) => BACKOFF_MS[Math.min(attempts, BACKOFF_MS.length) - 1] ?? BACKOFF_MS[0];
 
@@ -34,6 +39,7 @@ export class InboundService implements OnModuleInit, OnModuleDestroy {
   constructor(
     private assistant: AssistantService,
     private whatsapp: WhatsappWorker,
+    private instagram: InstagramWorker,
     private automations: AutomationRunner,
   ) {}
 
@@ -56,6 +62,18 @@ export class InboundService implements OnModuleInit, OnModuleDestroy {
     });
     if (res.count) void this.tick();
     return res.count > 0;
+  }
+
+  /** Grava as mensagens de um webhook do Instagram na mesma fila. Devolve quantas eram novas. */
+  async enqueueInstagram(body: any): Promise<number> {
+    const events = parseInstagramWebhook(body);
+    if (!events.length) return 0;
+    const res = await prisma.inboundEvent.createMany({
+      data: events.map((e) => ({ instance: `${IG_PREFIX}${e.accountId}`, externalId: e.mid, payload: e as unknown as Prisma.InputJsonValue })),
+      skipDuplicates: true,
+    });
+    if (res.count) void this.tick();
+    return res.count;
   }
 
   private async tick() {
@@ -108,6 +126,7 @@ export class InboundService implements OnModuleInit, OnModuleDestroy {
 
   /** Decide se a mensagem é um comando de um usuário para o assistente ou uma mensagem de cliente. */
   private async process(instance: string, body: any) {
+    if (instance.startsWith(IG_PREFIX)) return this.processInstagram(body as InstagramEvent);
     const data = body?.data;
     if (!data?.key) return;
 
@@ -151,10 +170,22 @@ export class InboundService implements OnModuleInit, OnModuleDestroy {
     if (data.key.fromMe) return;
 
     const res = await this.whatsapp.process(channel.workspaceId, channel.id, body);
-    if (!res) return;
+    if (res) await this.fireAutomations(channel.workspaceId, channel.id, res);
+  }
+
+  private async processInstagram(ev: InstagramEvent) {
+    const res = await this.instagram.process(ev);
+    if (res) await this.fireAutomations(res.channel.workspaceId, res.channel.id, res);
+  }
+
+  private async fireAutomations(
+    workspaceId: string,
+    channelId: string,
+    res: { conversation: { id: string }; contact: { id: string; name: string; phone: string | null }; message: { body: string; type: string }; newConversation: boolean },
+  ) {
     const ev = {
-      workspaceId: channel.workspaceId,
-      conversation: { id: res.conversation.id, channelId: channel.id },
+      workspaceId,
+      conversation: { id: res.conversation.id, channelId },
       contact: { id: res.contact.id, name: res.contact.name, phone: res.contact.phone },
       message: { body: res.message.body, type: res.message.type },
     };

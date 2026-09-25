@@ -18,6 +18,7 @@ export function ConversationPanel({ conversationId }: Props) {
   const [messages, setMessages] = useState<any[]>([]);
   const [text, setText] = useState("");
   const [sending, setSending] = useState(false);
+  const [sendError, setSendError] = useState("");
   const [status, setStatus] = useState<string>("OPEN");
   const bottomRef = useRef<HTMLDivElement>(null);
 
@@ -54,6 +55,7 @@ export function ConversationPanel({ conversationId }: Props) {
     const body = text.trim();
     if (!body || !data) return;
     setSending(true);
+    setSendError("");
     const optimisticId = `opt_${Date.now()}`;
     const optimistic = {
       id: optimisticId, body, direction: "OUTBOUND",
@@ -62,13 +64,13 @@ export function ConversationPanel({ conversationId }: Props) {
     setMessages((prev) => [...prev, optimistic]);
     setText("");
     try {
-      await api.channels.sendWhatsapp(
-        data.channel.id,
-        data.contact.phone,
-        body,
-        conversationId,
-      );
-    } catch {
+      if (data.channel.type === "INSTAGRAM") {
+        await api.channels.sendInstagram(data.channel.id, body, conversationId);
+      } else {
+        await api.channels.sendWhatsapp(data.channel.id, data.contact.phone, body, conversationId);
+      }
+    } catch (e: any) {
+      setSendError(e?.message ?? "Não foi possível enviar a mensagem");
       setMessages((prev) => prev.filter((m) => m.id !== optimisticId));
       setText(body);
     } finally {
@@ -174,6 +176,7 @@ export function ConversationPanel({ conversationId }: Props) {
 
         {/* Input */}
         <div className="flex-shrink-0 border-t border-gray-800 bg-gray-900 p-3">
+          {sendError && <p className="mb-2 text-xs text-red-400">{sendError}</p>}
           <div className="flex items-end gap-2">
             <div className="flex-1 bg-gray-800 rounded-xl border border-gray-700 focus-within:border-teal-500/50 transition-colors">
               <textarea

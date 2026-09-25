@@ -13,7 +13,7 @@ function assertProductionConfig() {
 
 async function bootstrap() {
   assertProductionConfig();
-  const app = await NestFactory.create<NestExpressApplication>(AppModule);
+  const app = await NestFactory.create<NestExpressApplication>(AppModule, { rawBody: true }); // rawBody: a assinatura do webhook do Instagram é do corpo cru
 
   // Atrás do proxy do Railway: confia só no último salto para que req.ip seja o IP real do cliente
   app.set("trust proxy", 1);

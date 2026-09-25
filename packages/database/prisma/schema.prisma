@@ -114,6 +114,8 @@ model Contact {
 
   @@unique([workspaceId, phone])
   @@unique([workspaceId, email])
+  // Instagram: o contato é identificado pelo IGSID (sem telefone). Índice comum, sem @unique, por causa do db push em produção
+  @@index([workspaceId, externalId])
 }
 
 model Tag {

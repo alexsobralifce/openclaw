@@ -31,6 +31,9 @@ export default function ChannelsPage() {
     const g = new URLSearchParams(window.location.search).get("google");
     if (g === "ok") setGoogleMsg("Google conectado com sucesso.");
     if (g === "error") setGoogleMsg("Não foi possível conectar o Google. Tente novamente.");
+    const ig = new URLSearchParams(window.location.search).get("instagram");
+    if (ig === "ok") setGoogleMsg("Instagram conectado com sucesso.");
+    if (ig === "error") setGoogleMsg("Não foi possível conectar o Instagram. Tente novamente.");
   }, []);
 
   return (
@@ -85,31 +88,41 @@ export default function ChannelsPage() {
   );
 }
 
+/** Manda o cliente para o login do Instagram; ele autoriza e volta para cá já conectado. */
+async function connectInstagram() {
+  const { url } = await api.channels.instagramAuthUrl();
+  window.location.href = url;
+}
+
 function ChannelCard({ channel, onDelete }: { channel: any; onDelete: () => void }) {
   const [status, setStatus] = useState<string>("checking");
   const [showQr, setShowQr] = useState(false);
 
+  const isInstagram = channel.type === "INSTAGRAM";
+  const igNeedsReconnect = isInstagram && (!channel.isActive || channel.config?.needsReconnect);
+
   useEffect(() => {
+    if (isInstagram) { setStatus(igNeedsReconnect ? "reconnect" : "open"); return; }
     if (channel.type !== "WHATSAPP") return;
     api.channels.whatsappStatus(channel.id)
       .then((s: any) => setStatus(s.state ?? "unknown"))
       .catch(() => setStatus("error"));
-  }, [channel.id, channel.type]);
+  }, [channel.id, channel.type, isInstagram, igNeedsReconnect]);
 
   const STATE_LABEL: Record<string, string> = {
     open: "Conectado", close: "Desconectado", connecting: "Conectando...",
-    checking: "Verificando...", error: "Erro", unknown: "Desconhecido",
+    checking: "Verificando...", error: "Erro", unknown: "Desconhecido", reconnect: "Precisa reconectar",
   };
   const STATE_COLOR: Record<string, string> = {
     open: "text-teal-400", close: "text-red-400", connecting: "text-amber-400",
-    checking: "text-gray-500", error: "text-red-400", unknown: "text-gray-500",
+    checking: "text-gray-500", error: "text-red-400", unknown: "text-gray-500", reconnect: "text-amber-400",
   };
 
   return (
     <div className="bg-gray-900 border border-gray-800 rounded-xl p-4">
       <div className="flex items-center gap-4">
         <div className="w-10 h-10 rounded-xl bg-green-500/15 border border-green-500/20 flex items-center justify-center text-xl flex-shrink-0">
-          {channel.type === "WHATSAPP" ? "🟢" : channel.type === "EMAIL" ? "📧" : "💬"}
+          {channel.type === "WHATSAPP" ? "🟢" : channel.type === "INSTAGRAM" ? "🟣" : channel.type === "EMAIL" ? "📧" : "💬"}
         </div>
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2">
@@ -131,8 +144,20 @@ function ChannelCard({ channel, onDelete }: { channel: any; onDelete: () => void
               Ver QR Code
             </button>
           )}
+          {isInstagram && igNeedsReconnect && (
+            <button
+              onClick={connectInstagram}
+              className="px-3 py-1.5 text-xs font-medium bg-teal-500/10 text-teal-400 hover:bg-teal-500/20 rounded-lg transition-colors"
+            >
+              Reconectar
+            </button>
+          )}
           <button
-            onClick={async () => { await api.channels.deleteWhatsapp(channel.id); onDelete(); }}
+            onClick={async () => {
+              if (isInstagram) await api.channels.disconnectInstagram(channel.id);
+              else await api.channels.deleteWhatsapp(channel.id);
+              onDelete();
+            }}
             className="px-3 py-1.5 text-xs font-medium bg-red-500/10 text-red-400 hover:bg-red-500/20 rounded-lg transition-colors"
           >
             Remover
@@ -205,6 +230,7 @@ function QrCodePanel({ channelId, onClose, onConnected }: { channelId: string; o
 
 function AddChannelModal({ onClose, onCreated }: { onClose: () => void; onCreated: (ch: any) => void }) {
   const [step, setStep] = useState<"pick" | "whatsapp">("pick");
+  const [error, setError] = useState("");
 
   if (step === "whatsapp") {
     return <WhatsappSetup onClose={onClose} onCreated={onCreated} />;
@@ -213,7 +239,10 @@ function AddChannelModal({ onClose, onCreated }: { onClose: () => void; onCreate
   const options = [
     { type: "WHATSAPP", label: "WhatsApp", icon: "🟢", desc: "via Evolution API", action: () => setStep("whatsapp") },
     { type: "EMAIL", label: "Email", icon: "📧", desc: "IMAP + SMTP", action: () => {} },
-    { type: "INSTAGRAM", label: "Instagram", icon: "🟣", desc: "Meta Graph API", action: () => {} },
+    {
+      type: "INSTAGRAM", label: "Instagram", icon: "🟣", desc: "Entrar com o Instagram",
+      action: () => connectInstagram().catch((e: any) => setError(e.message)),
+    },
     { type: "WEBCHAT", label: "Webchat", icon: "💬", desc: "Widget embeddável", action: () => {} },
   ];
 
@@ -229,7 +258,7 @@ function AddChannelModal({ onClose, onCreated }: { onClose: () => void; onCreate
             <button
               key={opt.type}
               onClick={opt.action}
-              disabled={opt.type !== "WHATSAPP"}
+              disabled={opt.type !== "WHATSAPP" && opt.type !== "INSTAGRAM"}
               className="flex flex-col items-center gap-2 p-4 rounded-xl border border-gray-800 bg-gray-950 hover:border-teal-500/40 hover:bg-teal-500/5 disabled:opacity-40 disabled:cursor-not-allowed transition-all"
             >
               <span className="text-2xl">{opt.icon}</span>
@@ -238,6 +267,7 @@ function AddChannelModal({ onClose, onCreated }: { onClose: () => void; onCreate
             </button>
           ))}
         </div>
+        {error && <p className="mt-3 text-xs text-red-400">{error}</p>}
       </div>
     </div>
   );
