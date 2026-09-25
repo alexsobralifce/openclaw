@@ -1,0 +1,32 @@
+import { applyDecorators, CanActivate, ExecutionContext, ForbiddenException, Injectable, SetMetadata, UseGuards } from "@nestjs/common";
+import { Reflector } from "@nestjs/core";
+import { AuthGuard } from "@nestjs/passport";
+import { canManageUsers, effectiveServices, Service, SERVICES } from "./permissions";
+
+const SERVICE_KEY = "access:service";
+const ADMIN_KEY = "access:admin";
+
+@Injectable()
+export class AccessGuard implements CanActivate {
+  constructor(private reflector: Reflector) {}
+
+  canActivate(ctx: ExecutionContext) {
+    const user = ctx.switchToHttp().getRequest().user;
+    const targets = [ctx.getHandler(), ctx.getClass()];
+    if (this.reflector.getAllAndOverride<boolean>(ADMIN_KEY, targets) && !canManageUsers(user.role)) {
+      throw new ForbiddenException("Apenas administradores da plataforma");
+    }
+    const service = this.reflector.getAllAndOverride<Service>(SERVICE_KEY, targets);
+    if (service && !effectiveServices(user.role, user.services).includes(service)) {
+      throw new ForbiddenException(`Serviço não liberado para sua conta: ${SERVICES[service]}. Fale com o administrador.`);
+    }
+    return true;
+  }
+}
+
+/** Exige login e, se informado, que o serviço esteja liberado para o usuário. */
+export const Access = (service?: Service) =>
+  applyDecorators(...(service ? [SetMetadata(SERVICE_KEY, service)] : []), UseGuards(AuthGuard("jwt"), AccessGuard));
+
+/** Exige login como ROOT ou ADMIN da plataforma. */
+export const AdminOnly = () => applyDecorators(SetMetadata(ADMIN_KEY, true), UseGuards(AuthGuard("jwt"), AccessGuard));

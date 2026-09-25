@@ -1,19 +1,22 @@
 import { CanActivate, ExecutionContext, HttpException, Injectable, UnauthorizedException, ForbiddenException } from "@nestjs/common";
 import { Reflector } from "@nestjs/core";
 import { ApiKeysService } from "./api-keys.service";
+import { prisma } from "@openclaw/database";
 import { ApiKeyContext, SCOPES_KEY } from "./scopes";
+import { StateService } from "../state/state.service";
+import { effectiveServices, serviceForScope, SERVICES } from "../auth/permissions";
 
 const WINDOW_MS = 60_000;
 const TOUCH_EVERY_MS = 60_000;
 
 @Injectable()
 export class ApiKeyGuard implements CanActivate {
-  private hits = new Map<string, { start: number; count: number }>();
   private touched = new Map<string, number>();
 
   constructor(
     private keys: ApiKeysService,
     private reflector: Reflector,
+    private state: StateService,
   ) {}
 
   async canActivate(ctx: ExecutionContext) {
@@ -28,7 +31,8 @@ export class ApiKeyGuard implements CanActivate {
     const missing = required.filter((s) => !key.scopes.includes(s));
     if (missing.length) throw new ForbiddenException(`Escopo insuficiente. Necessário: ${missing.join(", ")}`);
 
-    this.limit(key.id, key.rateLimit, ctx);
+    await this.checkOwner(key.workspaceId, ["api", ...required.map(serviceForScope)]);
+    await this.limit(key.id, key.rateLimit, ctx);
 
     const now = Date.now();
     if (now - (this.touched.get(key.id) ?? 0) > TOUCH_EVERY_MS) {
@@ -40,17 +44,24 @@ export class ApiKeyGuard implements CanActivate {
     return true;
   }
 
-  /** Limite por minuto (janela fixa, em memória por instância). */
-  private limit(id: string, max: number, ctx: ExecutionContext) {
-    const now = Date.now();
-    const h = this.hits.get(id);
-    if (!h || now - h.start >= WINDOW_MS) {
-      this.hits.set(id, { start: now, count: 1 });
-      return;
+  /** A chave herda as restrições do dono do workspace: conta ativa e serviços liberados pelo administrador. */
+  private async checkOwner(workspaceId: string, needed: string[]) {
+    const owner = await prisma.workspaceMember.findFirst({ where: { workspaceId, role: "OWNER" }, include: { user: true } });
+    if (!owner || owner.user.status !== "ACTIVE") throw new ForbiddenException("Conta do workspace inativa ou aguardando aprovação");
+    const allowed: string[] = effectiveServices(owner.user.role, owner.user.services);
+    const missing = [...new Set(needed)].filter((s) => !allowed.includes(s));
+    if (missing.length) {
+      throw new ForbiddenException(`Serviço não liberado para esta conta: ${missing.map((s) => SERVICES[s as keyof typeof SERVICES]).join(", ")}`);
     }
-    h.count++;
-    if (h.count > max) {
-      const retry = Math.ceil((h.start + WINDOW_MS - now) / 1000);
+  }
+
+  /** Limite por minuto (janela fixa, compartilhada entre instâncias pelo banco). */
+  private async limit(id: string, max: number, ctx: ExecutionContext) {
+    const now = Date.now();
+    const window = Math.floor(now / WINDOW_MS);
+    const count = await this.state.incr(`rl:key:${id}:${window}`, WINDOW_MS * 2);
+    if (count > max) {
+      const retry = Math.ceil(((window + 1) * WINDOW_MS - now) / 1000);
       ctx.switchToHttp().getResponse().setHeader("Retry-After", String(retry));
       throw new HttpException("Limite de requisições excedido", 429);
     }

@@ -1,12 +1,18 @@
-import { Injectable, UnauthorizedException, ConflictException } from "@nestjs/common";
+import { Injectable, UnauthorizedException, ConflictException, ForbiddenException } from "@nestjs/common";
 import { JwtService } from "@nestjs/jwt";
 import { prisma } from "@openclaw/database";
 import * as bcrypt from "bcryptjs";
+import { statusMessage } from "./jwt.strategy";
+import { effectiveServices } from "./permissions";
 
 @Injectable()
 export class AuthService {
   constructor(private jwt: JwtService) {}
 
+  /**
+   * Cada cadastro ganha o próprio workspace. O primeiro usuário do sistema vira ROOT;
+   * os demais ficam pendentes até um ROOT/ADMIN aprovar e liberar os serviços.
+   */
   async register(email: string, name: string, password: string, workspaceName: string) {
     const existing = await prisma.user.findUnique({ where: { email } });
     if (existing) throw new ConflictException("Email já cadastrado");
@@ -21,12 +27,16 @@ export class AuthService {
       .slice(0, 40);
 
     const uniqueSlug = `${slug}-${Date.now().toString(36)}`;
+    const first = (await prisma.user.count()) === 0;
 
     const user = await prisma.user.create({
       data: {
         email,
         name,
         passwordHash,
+        role: first ? "ROOT" : "USER",
+        status: first ? "ACTIVE" : "PENDING",
+        approvedAt: first ? new Date() : null,
         workspaces: {
           create: {
             role: "OWNER",
@@ -37,6 +47,7 @@ export class AuthService {
       include: { workspaces: { include: { workspace: true } } },
     });
 
+    if (user.status !== "ACTIVE") return { pending: true, message: statusMessage(user.status) };
     return this.buildResponse(user);
   }
 
@@ -49,6 +60,8 @@ export class AuthService {
 
     const valid = await bcrypt.compare(password, user.passwordHash);
     if (!valid) throw new UnauthorizedException("Credenciais inválidas");
+    // Só depois de conferir a senha, para não revelar quais e-mails estão cadastrados
+    if (user.status !== "ACTIVE") throw new ForbiddenException(statusMessage(user.status));
 
     return this.buildResponse(user);
   }
@@ -59,31 +72,39 @@ export class AuthService {
       include: { workspaces: { include: { workspace: true } } },
     });
     if (!user) throw new UnauthorizedException();
-    const ws = user.workspaces[0];
+    return this.view(user);
+  }
+
+  /** O próprio usuário cadastra o WhatsApp de onde vai falar com o assistente. */
+  async updateProfile(userId: string, data: { name?: string; phone?: string | null }) {
+    const phone = data.phone === undefined ? undefined : (data.phone ?? "").replace(/\D/g, "") || null;
+    if (phone && (await prisma.user.findFirst({ where: { phone, NOT: { id: userId } } }))) {
+      throw new ConflictException("Este WhatsApp já está cadastrado em outra conta");
+    }
+    await prisma.user.update({ where: { id: userId }, data: { ...(data.name ? { name: data.name } : {}), ...(phone !== undefined ? { phone } : {}) } });
+    return this.me(userId);
+  }
+
+  private view(user: any) {
+    const ws = user.workspaces?.[0];
     return {
       id: user.id,
       name: user.name,
       email: user.email,
-      avatarUrl: user.avatarUrl,
+      avatarUrl: user.avatarUrl ?? null,
+      phone: user.phone ?? null,
       workspaceId: ws?.workspaceId ?? null,
       workspaceName: ws?.workspace?.name ?? null,
       role: ws?.role ?? null,
+      platformRole: user.role,
+      services: effectiveServices(user.role, user.services),
     };
   }
 
   private buildResponse(user: any) {
-    const ws = user.workspaces?.[0];
     return {
       accessToken: this.jwt.sign({ sub: user.id, email: user.email }),
-      user: {
-        id: user.id,
-        name: user.name,
-        email: user.email,
-        avatarUrl: user.avatarUrl ?? null,
-        workspaceId: ws?.workspaceId ?? null,
-        workspaceName: ws?.workspace?.name ?? null,
-        role: ws?.role ?? null,
-      },
+      user: this.view(user),
     };
   }
 }

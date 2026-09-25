@@ -18,7 +18,15 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   }
   if (!res.ok) {
     const err = await res.json().catch(() => ({}));
-    throw new Error(err.message || `HTTP ${res.status}`);
+    // Conta desativada ou pendente: encerra a sessão e mostra o motivo no login
+    if (res.status === 403 && err.code === "ACCOUNT_INACTIVE" && typeof window !== "undefined") {
+      localStorage.removeItem("oc_token");
+      localStorage.removeItem("oc_user");
+      document.cookie = "oc_token=; path=/; max-age=0";
+      window.location.href = `/auth/login?motivo=${encodeURIComponent(err.message)}`;
+    }
+    const msg = Array.isArray(err.message) ? err.message.join("; ") : err.message;
+    throw new Error(msg || `HTTP ${res.status}`);
   }
   return res.json();
 }
@@ -31,11 +39,29 @@ export const api = {
         body: JSON.stringify({ email, password }),
       }),
     register: (data: { email: string; name: string; password: string; workspaceName: string }) =>
-      request<{ accessToken: string; user: any }>("/auth/register", {
+      request<{ accessToken?: string; user?: any; pending?: boolean; message?: string }>("/auth/register", {
         method: "POST",
         body: JSON.stringify(data),
       }),
     me: () => request<any>("/auth/me"),
+    services: () => request<Record<string, string>>("/auth/services"),
+    updateMe: (data: { name?: string; phone?: string }) =>
+      request<any>("/auth/me", { method: "PATCH", body: JSON.stringify(data) }),
+  },
+  users: {
+    catalog: () => request<{ services: Record<string, string>; defaults: Record<string, string[]> }>("/users/services"),
+    list: (status?: string) => request<any[]>(`/users${status ? `?status=${status}` : ""}`),
+    create: (data: any) => request<any>("/users", { method: "POST", body: JSON.stringify(data) }),
+    update: (id: string, data: any) => request<any>(`/users/${id}`, { method: "PATCH", body: JSON.stringify(data) }),
+    remove: (id: string) => request<any>(`/users/${id}`, { method: "DELETE" }),
+  },
+  automations: {
+    list: () => request<any[]>("/automations"),
+    create: (data: any) => request<any>("/automations", { method: "POST", body: JSON.stringify(data) }),
+    update: (id: string, data: any) => request<any>(`/automations/${id}`, { method: "PATCH", body: JSON.stringify(data) }),
+    toggle: (id: string, isActive: boolean) =>
+      request<any>(`/automations/${id}/toggle`, { method: "PATCH", body: JSON.stringify({ isActive }) }),
+    remove: (id: string) => request<any>(`/automations/${id}`, { method: "DELETE" }),
   },
   inbox: {
     list: (status?: string) =>

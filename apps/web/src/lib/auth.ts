@@ -8,6 +8,10 @@ export interface UserInfo {
   workspaceId: string | null;
   workspaceName: string | null;
   role: string | null;
+  phone?: string | null;
+  /** ROOT | ADMIN | USER */
+  platformRole?: string;
+  services?: string[];
 }
 
 export function getToken(): string | null {

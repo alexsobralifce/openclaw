@@ -1,5 +1,6 @@
 import { BadGatewayException, BadRequestException, Injectable, Logger, NotFoundException, HttpException, HttpStatus } from "@nestjs/common";
 import { GoogleService } from "../integrations/google/google.service";
+import { StateService } from "../state/state.service";
 
 const MAX_RANGE_MS = 92 * 24 * 3600 * 1000;
 const SEND_WINDOW_MS = 3600 * 1000;
@@ -9,9 +10,7 @@ const SEND_PER_HOUR = Number(process.env.API_EMAIL_SEND_PER_HOUR || 30);
 @Injectable()
 export class GooglePublicService {
   private readonly logger = new Logger("PublicApi.Audit");
-  private sends = new Map<string, number[]>();
-
-  constructor(private google: GoogleService) {}
+  constructor(private google: GoogleService, private state: StateService) {}
 
   private audit(keyId: string, workspaceId: string, action: string, account?: string) {
     this.logger.log(`[AUDIT-API] key=${keyId} ws=${workspaceId} ${action} account=${account ?? "(padrão)"}`);
@@ -56,15 +55,13 @@ export class GooglePublicService {
     });
   }
 
-  sendEmail(keyId: string, workspaceId: string, d: { to: string; subject: string; text: string; account?: string }) {
+  async sendEmail(keyId: string, workspaceId: string, d: { to: string; subject: string; text: string; account?: string }) {
     // impede injeção de cabeçalhos (quebras de linha) no assunto e no destinatário
     if (/[\r\n]/.test(d.subject) || /[\r\n,;<>\s]/.test(d.to)) throw new BadRequestException("Assunto ou destinatário inválido");
 
-    const now = Date.now();
-    const recent = (this.sends.get(keyId) ?? []).filter((t) => now - t < SEND_WINDOW_MS);
-    if (recent.length >= SEND_PER_HOUR) throw new HttpException("Limite de e-mails por hora excedido para esta chave", HttpStatus.TOO_MANY_REQUESTS);
-    recent.push(now);
-    this.sends.set(keyId, recent);
+    const window = Math.floor(Date.now() / SEND_WINDOW_MS);
+    const sent = await this.state.incr(`rl:email:${keyId}:${window}`, SEND_WINDOW_MS * 2);
+    if (sent > SEND_PER_HOUR) throw new HttpException("Limite de e-mails por hora excedido para esta chave", HttpStatus.TOO_MANY_REQUESTS);
 
     this.audit(keyId, workspaceId, `email.send to=${d.to} subjectLen=${d.subject.length}`, d.account);
     return this.run(async () => {

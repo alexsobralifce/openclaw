@@ -4,9 +4,15 @@ import { EvolutionService } from "../evolution/evolution.service";
 import { GoogleService } from "../../integrations/google/google.service";
 import { MemoryService } from "./memory.service";
 import { suspiciousReasons } from "./security";
+import { StateService } from "../../state/state.service";
+import { effectiveServices, Service } from "../../auth/permissions";
+import { normalize, parseChoice, pickByLabel } from "./voice";
 
-const TZ = "America/Fortaleza";
+const TZ = process.env.ASSISTANT_TZ || "America/Fortaleza";
 const TTL = 30 * 60_000;
+// Modos carro/direção desligam sozinhos depois deste tempo sem uso (para não ficar preso em "texto falado" na mesa)
+const MODE_TTL = Number(process.env.CAR_MODE_HOURS || 3) * 3600_000;
+type Mode = "car" | "driving";
 // Saudações abrem o menu (fora de telas de digitação); "menu"/"ajuda"/... só valem como mensagem inteira.
 // (comparadas sem acentos: o \b do JavaScript não reconhece "á" como letra)
 const SALUTE = /^(oi+|ola|oie|hey|hello|e ai|bom dia|boa tarde|boa noite)\b/;
@@ -18,15 +24,15 @@ interface State {
   at: number;
 }
 
-const WORDS: Record<string, number> = { zero: 0, um: 1, uma: 1, dois: 2, duas: 2, "três": 3, tres: 3, quatro: 4, cinco: 5, seis: 6, sete: 7, oito: 8 };
 const ALIASES: Record<string, Record<string, number>> = {
   notif: { ler: 1, abrir: 1, apagar: 2, excluir: 2, responder: 3, spam: 4, "marcar como spam": 4, "e spam": 4 },
   email: { responder: 1, apagar: 2, excluir: 2, marcar: 3, "marcar como lido": 3, spam: 4, "marcar como spam": 4 },
-  email_draft: { enviar: 1, mandar: 1, "pode enviar": 1, confirmar: 1, sim: 1, refazer: 2, cancelar: 0 },
-  client_draft: { enviar: 1, mandar: 1, refazer: 2, cancelar: 0 },
-  event_confirm: { confirmar: 1, confirma: 1, sim: 1, refazer: 2, cancelar: 0 },
+  email_draft: { enviar: 1, mandar: 1, "pode enviar": 1, confirmar: 1, sim: 1, refazer: 2, cancelar: 0, nao: 0 },
+  client_draft: { enviar: 1, mandar: 1, "pode enviar": 1, confirmar: 1, sim: 1, refazer: 2, cancelar: 0, nao: 0 },
+  event_confirm: { confirmar: 1, confirma: 1, sim: 1, criar: 1, refazer: 2, cancelar: 0, nao: 0 },
   client: { responder: 1, resolver: 2 },
-  confirm_ai: { confirmar: 1, confirma: 1, sim: 1, "pode enviar": 1, cancelar: 0, nao: 0, não: 0 },
+  confirm_ai: { confirmar: 1, confirma: 1, sim: 1, "pode enviar": 1, "pode mandar": 1, cancelar: 0, nao: 0 },
+  agenda: { hoje: 1, amanha: 2, semana: 3, "proximos 7 dias": 3, "criar evento": 4, "novo evento": 4 },
 };
 
 const DIV = "━━━━━━━━━━━━━━━━━━";
@@ -50,11 +56,14 @@ const dateStr = (offsetDays: number) =>
 @Injectable()
 export class MenuService {
   private readonly logger = new Logger(MenuService.name);
-  private states = new Map<string, State>();
-
   private executor?: (ws: string, action: { name: string; args: any }) => Promise<any>;
 
-  constructor(private google: GoogleService, private evolution: EvolutionService, private memory: MemoryService) {}
+  constructor(
+    private google: GoogleService,
+    private evolution: EvolutionService,
+    private memory: MemoryService,
+    private state: StateService,
+  ) {}
 
   setExecutor(fn: (ws: string, action: { name: string; args: any }) => Promise<any>) {
     this.executor = fn;
@@ -65,42 +74,67 @@ export class MenuService {
   /** Retorna a resposta do menu, ou null para deixar a IA responder livremente. */
   async respond(workspaceId: string, raw: string): Promise<string | null> {
     const text = raw.trim();
-    let st = this.states.get(workspaceId);
-    if (st && Date.now() - st.at > TTL) st = undefined;
+    const st = await this.state.get<State>(this.key(workspaceId));
+    await this.touchMode(workspaceId);
     const clean = text.toLowerCase().replace(/[.!?,;:"“”']/g, "").trim();
+    const flat = normalize(text);
     const isInput = !!st && st.screen.endsWith("_input");
     let n: number | null = null;
     if (/^\d{1,2}$/.test(clean)) n = Number(clean);
-    else if (!isInput && clean in WORDS) n = WORDS[clean];
-    else if (!isInput && clean === "voltar") n = 0;
-    else if (st && !isInput) n = ALIASES[st.screen]?.[clean] ?? null;
+    else if (!isInput && (flat === "voltar" || flat === "volta")) n = 0;
+    else if (st && !isInput && ALIASES[st.screen]?.[flat] !== undefined) n = ALIASES[st.screen][flat];
+    // Escolhas faladas: "opção dois", "a segunda", "o último"
+    else if (!isInput) n = parseChoice(text, st?.data?.items?.length ?? st?.data?.options?.length);
 
     try {
-      const flat = clean.normalize("NFD").replace(/[\u0300-\u036f]/g, "");
       // Em telas de digitação (rascunho de e-mail, evento...), o texto é conteúdo: comandos globais só valem como mensagem inteira
       const cmd = (src: string) => new RegExp(isInput ? `^(${src})$` : `(${src})`);
       if (cmd("sair do modo (direcao|carro)|desligar (o )?modo (direcao|carro)|desativar (o )?modo (direcao|carro)|parei de dirigir|^cheguei").test(flat)) return await this.drivingSet(workspaceId, false);
-      if (cmd("modo carro|android auto").test(flat)) return await this.carSet(workspaceId);
+      if (cmd("modo carro|android auto|carplay|car play|estou no carro|to no carro").test(flat)) return await this.carSet(workspaceId);
       if (cmd("modo direcao|vou dirigir|estou dirigindo|to dirigindo").test(flat)) return await this.drivingSet(workspaceId, true);
       if (/^(ler |ver |abrir |checar )?(os |meus )?(novos )?e-?mails?( novos)?$/.test(flat)) return await this.emailsEntry(workspaceId);
+      // Navegação direta por voz, de qualquer tela (fora das telas de digitação)
+      if (!isInput && /^(ver |abrir |mostrar )?(as |minhas )?conversas( de clientes| em aberto)?$/.test(flat) && (await this.services(workspaceId)).includes("inbox")) return await this.clientList(workspaceId);
+      if (!isInput && /^(ver |abrir |mostrar )?(a |minha )?agenda$/.test(flat) && (await this.services(workspaceId)).includes("calendar")) return await this.agendaMenu(workspaceId);
       if (MENU_WORD.test(flat) || (!isInput && SALUTE.test(flat))) return await this.mainMenu(workspaceId, true);
       if (!st) return n !== null ? await this.mainMenu(workspaceId, false) : null;
       return await this.route(workspaceId, st, text, n);
     } catch (err: any) {
       this.logger.error(`Menu falhou: ${err.message}`);
-      this.states.delete(workspaceId);
+      await this.state.del(this.key(workspaceId));
       return `😕 *Ops, tive um problema:* ${short(err.message, 160)}\n💡 _Digite *menu* para recomeçar._`;
     }
   }
 
-  private set(ws: string, screen: string, data: any = {}) {
-    this.states.set(ws, { screen, data, at: Date.now() });
+  private key(ws: string) {
+    return `menu:${ws}`;
+  }
+
+  private async set(ws: string, screen: string, data: any = {}) {
+    await this.state.set(this.key(ws), { screen, data, at: Date.now() }, TTL);
+  }
+
+  /** Serviços liberados para o dono do workspace (o menu só mostra o que ele pode usar). */
+  private async services(ws: string): Promise<Service[]> {
+    const m = await prisma.workspaceMember.findFirst({ where: { workspaceId: ws, role: "OWNER" }, include: { user: true } });
+    return m ? effectiveServices(m.user.role, m.user.services) : [];
+  }
+
+  private async ownerName(ws: string) {
+    const m = await prisma.workspaceMember.findFirst({ where: { workspaceId: ws, role: "OWNER" }, include: { user: true } });
+    return m?.user.name ?? "o usuário";
+  }
+
+  /** Quantos itens listar: no carro, listas curtas para ouvir sem se perder. */
+  private async listSize(ws: string, normal: number) {
+    return (await this.isCar(ws)) ? Math.min(normal, 4) : normal;
   }
 
   private async route(ws: string, st: State, text: string, n: number | null): Promise<string | null> {
     const d = st.data;
     switch (st.screen) {
       case "main": {
+        if (n === null) n = pickByLabel(text, d.labels ?? []);
         if (n === null) return null;
         const opt = d.options[n - 1];
         return opt ? this.runAction(ws, opt) : this.invalid();
@@ -118,6 +152,7 @@ export class MenuService {
       }
       case "emails": {
         if (n === 0) return this.mainMenu(ws, false);
+        if (n === null) n = pickByLabel(text, d.items.map((m: any) => `${personName(m.de)} ${m.assunto ?? ""}`));
         if (n === null) return null;
         const item = d.items[n - 1];
         return item ? this.emailOpen(ws, item.account ?? d.account, item.id) : this.invalid();
@@ -129,7 +164,7 @@ export class MenuService {
         if (n === 4) return this.emailSpam(ws, d.account, d.id, false);
         if (n === 3) {
           const m: any = await this.google.gmailRead(ws, d.id, d.account);
-          this.set(ws, "email_reply_input", { ...m, account: d.account });
+          await this.set(ws, "email_reply_input", { ...m, account: d.account });
           return `${head("🎙️", "Responder e-mail", `${short(personName(m.de), 28)} · ${short(m.assunto ?? "(sem assunto)", 40)}`)}\nMe diga por texto ou áudio o que responder, que eu escrevo o e-mail.\n${DIV}\n${opts(BACK)}`;
         }
         return n === null ? null : this.invalid();
@@ -137,7 +172,7 @@ export class MenuService {
       case "email": {
         if (n === 0) return this.emailList(ws, d.account);
         if (n === 1) {
-          this.set(ws, "email_reply_input", d);
+          await this.set(ws, "email_reply_input", d);
           return `${head("🎙️", "Responder e-mail")}\nMe diga por texto ou áudio o que responder, que eu escrevo o e-mail.\n_Ex.: "confirmo presença" ou "peça mais prazo"_\n${DIV}\n${opts(BACK)}`;
         }
         if (n === 2) return this.emailTrash(ws, d.account, d.id, true);
@@ -151,12 +186,12 @@ export class MenuService {
       case "email_reply_input": {
         if (n === 0) return this.emailReopen(ws, d);
         const draft = await this.ai(
-          "Escreva uma resposta de e-mail em português do Brasil, cordial, natural e objetiva, em nome do Alexandre, seguindo a instrução dada. Devolva só o corpo do e-mail, sem assunto e sem assinatura longa.",
+          `Escreva uma resposta de e-mail em português do Brasil, cordial, natural e objetiva, em nome de ${await this.ownerName(ws)}, seguindo a instrução dada. Devolva só o corpo do e-mail, sem assunto e sem assinatura longa.`,
           `E-mail recebido:\n${d.corpo}\n\nInstrução: ${text}`,
           false,
           ws,
         ).catch(() => text);
-        this.set(ws, "email_draft", { ...d, draft });
+        await this.set(ws, "email_draft", { ...d, draft });
         return `${head("✍️", "Rascunho da resposta")}\n📨 *Para:* ${emailOf(d.de)}\n${DIV}\n_${draft}_\n${DIV}\n${opts([1, "✅", "Enviar"], [2, "🔄", "Refazer"], [0, "❌", "Cancelar"])}`;
       }
       case "email_draft": {
@@ -165,7 +200,7 @@ export class MenuService {
           return `✅ *E-mail enviado!*\n\n${await this.emailList(ws, d.account)}`;
         }
         if (n === 2) {
-          this.set(ws, "email_reply_input", d);
+          await this.set(ws, "email_reply_input", d);
           return `🔄 Beleza! Me diga de novo o que responder.\n${DIV}\n${opts(BACK)}`;
         }
         if (n === 0) return this.emailReopen(ws, d);
@@ -179,7 +214,7 @@ export class MenuService {
         if (n === 2) return this.agendaList(ws, 1, 1, "amanhã");
         if (n === 3) return this.agendaList(ws, 0, 7, "nos próximos 7 dias");
         if (n === 4) {
-          this.set(ws, "event_input");
+          await this.set(ws, "event_input");
           return `${head("➕", "Novo evento")}\nDescreva do seu jeito, por texto ou áudio 🎙️.\n_Ex.: "reunião com o João amanhã às 15h por 1 hora"_\n${DIV}\n${opts(BACK)}`;
         }
         return n === null ? null : this.invalid();
@@ -188,20 +223,20 @@ export class MenuService {
         if (n === 0) return this.agendaMenu(ws);
         const ev = await this.parseEvent(text);
         if (ev.error) return `🤔 Preciso de mais um detalhe: *${ev.error}*\n_Me conte o evento completo de novo, ou digite 0 para voltar._`;
-        this.set(ws, "event_confirm", ev);
+        await this.set(ws, "event_confirm", ev);
         return `${head("🗓️", "Confirmar evento")}\n📌 *Título:* ${ev.title}\n🕐 *Quando:* ${this.when(ev.start, ev.end)}\n${DIV}\n${opts([1, "✅", "Confirmar"], [2, "🔄", "Refazer"], [0, "❌", "Cancelar"])}`;
       }
       case "event_confirm": {
         if (n === 0) return this.agendaMenu(ws);
         if (n === 2) {
-          this.set(ws, "event_input");
+          await this.set(ws, "event_input");
           return `🔄 Certo! Descreva o evento de novo.\n${DIV}\n${opts(BACK)}`;
         }
         if (n !== 1) return this.invalid();
         const accounts = await this.google.listAccounts(ws);
         if (accounts.length === 0) return this.noGoogle();
         if (accounts.length === 1) return this.eventCreate(ws, d, accounts[0]);
-        this.set(ws, "event_account", { ev: d, accounts });
+        await this.set(ws, "event_account", { ev: d, accounts });
         return `${head("📅", "Em qual agenda?")}\n${accounts.map((a: string, i: number) => `${key(i + 1)} 📥 ${a}`).join("\n")}\n${opts([0, "❌", "Cancelar"])}`;
       }
       case "event_account": {
@@ -213,11 +248,12 @@ export class MenuService {
       // Confirmação de ações pedidas à IA
       case "confirm_ai": {
         if (n === 0) {
-          this.states.delete(ws);
+          await this.state.del(this.key(ws));
           return "❌ *Cancelado.* Nada foi enviado.\n💡 _Digite *menu* quando quiser._";
         }
-        if (n !== 1) return n === null ? this.invalid() : this.invalid();
-        this.states.delete(ws);
+        if (n !== 1) return this.invalid();
+        // Apaga a confirmação antes de executar: uma nova tentativa nunca repete o envio
+        await this.state.del(this.key(ws));
         const out: string[] = [];
         for (const a of d.actions) {
           try {
@@ -243,6 +279,7 @@ export class MenuService {
       // Clientes
       case "clients": {
         if (n === 0) return this.mainMenu(ws, false);
+        if (n === null) n = pickByLabel(text, d.items.map((c: any) => c.name ?? ""));
         if (n === null) return null;
         const item = d.items[n - 1];
         return item ? this.clientOpen(ws, item.id) : this.invalid();
@@ -250,7 +287,7 @@ export class MenuService {
       case "client": {
         if (n === 0) return this.clientList(ws);
         if (n === 1) {
-          this.set(ws, "client_reply_input", d);
+          await this.set(ws, "client_reply_input", d);
           return `${head("🎙️", "Responder cliente", d.name)}\nMe diga por texto ou áudio o que responder, que eu escrevo a mensagem.\n${DIV}\n${opts(BACK)}`;
         }
         if (n === 2) {
@@ -267,7 +304,7 @@ export class MenuService {
           false,
           ws,
         ).catch(() => text);
-        this.set(ws, "client_draft", { ...d, draft });
+        await this.set(ws, "client_draft", { ...d, draft });
         return `${head("✍️", "Mensagem para o cliente")}\n👤 *Para:* ${d.name}\n${DIV}\n_${draft}_\n${DIV}\n${opts([1, "✅", "Enviar"], [2, "🔄", "Refazer"], [0, "❌", "Cancelar"])}`;
       }
       case "client_draft": {
@@ -276,7 +313,7 @@ export class MenuService {
           return `✅ *Mensagem enviada para ${d.name}.*\n\n${await this.clientOpen(ws, d.id)}`;
         }
         if (n === 2) {
-          this.set(ws, "client_reply_input", d);
+          await this.set(ws, "client_reply_input", d);
           return `🔄 Beleza! Me diga de novo o que responder.\n${DIV}\n${opts(BACK)}`;
         }
         if (n === 0) return this.clientOpen(ws, d.id);
@@ -297,17 +334,22 @@ export class MenuService {
   }
 
   private async mainOptions(ws: string) {
+    const services = await this.services(ws);
     const accounts = await this.google.listAccounts(ws);
     const options: any[] = [];
     const labels: { icon: string; label: string; sub?: string }[] = [];
-    if (accounts.length) {
+    if (accounts.length && services.includes("email")) {
       options.push(accounts.length === 1 ? { type: "emails", account: accounts[0] } : { type: "emails_pick" });
       labels.push({ icon: "📧", label: "E-mails", sub: accounts.map(accountLabel).join(" · ") });
+    }
+    if (accounts.length && services.includes("calendar")) {
       options.push({ type: "agenda" });
       labels.push({ icon: "📅", label: "Google Agenda" });
     }
-    options.push({ type: "clients" });
-    labels.push({ icon: "💬", label: "Conversas de clientes" });
+    if (services.includes("inbox")) {
+      options.push({ type: "clients" });
+      labels.push({ icon: "💬", label: "Conversas de clientes" });
+    }
     options.push({ type: "free" });
     labels.push({ icon: "🤖", label: "Perguntar à IA" });
     options.push({ type: "memory" });
@@ -319,7 +361,7 @@ export class MenuService {
 
   /** Monta o aviso de novos e-mails e prepara as opções de resposta. */
   async notifyNew(ws: string, items: { account: string; id: string; de: string; assunto: string }[]): Promise<string> {
-    const st = this.states.get(ws);
+    const st = await this.state.get<State>(this.key(ws));
     const busy = !!st && Date.now() - st.at < 5 * 60_000 && /(_input|_draft|_confirm|_account)$/.test(st.screen);
     if (busy) {
       return items.length === 1
@@ -328,7 +370,7 @@ export class MenuService {
     }
     if (items.length === 1) {
       const m = items[0];
-      this.set(ws, "notif", m);
+      await this.set(ws, "notif", m);
       return [
         head("📩", "Novo e-mail"),
         `👤 *De:* ${personName(m.de)}`,
@@ -339,7 +381,7 @@ export class MenuService {
       ].join("\n");
     }
     const multi = new Set(items.map((i) => i.account)).size > 1;
-    this.set(ws, "emails", { account: undefined, items });
+    await this.set(ws, "emails", { account: undefined, items });
     const cards = items.slice(0, 6).map((m, i) => this.emailCard(i + 1, m, multi));
     const extra = items.length > 6 ? `\n➕ _${items.length - 6} não listados_` : "";
     return [head("📩", `${items.length} novos e-mails`), cards.join("\n\n") + extra, foot("Responda com o número para abrir"), opts([0, "🏠", "Menu"])].join("\n");
@@ -357,13 +399,19 @@ export class MenuService {
   }
 
   private async mainMenu(ws: string, greet: boolean) {
-    const { options, labels } = await this.mainOptions(ws);
-    this.set(ws, "main", { options });
+    const { labels } = await this.setMain(ws);
     const h = Number(new Date().toLocaleString("en-GB", { timeZone: TZ, hour: "2-digit", hour12: false }));
     const [icon, saud] = h < 12 ? ["☀️", "Bom dia"] : h < 18 ? ["🌤️", "Boa tarde"] : ["🌙", "Boa noite"];
     const title = greet ? `${saud}! Sou seu assistente` : "Menu principal";
     const items = labels.map((l, i) => `${key(i + 1)} ${l.icon} ${l.label}${l.sub ? `\n     _${l.sub}_` : ""}`);
     return [head(greet ? icon : "🏠", title, "O que vamos ver agora?"), items.join("\n"), foot("Responda com o número, escreva ou mande um áudio 🎙️"), "🚗 _Vai dirigir? Diga *vou dirigir* e eu falo por áudio._"].join("\n");
+  }
+
+  /** Volta à tela principal guardando opções e rótulos (os rótulos permitem escolher falando o nome). */
+  private async setMain(ws: string) {
+    const main = await this.mainOptions(ws);
+    await this.set(ws, "main", { options: main.options, labels: main.labels.map((l) => l.label) });
+    return main;
   }
 
   private async runAction(ws: string, opt: any) {
@@ -373,7 +421,7 @@ export class MenuService {
     if (opt.type === "clients") return this.clientList(ws);
     if (opt.type === "memory") return this.memoryList(ws);
     if (opt.type === "driving") return this.drivingSet(ws, !(await this.isDriving(ws)));
-    this.set(ws, "free");
+    await this.set(ws, "free");
     return [head("🤖", "Assistente livre"), "Pode falar! Escreva ou mande um áudio 🎙️ com o que precisa.", DIV, opts(BACK)].join("\n");
   }
 
@@ -381,7 +429,7 @@ export class MenuService {
 
   private async memoryList(ws: string) {
     const items = await this.memory.list(ws, 15);
-    this.set(ws, "memory", { items });
+    await this.set(ws, "memory", { items });
     if (!items.length) {
       return [head("🧠", "Minha memória"), "Ainda não guardei nada sobre você.", '_Diga, por exemplo: "lembre que respondo o João de forma informal"._', DIV, opts(BACK)].join("\n");
     }
@@ -398,7 +446,7 @@ export class MenuService {
 
   /** Pede confirmação do dono antes de executar ações sensíveis sugeridas pela IA. */
   async requestConfirm(ws: string, actions: { name: string; args: any }[]): Promise<string> {
-    this.set(ws, "confirm_ai", { actions });
+    await this.set(ws, "confirm_ai", { actions });
     const cards: string[] = [];
     for (const a of actions) {
       if (a.name === "gmail_send") {
@@ -422,14 +470,14 @@ export class MenuService {
     const accounts = await this.google.listAccounts(ws);
     if (accounts.length === 0) return this.noGoogle();
     if (accounts.length === 1) return this.emailList(ws, accounts[0]);
-    this.set(ws, "email_account", { accounts });
+    await this.set(ws, "email_account", { accounts });
     const list = accounts.map((a: string, i: number) => `${key(i + 1)} 📥 ${accountLabel(a)}`).join("\n");
     return [head("📧", "Qual conta?", accounts.map(accountLabel).join(" ou ")), list, opts(BACK), foot("Diga o nome da conta ou o número")].join("\n");
   }
 
   private async emailList(ws: string, account: string) {
-    const items = await this.google.gmailSearch(ws, "is:unread in:inbox", account, 6);
-    this.set(ws, "emails", { account, items });
+    const items = await this.google.gmailSearch(ws, "is:unread in:inbox", account, await this.listSize(ws, 6));
+    await this.set(ws, "emails", { account, items });
     if (!items.length) return [head("🎉", "Caixa limpa!", accountLabel(account)), "Nenhum e-mail não lido.", DIV, opts(BACK)].join("\n");
     const cards = items.map((m: any, i: number) => this.emailCard(i + 1, m));
     return [head("📧", "E-mails não lidos", accountLabel(account)), cards.join("\n\n"), foot("Responda com o número para abrir"), opts(BACK)].join("\n");
@@ -445,7 +493,7 @@ export class MenuService {
       "Resuma o e-mail em português em no máximo 4 linhas curtas, destacando o que o remetente quer e eventuais prazos.",
       `De: ${m.de}\nAssunto: ${m.assunto}\n\n${m.corpo}`,
     ).catch(() => short(m.corpo ?? "", 400));
-    this.set(ws, "email", { ...m, account });
+    await this.set(ws, "email", { ...m, account });
     const sus = suspiciousReasons(`${m.assunto ?? ""}\n${m.corpo ?? ""}`);
     return [
       head("📧", m.assunto ?? "(sem assunto)"),
@@ -464,7 +512,7 @@ export class MenuService {
     await this.google.gmailTrash(ws, id, account);
     const msg = "🗑️ *Pronto!* Mandei para a lixeira _(dá para recuperar por 30 dias)_.";
     if (showList) return `${msg}\n\n${await this.emailList(ws, account)}`;
-    this.set(ws, "main", { options: (await this.mainOptions(ws)).options });
+    await this.setMain(ws);
     return `${msg}\n\n💡 _Digite *menu* quando quiser ver mais._`;
   }
 
@@ -472,53 +520,54 @@ export class MenuService {
     await this.google.gmailSpam(ws, id, account);
     const msg = "🚫 *Marcado como spam.* Ele saiu da sua caixa de entrada.";
     if (showList) return `${msg}\n\n${await this.emailList(ws, account)}`;
-    this.set(ws, "main", { options: (await this.mainOptions(ws)).options });
+    await this.setMain(ws);
     return `${msg}\n\n💡 _Digite *menu* quando quiser ver mais._`;
   }
 
   // Modo direção
 
-  private driving = new Map<string, boolean>();
-  private car = new Map<string, boolean>();
-
-  async isDriving(ws: string): Promise<boolean> {
-    if (this.driving.has(ws)) return this.driving.get(ws) as boolean;
-    const wa = await prisma.channel.findFirst({ where: { workspaceId: ws, type: "WHATSAPP" } });
-    const on = !!(wa?.config as any)?.drivingMode;
-    this.driving.set(ws, on);
-    return on;
+  private async mode(ws: string): Promise<Mode | null> {
+    return this.state.get<Mode>(`mode:${ws}`);
   }
 
-  /** Modo carro: respostas em texto falável, para o Android Auto ler em voz alta (ele não toca áudios). */
+  async isDriving(ws: string): Promise<boolean> {
+    return (await this.mode(ws)) === "driving";
+  }
+
+  /** Modo carro: respostas em texto falável, para o Android Auto/CarPlay lerem em voz alta (eles não tocam áudios). */
   async isCar(ws: string): Promise<boolean> {
-    if (this.car.has(ws)) return this.car.get(ws) as boolean;
-    const wa = await prisma.channel.findFirst({ where: { workspaceId: ws, type: "WHATSAPP" } });
-    const on = !!(wa?.config as any)?.carMode;
-    this.car.set(ws, on);
-    return on;
+    return (await this.mode(ws)) === "car";
+  }
+
+  /** Cada comando renova o prazo do modo ativo. */
+  private async touchMode(ws: string) {
+    const m = await this.mode(ws);
+    if (m) await this.state.set(`mode:${ws}`, m, MODE_TTL);
   }
 
   private async saveMode(ws: string, patch: { drivingMode: boolean; carMode: boolean }) {
-    const wa = await prisma.channel.findFirst({ where: { workspaceId: ws, type: "WHATSAPP" } });
-    if (wa) await prisma.channel.update({ where: { id: wa.id }, data: { config: { ...(wa.config as any), ...patch } } });
-    this.driving.set(ws, patch.drivingMode);
-    this.car.set(ws, patch.carMode);
+    const m: Mode | null = patch.carMode ? "car" : patch.drivingMode ? "driving" : null;
+    if (m) await this.state.set(`mode:${ws}`, m, MODE_TTL);
+    else await this.state.del(`mode:${ws}`);
   }
 
   private async carSet(ws: string) {
     await this.saveMode(ws, { drivingMode: false, carMode: true });
-    this.set(ws, "main", { options: (await this.mainOptions(ws)).options });
+    await this.setMain(ws);
+    const hours = Math.round(MODE_TTL / 3600_000);
     return [
-      head("🚘", "Modo carro ligado", "Para o Android Auto ler as respostas"),
-      "Respondo em *texto curto*, sem áudio, para o carro ler em voz alta. Comande pelo Google Assistente: _\"Ok Google, enviar mensagem no WhatsApp para Assistente: ler e-mails\"_.",
-      "Para sair, diga *sair do modo carro*.",
+      head("🚘", "Modo carro ligado", "Para o Android Auto ou CarPlay lerem as respostas"),
+      "Respondo em *texto curto*, sem áudio, para o carro ler em voz alta. Escolha as opções falando o número ou o nome, como *dois*, *a segunda* ou *a do João*.",
+      "No Android Auto: _\"Ok Google, mande uma mensagem no WhatsApp para Assistente: ler e-mails\"_. No CarPlay: _\"E aí Siri, manda um WhatsApp para Assistente: ler e-mails\"_.",
+      `Para sair, diga *cheguei*. Ele também desliga sozinho após ${hours} h sem uso.`,
     ].join("\n");
   }
 
   private async drivingSet(ws: string, on: boolean) {
+    const was = await this.mode(ws);
     await this.saveMode(ws, { drivingMode: on, carMode: false });
-    this.set(ws, "main", { options: (await this.mainOptions(ws)).options });
-    if (!on) return `✅ *Modo direção desligado.*\nVoltei a responder por texto.`;
+    await this.setMain(ws);
+    if (!on) return `✅ *Modo ${was === "car" ? "carro" : "direção"} desligado.*\nVoltei a responder no formato normal.`;
     const warn = process.env.GEMINI_API_KEY ? "" : "\n⚠️ _A voz ainda não está configurada no servidor; por enquanto respondo por texto._";
     return [
       head("🚗", "Modo direção ligado", "Mãos no volante, eu falo por você"),
@@ -528,14 +577,14 @@ export class MenuService {
   }
 
   private async emailReopen(ws: string, d: any) {
-    this.set(ws, "email", d);
+    await this.set(ws, "email", d);
     return [head("📧", d.assunto ?? "(sem assunto)", "Voltando ao e-mail"), this.emailActions()].join("\n");
   }
 
   // Agenda
 
-  private agendaMenu(ws: string) {
-    this.set(ws, "agenda");
+  private async agendaMenu(ws: string) {
+    await this.set(ws, "agenda");
     return `${head("📅", "Google Agenda", "O que você quer ver?")}\n${this.agendaOptions()}`;
   }
 
@@ -553,7 +602,7 @@ export class MenuService {
       evs.forEach((e: any) => all.push({ ...e, account }));
     }
     all.sort((a, b) => String(a.inicio).localeCompare(String(b.inicio)));
-    this.set(ws, "agenda");
+    await this.set(ws, "agenda");
     const title = `Agenda · ${label}`;
     if (!all.length) return [head("📅", title), "🙌 Nada marcado por aqui.", DIV, this.agendaOptions()].join("\n");
 
@@ -598,7 +647,7 @@ export class MenuService {
 
   private async eventCreate(ws: string, ev: any, account: string) {
     await this.google.calendarCreate(ws, ev, account);
-    this.set(ws, "agenda");
+    await this.set(ws, "agenda");
     return [head("✅", "Evento criado!"), `📌 *${ev.title}*`, `🕐 ${this.when(ev.start, ev.end)}`, `📥 ${account}`, DIV, this.agendaOptions()].join("\n");
   }
 
@@ -609,9 +658,9 @@ export class MenuService {
       where: { workspaceId: ws, status: { in: ["OPEN", "PENDING"] } },
       include: { contact: true, messages: { orderBy: { createdAt: "desc" }, take: 1 } },
       orderBy: { updatedAt: "desc" },
-      take: 8,
+      take: await this.listSize(ws, 8),
     });
-    this.set(ws, "clients", { items: convs.map((c) => ({ id: c.id })) });
+    await this.set(ws, "clients", { items: convs.map((c) => ({ id: c.id, name: c.contact.name })) });
     if (!convs.length) return [head("🎉", "Tudo em dia!"), "Nenhuma conversa de cliente em aberto.", DIV, opts(BACK)].join("\n");
     const cards = convs.map((c, i) => `${key(i + 1)} 👤 *${short(c.contact.name, 28)}* ${c.status === "PENDING" ? "🟡" : "🟢"}\n     💬 ${short(c.messages[0]?.body ?? "", 55)}`);
     return [head("💬", "Conversas em aberto", "🟢 aberta · 🟡 pendente"), cards.join("\n\n"), foot("Responda com o número para abrir"), opts(BACK)].join("\n");
@@ -624,7 +673,7 @@ export class MenuService {
     });
     const msgs = [...c.messages].reverse();
     const lastInbound = [...c.messages].find((m) => m.direction === "INBOUND")?.body;
-    this.set(ws, "client", { id, name: c.contact.name, lastInbound });
+    await this.set(ws, "client", { id, name: c.contact.name, lastInbound });
     const lines = msgs.map((m) => `${m.direction === "INBOUND" ? "👤" : "🧑‍💼"} *${m.direction === "INBOUND" ? short(c.contact.name, 16) : "Você"}:* ${short(m.body, 120)}`);
     return [
       head("💬", c.contact.name, c.contact.phone ?? undefined),

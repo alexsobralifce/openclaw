@@ -1,14 +1,13 @@
 import {
   Body, Controller, Delete, Get, HttpCode, Param,
-  Post, Request, Headers, UseGuards, Logger, ForbiddenException,
+  Post, Request, Headers, Logger, ForbiddenException,
 } from "@nestjs/common";
-import { AuthGuard } from "@nestjs/passport";
+import { Access } from "../auth/access";
 import { timingSafeEqual } from "crypto";
 import { ChannelsService } from "./channels.service";
 import { EvolutionService } from "./evolution/evolution.service";
-import { WhatsappWorker } from "./workers/whatsapp.worker";
-import { AssistantService } from "./assistant/assistant.service";
-import { WebhooksService } from "../webhooks/webhooks.service";
+import { InboundService } from "./inbound/inbound.service";
+import { InboxService } from "../inbox/inbox.service";
 import { prisma } from "@openclaw/database";
 
 @Controller("channels")
@@ -18,20 +17,19 @@ export class ChannelsController {
   constructor(
     private channels: ChannelsService,
     private evolution: EvolutionService,
-    private whatsapp: WhatsappWorker,
-    private assistant: AssistantService,
-    private webhooks: WebhooksService,
+    private inbound: InboundService,
+    private inbox: InboxService,
   ) {}
 
   // ─── Autenticado ──────────────────────────────────────────────
 
-  @UseGuards(AuthGuard("jwt"))
+  @Access()
   @Get()
   list(@Request() req: any) {
     return this.channels.listChannels(req.user.workspaces[0]?.workspaceId);
   }
 
-  @UseGuards(AuthGuard("jwt"))
+  @Access("channels")
   @Post("whatsapp")
   async createWhatsapp(@Request() req: any, @Body() body: { name: string }) {
     const workspaceId: string = req.user.workspaces[0]?.workspaceId;
@@ -51,7 +49,7 @@ export class ChannelsController {
     return { channel, instance: instanceName };
   }
 
-  @UseGuards(AuthGuard("jwt"))
+  @Access("channels")
   @Get("whatsapp/:channelId/qrcode")
   async getQrCode(@Request() req: any, @Param("channelId") channelId: string) {
     const workspaceId: string = req.user.workspaces[0]?.workspaceId;
@@ -60,7 +58,7 @@ export class ChannelsController {
     return this.evolution.getQrCode(cfg.instanceName);
   }
 
-  @UseGuards(AuthGuard("jwt"))
+  @Access("channels")
   @Get("whatsapp/:channelId/status")
   async getStatus(@Request() req: any, @Param("channelId") channelId: string) {
     const workspaceId: string = req.user.workspaces[0]?.workspaceId;
@@ -69,7 +67,7 @@ export class ChannelsController {
     return this.evolution.getConnectionState(cfg.instanceName);
   }
 
-  @UseGuards(AuthGuard("jwt"))
+  @Access("channels")
   @Delete("whatsapp/:channelId")
   async deleteWhatsapp(@Request() req: any, @Param("channelId") channelId: string) {
     const workspaceId: string = req.user.workspaces[0]?.workspaceId;
@@ -81,7 +79,7 @@ export class ChannelsController {
   }
 
   // Enviar mensagem de saída via WhatsApp
-  @UseGuards(AuthGuard("jwt"))
+  @Access("inbox")
   @Post("whatsapp/:channelId/send")
   async sendMessage(
     @Request() req: any,
@@ -91,32 +89,18 @@ export class ChannelsController {
     const workspaceId: string = req.user.workspaces[0]?.workspaceId;
     const channel = await prisma.channel.findFirstOrThrow({ where: { id: channelId, workspaceId } });
     const cfg = channel.config as any;
+    // A conversa precisa ser deste workspace (antes, qualquer id era aceito)
+    if (body.conversationId) await prisma.conversation.findFirstOrThrow({ where: { id: body.conversationId, workspaceId } });
 
     const result = await this.evolution.sendText(cfg.instanceName, body.to, body.text);
-
-    // Salva a mensagem enviada no banco
-    if (body.conversationId) {
-      const saved = await prisma.message.create({
-        data: {
-          conversationId: body.conversationId,
-          body: body.text,
-          direction: "OUTBOUND",
-          type: "TEXT",
-          externalId: result?.key?.id,
-          authorId: req.user.id,
-        },
-      });
-      this.webhooks.emit(workspaceId, "message.sent", {
-        conversationId: body.conversationId,
-        message: { id: saved.id, body: saved.body, type: saved.type, direction: saved.direction, createdAt: saved.createdAt },
-      });
-    }
+    if (body.conversationId) await this.inbox.recordOutbound(workspaceId, body.conversationId, body.text, result?.key?.id, req.user.id);
 
     return result;
   }
 
   // ─── Webhook público (Evolution API → openclaw) ────────────────
 
+  /** Só grava na fila e responde: o processamento (IA, transcrição, banco) acontece no InboundService. */
   @Post("webhooks/whatsapp/:instanceName")
   @HttpCode(200)
   async whatsappWebhook(
@@ -131,58 +115,9 @@ export class ChannelsController {
       if (a.length !== b.length || !timingSafeEqual(a, b)) throw new ForbiddenException("segredo do webhook inválido");
     }
 
-    this.logger.log(`Webhook recebido: ${instanceName} event=${body?.event}`);
-
-    // Ignora eventos que não são mensagens
-    if (body?.event !== "messages.upsert") return { ok: true };
-
-    const data = body?.data;
-    if (!data) return { ok: true };
-
-    try {
-      const channel = await prisma.channel.findFirst({
-        where: { config: { path: ["instanceName"], equals: instanceName } },
-      });
-
-      if (!channel) {
-        this.logger.warn(`Canal não encontrado para instance: ${instanceName}`);
-        return { ok: true };
-      }
-
-      const jid: string = data.key?.remoteJid ?? "";
-      if (jid.endsWith("@g.us") || jid === "status@broadcast") return { ok: true };
-
-      // Mensagens do dono (texto ou áudio) viram comandos do assistente
-      if (this.assistant.isOwnerJid(data.key?.remoteJid) || this.assistant.isOwnerJid(data.key?.remoteJidAlt) || this.assistant.isOwnerJid(data.key?.senderPn)) {
-        if (this.assistant.isOwnEcho(data.key?.id)) return { ok: true };
-        // Mensagens enviadas pelo número conectado para o dono (respostas do assistente, áudios) não são comandos,
-        // a não ser que o dono use o próprio número conectado ("mensagem para si mesmo").
-        if (data.key?.fromMe && !this.assistant.isOwnerJid(body?.sender)) return { ok: true };
-        let text: string = data.message?.conversation || data.message?.extendedTextMessage?.text || "";
-        let heard = false;
-        if (!text && data.message?.audioMessage) {
-          try {
-            text = await this.assistant.transcribe(instanceName, data.key);
-            heard = true;
-          } catch (err: any) {
-            this.logger.error(`Transcrição falhou: ${err.message}`);
-          }
-          if (!text) {
-            await this.assistant.sendToOwner(channel.workspaceId, instanceName, "Não consegui entender o áudio. Pode tentar de novo ou escrever?");
-            return { ok: true };
-          }
-        }
-        if (text) await this.assistant.handle(channel.workspaceId, instanceName, text, { heard });
-        return { ok: true };
-      }
-
-      if (data.key?.fromMe) return { ok: true };
-
-      await this.whatsapp.process(channel.workspaceId, channel.id, body);
-    } catch (err: any) {
-      this.logger.error(`Erro no webhook: ${err.message}`);
-    }
-
+    // Se a gravação falhar, a exceção vira 500 e o Evolution pode reenviar; duplicatas são descartadas na fila
+    const queued = await this.inbound.enqueue(instanceName, body);
+    if (queued) this.logger.log(`Webhook enfileirado: ${instanceName} ${body?.data?.key?.id}`);
     return { ok: true };
   }
 }

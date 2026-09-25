@@ -1,5 +1,5 @@
-import { Controller, Get, Query, Request, Res, UseGuards, BadRequestException } from "@nestjs/common";
-import { AuthGuard } from "@nestjs/passport";
+import { Controller, Get, Query, Request, Res, BadRequestException } from "@nestjs/common";
+import { Access } from "../../auth/access";
 import { JwtService } from "@nestjs/jwt";
 import { GoogleService } from "./google.service";
 
@@ -7,7 +7,7 @@ import { GoogleService } from "./google.service";
 export class GoogleController {
   constructor(private google: GoogleService, private jwt: JwtService) {}
 
-  @UseGuards(AuthGuard("jwt"))
+  @Access("channels")
   @Get("auth-url")
   async authUrl(@Request() req: any) {
     if (!this.google.isConfigured()) {
@@ -18,7 +18,7 @@ export class GoogleController {
     return { url: this.google.authUrl(state), connected: await this.google.isConnected(workspaceId) };
   }
 
-  @UseGuards(AuthGuard("jwt"))
+  @Access()
   @Get("status")
   async status(@Request() req: any) {
     const workspaceId: string = req.user.workspaces[0]?.workspaceId;

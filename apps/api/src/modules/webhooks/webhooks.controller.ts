@@ -1,10 +1,10 @@
-import { Body, Controller, Delete, Get, Param, Post, Request, UseGuards } from "@nestjs/common";
-import { AuthGuard } from "@nestjs/passport";
+import { Body, Controller, Delete, Get, Param, Post, Request } from "@nestjs/common";
+import { Access } from "../auth/access";
 import { WebhooksService, WEBHOOK_EVENTS } from "./webhooks.service";
 import { CreateWebhookDto } from "../public-api/dto";
 
 /** Gestão dos webhooks pelo painel (JWT). A API pública usa o mesmo serviço. */
-@UseGuards(AuthGuard("jwt"))
+@Access("api")
 @Controller("webhooks")
 export class WebhooksController {
   constructor(private webhooks: WebhooksService) {}

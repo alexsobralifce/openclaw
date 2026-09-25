@@ -38,13 +38,20 @@ enum Plan {
 // ─── USUÁRIOS ────────────────────────────────────────────────────
 
 model User {
-  id           String   @id @default(cuid())
-  email        String   @unique
+  id           String       @id @default(cuid())
+  email        String       @unique
   name         String
   passwordHash String?
   avatarUrl    String?
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  phone        String?      @unique // WhatsApp (só dígitos, com DDI) usado para falar com o assistente
+  // Nível na plataforma. ROOT/ADMIN aprovam cadastros e liberam serviços, sem ver o conteúdo dos workspaces.
+  role         PlatformRole @default(USER)
+  // ACTIVE por padrão para que contas já existentes continuem entrando; o cadastro público cria como PENDING
+  status       UserStatus   @default(ACTIVE)
+  services     String[]     @default([])
+  approvedAt   DateTime?
+  createdAt    DateTime     @default(now())
+  updatedAt    DateTime     @updatedAt
 
   workspaces    WorkspaceMember[]
   messages      Message[]
@@ -52,9 +59,9 @@ model User {
 }
 
 model WorkspaceMember {
-  id          String          @id @default(cuid())
-  role        WorkspaceRole   @default(AGENT)
-  createdAt   DateTime        @default(now())
+  id        String        @id @default(cuid())
+  role      WorkspaceRole @default(AGENT)
+  createdAt DateTime      @default(now())
 
   workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   workspaceId String
@@ -70,18 +77,30 @@ enum WorkspaceRole {
   AGENT
 }
 
+enum PlatformRole {
+  ROOT
+  ADMIN
+  USER
+}
+
+enum UserStatus {
+  PENDING
+  ACTIVE
+  DISABLED
+}
+
 // ─── CRM ─────────────────────────────────────────────────────────
 
 model Contact {
-  id          String   @id @default(cuid())
-  name        String
-  email       String?
-  phone       String?
-  avatarUrl   String?
-  externalId  String?
-  notes       String?
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  id         String   @id @default(cuid())
+  name       String
+  email      String?
+  phone      String?
+  avatarUrl  String?
+  externalId String?
+  notes      String?
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
 
   workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   workspaceId String
@@ -152,18 +171,20 @@ model ConversationAssignee {
 }
 
 model Message {
-  id          String      @id @default(cuid())
-  body        String
-  type        MessageType @default(TEXT)
-  direction   Direction
-  externalId  String?
-  metadata    Json?
-  createdAt   DateTime    @default(now())
+  id         String      @id @default(cuid())
+  body       String
+  type       MessageType @default(TEXT)
+  direction  Direction
+  externalId String?
+  metadata   Json?
+  createdAt  DateTime    @default(now())
 
   conversation   Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
   conversationId String
   author         User?        @relation(fields: [authorId], references: [id])
   authorId       String?
+
+  @@index([externalId])
 }
 
 enum MessageType {
@@ -184,12 +205,12 @@ enum Direction {
 // ─── CANAIS ──────────────────────────────────────────────────────
 
 model Channel {
-  id          String      @id @default(cuid())
-  name        String
-  type        ChannelType
-  config      Json
-  isActive    Boolean     @default(true)
-  createdAt   DateTime    @default(now())
+  id        String      @id @default(cuid())
+  name      String
+  type      ChannelType
+  config    Json
+  isActive  Boolean     @default(true)
+  createdAt DateTime    @default(now())
 
   workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   workspaceId String
@@ -208,16 +229,48 @@ enum ChannelType {
 // ─── AUTOMAÇÕES ──────────────────────────────────────────────────
 
 model Automation {
-  id        String   @id @default(cuid())
+  id        String    @id @default(cuid())
   name      String
   trigger   Json
   actions   Json
-  isActive  Boolean  @default(true)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  isActive  Boolean   @default(true)
+  runCount  Int       @default(0)
+  lastRunAt DateTime?
+  lastError String?
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
 
   workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   workspaceId String
+
+  @@index([workspaceId, isActive])
+}
+
+// ─── FILA DE ENTRADA (webhooks do Evolution) ─────────────────────
+
+model InboundEvent {
+  id            String   @id @default(cuid())
+  instance      String
+  externalId    String
+  payload       Json
+  status        String   @default("PENDING") // PENDING | DONE | FAILED
+  attempts      Int      @default(0)
+  lastError     String?
+  nextAttemptAt DateTime @default(now())
+  createdAt     DateTime @default(now())
+
+  @@unique([instance, externalId])
+  @@index([status, nextAttemptAt])
+}
+
+// ─── ESTADO COMPARTILHADO (chave-valor com expiração) ────────────
+
+model KvEntry {
+  key       String    @id
+  value     Json
+  expiresAt DateTime?
+
+  @@index([expiresAt])
 }
 
 // ─── API KEYS ─────────────────────────────────────────────────────
@@ -243,7 +296,7 @@ model ApiKey {
 model WebhookEndpoint {
   id           String   @id @default(cuid())
   url          String
-  secret       String   // cifrado em repouso (AES-256-GCM)
+  secret       String // cifrado em repouso (AES-256-GCM)
   events       String[]
   isActive     Boolean  @default(true)
   failureCount Int      @default(0)
@@ -292,10 +345,10 @@ model IdempotencyKey {
 // ─── MEMÓRIA DO ASSISTENTE ───────────────────────────────────────
 
 model Memory {
-  id          String   @id @default(cuid())
-  content     String
-  kind        String   @default("fact")
-  createdAt   DateTime @default(now())
+  id        String   @id @default(cuid())
+  content   String
+  kind      String   @default("fact")
+  createdAt DateTime @default(now())
 
   workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   workspaceId String

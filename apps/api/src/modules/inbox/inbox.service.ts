@@ -54,17 +54,21 @@ export class InboxService {
     return conversation;
   }
 
+  /**
+   * Grava uma mensagem recebida. Idempotente: se o canal reentregar a mesma mensagem (mesmo externalId),
+   * devolve null sem duplicar nada.
+   */
   async processIncoming(msg: IncomingMessage) {
-    let contact = await prisma.contact.findFirst({
-      where: { workspaceId: msg.workspaceId, phone: msg.from },
-    });
-
-    if (!contact) {
-      contact = await prisma.contact.create({
-        data: { workspaceId: msg.workspaceId, name: msg.from, phone: msg.from },
+    if (msg.externalId) {
+      const dup = await prisma.message.findFirst({
+        where: { externalId: msg.externalId, conversation: { channelId: msg.channelId } },
+        select: { id: true },
       });
-      this.webhooks.emit(msg.workspaceId, "contact.created", { contact });
+      if (dup) return null;
     }
+
+    const { contact, created: newContact } = await this.findOrCreateContact(msg);
+    if (newContact) this.webhooks.emit(msg.workspaceId, "contact.created", { contact });
 
     let conversation = await prisma.conversation.findFirst({
       where: {
@@ -75,6 +79,7 @@ export class InboxService {
       },
     });
 
+    const newConversation = !conversation;
     if (!conversation) {
       conversation = await prisma.conversation.create({
         data: {
@@ -93,8 +98,11 @@ export class InboxService {
         type: msg.type,
         direction: "INBOUND",
         externalId: msg.externalId,
+        ...(msg.metadata && Object.keys(msg.metadata).length ? { metadata: msg.metadata as any } : {}),
       },
     });
+    // Mantém a conversa no topo da lista
+    await prisma.conversation.update({ where: { id: conversation.id }, data: { updatedAt: new Date() } });
 
     this.webhooks.emit(msg.workspaceId, "message.received", {
       conversationId: conversation.id,
@@ -114,6 +122,41 @@ export class InboxService {
       },
     });
 
-    return { conversation, message };
+    return { conversation, message, contact, newContact, newConversation };
+  }
+
+  /** Registra uma mensagem enviada (por pessoa ou automação) e avisa painel e webhooks. */
+  async recordOutbound(workspaceId: string, conversationId: string, body: string, externalId?: string, authorId?: string, metadata?: Record<string, unknown>) {
+    const message = await prisma.message.create({
+      data: { conversationId, body, direction: "OUTBOUND", type: "TEXT", externalId, authorId, ...(metadata ? { metadata: metadata as any } : {}) },
+    });
+    await prisma.conversation.update({ where: { id: conversationId }, data: { updatedAt: new Date() } });
+    const view = { id: message.id, body: message.body, type: message.type, direction: message.direction, createdAt: message.createdAt };
+    this.webhooks.emit(workspaceId, "message.sent", { conversationId, message: view });
+    this.gateway.emitNewMessage(workspaceId, {
+      conversationId,
+      message: { ...view, direction: "OUTBOUND", createdAt: message.createdAt.toISOString(), authorId: authorId ?? null },
+    });
+    return message;
+  }
+
+  /** Contato pelo telefone (único por workspace); tolera duas mensagens simultâneas do mesmo número. */
+  private async findOrCreateContact(msg: IncomingMessage) {
+    const where = { workspaceId_phone: { workspaceId: msg.workspaceId, phone: msg.from } };
+    const existing = await prisma.contact.findUnique({ where });
+    if (existing) {
+      // Troca o número pelo nome do WhatsApp quando ainda não temos um nome melhor
+      if (msg.name && existing.name === existing.phone) {
+        return { contact: await prisma.contact.update({ where: { id: existing.id }, data: { name: msg.name } }), created: false };
+      }
+      return { contact: existing, created: false };
+    }
+    try {
+      const contact = await prisma.contact.create({ data: { workspaceId: msg.workspaceId, name: msg.name || msg.from, phone: msg.from } });
+      return { contact, created: true };
+    } catch (e: any) {
+      if (e?.code !== "P2002") throw e;
+      return { contact: await prisma.contact.findUniqueOrThrow({ where }), created: false };
+    }
   }
 }

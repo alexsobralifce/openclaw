@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { api } from "@/lib/api";
@@ -11,6 +11,12 @@ export default function LoginPage() {
   const [form, setForm] = useState({ email: "", password: "" });
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+
+  // Motivo de uma sessão encerrada (conta desativada ou pendente)
+  useEffect(() => {
+    const motivo = new URLSearchParams(window.location.search).get("motivo");
+    if (motivo) setError(motivo);
+  }, []);
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();

@@ -11,6 +11,7 @@ export default function RegisterPage() {
   const [form, setForm] = useState({ name: "", email: "", password: "", workspaceName: "" });
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+  const [pending, setPending] = useState("");
 
   function set(key: string) {
     return (e: React.ChangeEvent<HTMLInputElement>) => setForm((f) => ({ ...f, [key]: e.target.value }));
@@ -21,9 +22,13 @@ export default function RegisterPage() {
     setError("");
     setLoading(true);
     try {
-      const { accessToken, user } = await api.auth.register(form);
-      setToken(accessToken);
-      setUser(user);
+      const res = await api.auth.register(form);
+      if (res.pending || !res.accessToken) {
+        setPending(res.message || "Cadastro recebido. Aguarde a aprovação do administrador.");
+        return;
+      }
+      setToken(res.accessToken);
+      setUser(res.user);
       router.push("/dashboard/inbox");
     } catch (err: any) {
       setError(err.message || "Erro ao criar conta");
@@ -40,6 +45,14 @@ export default function RegisterPage() {
           <p className="text-sm text-gray-500 mt-1">Crie seu workspace</p>
         </div>
 
+        {pending ? (
+          <div className="bg-gray-900 border border-gray-800 rounded-2xl p-6 space-y-3 text-center">
+            <p className="text-3xl">⏳</p>
+            <p className="text-sm font-semibold text-gray-200">Cadastro recebido</p>
+            <p className="text-sm text-gray-400">{pending}</p>
+            <p className="text-xs text-gray-500">Você poderá entrar assim que o administrador liberar seu acesso.</p>
+          </div>
+        ) : (
         <form onSubmit={submit} className="bg-gray-900 border border-gray-800 rounded-2xl p-6 space-y-4">
           {error && (
             <div className="bg-red-500/10 border border-red-500/20 rounded-lg px-4 py-3 text-sm text-red-400">
@@ -101,7 +114,9 @@ export default function RegisterPage() {
           >
             {loading ? "Criando..." : "Criar workspace"}
           </button>
+          <p className="text-[11px] text-gray-500 text-center">Novos cadastros passam pela aprovação do administrador.</p>
         </form>
+        )}
 
         <p className="text-center text-xs text-gray-600 mt-4">
           Já tem conta?{" "}

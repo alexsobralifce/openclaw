@@ -30,9 +30,12 @@ export interface IncomingMessage {
   workspaceId: string;
   externalId: string;
   from: string;
+  /** Nome exibido pelo remetente (pushName no WhatsApp) */
+  name?: string;
   body: string;
   type: "TEXT" | "IMAGE" | "AUDIO" | "VIDEO" | "FILE";
   mediaUrl?: string;
+  metadata?: Record<string, unknown>;
   timestamp: Date;
   raw: unknown;
 }

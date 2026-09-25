@@ -3,11 +3,14 @@
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { clearToken } from "@/lib/auth";
+import { hasService, isAdmin, useMe } from "@/hooks/useMe";
 
-const nav = [
+// service: serviço que precisa estar liberado para o item aparecer; admin: só ROOT/ADMIN
+const nav: { href: string; label: string; icon: React.ReactNode; service?: string; admin?: boolean }[] = [
   {
     href: "/dashboard/inbox",
     label: "Inbox",
+    service: "inbox",
     icon: (
       <svg width="20" height="20" fill="none" viewBox="0 0 24 24">
         <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
@@ -17,6 +20,7 @@ const nav = [
   {
     href: "/dashboard/contacts",
     label: "Contatos",
+    service: "contacts",
     icon: (
       <svg width="20" height="20" fill="none" viewBox="0 0 24 24">
         <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
@@ -28,6 +32,7 @@ const nav = [
   {
     href: "/dashboard/channels",
     label: "Canais",
+    service: "channels",
     icon: (
       <svg width="20" height="20" fill="none" viewBox="0 0 24 24">
         <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07A19.5 19.5 0 0 1 4.69 12 19.79 19.79 0 0 1 1.64 3.45 2 2 0 0 1 3.6 1.27h3a2 2 0 0 1 2 1.72c.127.96.361 1.903.7 2.81a2 2 0 0 1-.45 2.11L7.91 8.91a16 16 0 0 0 6.07 6.07l.95-.95a2 2 0 0 1 2.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0 1 22 16.92z" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
@@ -37,6 +42,7 @@ const nav = [
   {
     href: "/dashboard/automations",
     label: "Automações",
+    service: "automations",
     icon: (
       <svg width="20" height="20" fill="none" viewBox="0 0 24 24">
         <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
@@ -46,9 +52,21 @@ const nav = [
   {
     href: "/dashboard/api",
     label: "API",
+    service: "api",
     icon: (
       <svg width="20" height="20" fill="none" viewBox="0 0 24 24">
         <path d="M16 18l6-6-6-6M8 6l-6 6 6 6" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
+      </svg>
+    ),
+  },
+  {
+    href: "/dashboard/users",
+    label: "Usuários",
+    admin: true,
+    icon: (
+      <svg width="20" height="20" fill="none" viewBox="0 0 24 24">
+        <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
+        <path d="M9 12l2 2 4-4" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
       </svg>
     ),
   },
@@ -67,6 +85,8 @@ const nav = [
 export function Sidebar() {
   const pathname = usePathname();
   const router = useRouter();
+  const me = useMe();
+  const visible = nav.filter((i) => (i.admin ? isAdmin(me) : !i.service || !me || hasService(me, i.service)));
 
   function logout() {
     clearToken();
@@ -84,18 +104,18 @@ export function Sidebar() {
       <div className="px-3 pt-3 pb-1">
         <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-gray-800 cursor-pointer hover:bg-gray-700 transition-colors">
           <div className="w-6 h-6 rounded-md bg-teal-500 flex items-center justify-center text-xs font-bold text-white flex-shrink-0">
-            W
+            {(me?.workspaceName ?? "W").charAt(0).toUpperCase()}
           </div>
           <div className="min-w-0">
-            <p className="text-xs font-semibold text-gray-200 truncate">Meu Workspace</p>
-            <p className="text-[10px] text-gray-500">Plano Free</p>
+            <p className="text-xs font-semibold text-gray-200 truncate">{me?.workspaceName ?? "Meu Workspace"}</p>
+            <p className="text-[10px] text-gray-500 truncate">{me ? `${me.name}${me.platformRole === "ROOT" ? " · root" : me.platformRole === "ADMIN" ? " · admin" : ""}` : ""}</p>
           </div>
         </div>
       </div>
 
       {/* Nav */}
       <nav className="flex-1 px-3 py-2 space-y-0.5 overflow-y-auto">
-        {nav.map((item) => {
+        {visible.map((item) => {
           const active = pathname.startsWith(item.href);
           return (
             <Link

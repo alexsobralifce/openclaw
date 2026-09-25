@@ -4,6 +4,7 @@ import { GoogleService } from "../../integrations/google/google.service";
 import { AssistantService } from "./assistant.service";
 import { MenuService } from "./menu.service";
 import { WebhooksService } from "../../webhooks/webhooks.service";
+import { assistantInstance, can, workspaceCommander } from "./commander";
 
 const INTERVAL_MS = Number(process.env.EMAIL_POLL_SECONDS || 60) * 1000;
 
@@ -29,7 +30,7 @@ export class EmailWatcherService implements OnModuleInit, OnModuleDestroy {
   }
 
   private async tick() {
-    if (this.running || !AssistantService.ownerNumber()) return;
+    if (this.running) return;
     this.running = true;
     try {
       const channels = await prisma.channel.findMany({
@@ -76,13 +77,14 @@ export class EmailWatcherService implements OnModuleInit, OnModuleDestroy {
     for (const m of fresh) this.webhooks.emit(workspaceId, "email.received", { account: m.account, id: m.id, from: m.de, subject: m.assunto });
 
     if (fresh.length) {
-      const wa = await prisma.channel.findFirst({ where: { workspaceId, type: "WHATSAPP", isActive: true } });
-      const instance = (wa?.config as any)?.instanceName;
-      if (instance) {
+      // Avisa o dono do workspace, se ele tiver WhatsApp cadastrado e os serviços liberados
+      const owner = await workspaceCommander(workspaceId);
+      const instance = await assistantInstance(workspaceId);
+      if (owner && can(owner, "assistant") && can(owner, "email") && instance) {
         const text = await this.menu.notifyNew(workspaceId, fresh);
-        await this.assistant.sendToOwner(workspaceId, instance, text);
-      } else {
-        this.logger.warn("Novo e-mail, mas não há canal WhatsApp para avisar.");
+        await this.assistant.sendToUser(owner, instance, text);
+      } else if (!instance) {
+        this.logger.warn(`Novo e-mail no workspace ${workspaceId}, mas não há WhatsApp para avisar.`);
       }
     }
 

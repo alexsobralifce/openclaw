@@ -1,0 +1,58 @@
+/** Serviços que o root/admin libera para cada usuário. */
+export const SERVICES = {
+  inbox: "Conversas de clientes",
+  contacts: "Contatos",
+  channels: "Canais (conectar WhatsApp e Google)",
+  assistant: "Assistente no WhatsApp",
+  email: "E-mail (Gmail)",
+  calendar: "Agenda (Google)",
+  automations: "Automações",
+  api: "API e webhooks",
+} as const;
+
+export type Service = keyof typeof SERVICES;
+export type PlatformRole = "ROOT" | "ADMIN" | "USER";
+export type UserStatus = "PENDING" | "ACTIVE" | "DISABLED";
+
+export const ALL_SERVICES = Object.keys(SERVICES) as Service[];
+
+/** Serviços sugeridos ao aprovar um usuário de cada nível (o admin pode ajustar). */
+export const ROLE_DEFAULTS: Record<PlatformRole, Service[]> = {
+  ROOT: ALL_SERVICES,
+  ADMIN: ALL_SERVICES,
+  USER: ["inbox", "contacts", "channels"],
+};
+
+export function isService(s: string): s is Service {
+  return Object.prototype.hasOwnProperty.call(SERVICES, s);
+}
+
+/** O root sempre tem tudo; os demais, o que foi liberado individualmente. */
+export function effectiveServices(role: PlatformRole, services: string[]): Service[] {
+  if (role === "ROOT") return ALL_SERVICES;
+  return services.filter(isService);
+}
+
+export function canManageUsers(role: PlatformRole) {
+  return role === "ROOT" || role === "ADMIN";
+}
+
+/**
+ * Quem pode alterar quem: ninguém mexe no root nem em si mesmo por aqui,
+ * e só o root promove ou altera administradores.
+ */
+export function canEditUser(actor: PlatformRole, target: PlatformRole, newRole?: PlatformRole) {
+  if (!canManageUsers(actor) || target === "ROOT" || newRole === "ROOT") return false;
+  if (actor === "ADMIN" && (target === "ADMIN" || newRole === "ADMIN")) return false;
+  return true;
+}
+
+/** Serviço exigido por cada escopo da API pública (a chave só vale se o dono tiver o serviço). */
+export function serviceForScope(scope: string): Service {
+  const area = scope.split(":")[0];
+  if (area === "contacts") return "contacts";
+  if (area === "conversations" || area === "messages") return "inbox";
+  if (area === "email") return "email";
+  if (area === "calendar") return "calendar";
+  return "api";
+}

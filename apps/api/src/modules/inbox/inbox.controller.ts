@@ -1,8 +1,8 @@
-import { Body, Controller, Get, Param, Patch, Query, UseGuards, Request } from "@nestjs/common";
-import { AuthGuard } from "@nestjs/passport";
+import { Body, Controller, Get, Param, Patch, Query, Request } from "@nestjs/common";
+import { Access } from "../auth/access";
 import { InboxService } from "./inbox.service";
 
-@UseGuards(AuthGuard("jwt"))
+@Access("inbox")
 @Controller("inbox")
 export class InboxController {
   constructor(private inbox: InboxService) {}

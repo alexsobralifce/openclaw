@@ -1,11 +1,11 @@
-import { Body, Controller, Delete, Get, Param, Post, Request, UseGuards } from "@nestjs/common";
-import { AuthGuard } from "@nestjs/passport";
+import { Body, Controller, Delete, Get, Param, Post, Request } from "@nestjs/common";
+import { Access } from "../auth/access";
 import { ApiKeysService } from "./api-keys.service";
 import { CreateApiKeyDto } from "./dto";
 import { SCOPES } from "./scopes";
 
 /** Gestão das chaves pelo painel (autenticado por JWT). */
-@UseGuards(AuthGuard("jwt"))
+@Access("api")
 @Controller("api-keys")
 export class ApiKeysController {
   constructor(private keys: ApiKeysService) {}
