@@ -122,6 +122,7 @@ export class UsersService implements OnModuleInit {
       select: SELECT,
     });
     this.logger.log(`[AUDIT] usuário ${target.email} alterado por ${actorId}: ${Object.keys(patch).join(", ")}`);
+    if (approving) await this.warnBackup();
     return this.view(u);
   }
 
@@ -143,6 +144,15 @@ export class UsersService implements OnModuleInit {
     await prisma.$transaction([prisma.workspace.deleteMany({ where: { id: { in: owned } } }), prisma.user.delete({ where: { id } })]);
     this.logger.warn(`[AUDIT] usuário ${target.email} excluído por ${actorId} (workspaces: ${owned.length})`);
     return { ok: true };
+  }
+
+  /** Lembrete: com mais de BACKUP_USERS_THRESHOLD usuários ativos o projeto deixa de ser só teste (ver docs/operacao.md). */
+  private async warnBackup() {
+    const threshold = Number(process.env.BACKUP_USERS_THRESHOLD || 5);
+    const active = await prisma.user.count({ where: { status: "ACTIVE" } });
+    if (active > threshold) {
+      this.logger.warn(`[BACKUP] ${active} usuários ativos (limite ${threshold}): configure o backup diário do Postgres — veja docs/operacao.md`);
+    }
   }
 
   private cleanServices(list: string[]) {

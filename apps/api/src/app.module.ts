@@ -11,12 +11,14 @@ import { PublicApiModule } from "./modules/public-api/public-api.module";
 import { AutomationsModule } from "./modules/automations/automations.module";
 import { StateModule } from "./modules/state/state.module";
 import { UsersModule } from "./modules/users/users.module";
+import { HealthModule } from "./modules/health/health.module";
 
 @Module({
   imports: [
     ConfigModule.forRoot({ isGlobal: true }),
     StateModule,
     UsersModule,
+    HealthModule,
     AuthModule,
     WorkspaceModule,
     InboxModule,

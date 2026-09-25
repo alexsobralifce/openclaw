@@ -1,0 +1,43 @@
+name: Monitor
+
+# Verifica a API (banco, Evolution, WhatsApp do root, fila de entrada) e o painel.
+# Se algo falhar, o run fica vermelho e o GitHub avisa por e-mail quem editou este agendamento.
+#
+# Frequência: a cada 30 min cabe nos 2.000 min/mês grátis de repositório privado (~1.440 min).
+# Se o repositório for público (minutos ilimitados), pode trocar por "*/5 * * * *".
+on:
+  schedule:
+    - cron: "*/30 * * * *"
+  workflow_dispatch:
+
+concurrency:
+  group: monitor
+  cancel-in-progress: true
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    env:
+      API_URL: ${{ vars.API_URL || 'https://api-production-f2743.up.railway.app' }}
+      WEB_URL: ${{ vars.WEB_URL || 'https://web-production-0bb3d.up.railway.app' }}
+    steps:
+      - name: API completa
+        run: |
+          for i in 1 2 3; do
+            code=$(curl -s -o body.json -w "%{http_code}" --max-time 20 "$API_URL/api/v1/health/full" || echo 000)
+            [ "$code" = "200" ] && { echo "API ok"; cat body.json; exit 0; }
+            echo "tentativa $i: HTTP $code"; cat body.json 2>/dev/null; echo
+            sleep 20
+          done
+          echo "::error title=API com problema::HTTP $code $(cat body.json 2>/dev/null)"
+          exit 1
+      - name: Painel
+        run: |
+          for i in 1 2 3; do
+            code=$(curl -s -o /dev/null -w "%{http_code}" --max-time 20 "$WEB_URL/auth/login" || echo 000)
+            [ "$code" = "200" ] && { echo "Painel ok"; exit 0; }
+            echo "tentativa $i: HTTP $code"; sleep 20
+          done
+          echo "::error title=Painel fora do ar::HTTP $code"
+          exit 1
