@@ -7,6 +7,7 @@ import { suspiciousReasons } from "./security";
 import { StateService } from "../../state/state.service";
 import { effectiveServices, Service } from "../../auth/permissions";
 import { normalize, parseChoice, pickByLabel } from "./voice";
+import { fmtWhen, mergeQueue, QUEUE_TTL_MS, QueuedEmail, removeFromQueue } from "./email-queue";
 
 const TZ = process.env.ASSISTANT_TZ || "America/Fortaleza";
 const TTL = 30 * 60_000;
@@ -25,8 +26,8 @@ interface State {
 }
 
 const ALIASES: Record<string, Record<string, number>> = {
-  notif: { ler: 1, abrir: 1, apagar: 2, excluir: 2, responder: 3, spam: 4, "marcar como spam": 4, "e spam": 4 },
-  email: { responder: 1, apagar: 2, excluir: 2, marcar: 3, "marcar como lido": 3, spam: 4, "marcar como spam": 4 },
+  notif: { ler: 1, abrir: 1, apagar: 2, excluir: 2, responder: 3, spam: 4, "marcar como spam": 4, "e spam": 4, proximo: 5, seguinte: 5, pular: 5 },
+  email: { responder: 1, apagar: 2, excluir: 2, marcar: 3, "marcar como lido": 3, spam: 4, "marcar como spam": 4, proximo: 5, seguinte: 5, pular: 5 },
   email_draft: { enviar: 1, mandar: 1, "pode enviar": 1, confirmar: 1, sim: 1, refazer: 2, cancelar: 0, nao: 0 },
   client_draft: { enviar: 1, mandar: 1, "pode enviar": 1, confirmar: 1, sim: 1, refazer: 2, cancelar: 0, nao: 0 },
   event_confirm: { confirmar: 1, confirma: 1, sim: 1, criar: 1, refazer: 2, cancelar: 0, nao: 0 },
@@ -93,6 +94,10 @@ export class MenuService {
       if (cmd("modo carro|android auto|carplay|car play|estou no carro|to no carro").test(flat)) return await this.carSet(workspaceId);
       if (cmd("modo direcao|vou dirigir|estou dirigindo|to dirigindo").test(flat)) return await this.drivingSet(workspaceId, true);
       if (/^(ler |ver |abrir |checar )?(os |meus )?(novos )?e-?mails?( novos)?$/.test(flat)) return await this.emailsEntry(workspaceId);
+      // Fila de e-mails novos: "próximo" e "fila" valem de qualquer tela, menos onde há algo a confirmar ou digitar
+      const pending = !!st && /(_input|_draft|_confirm|_account)$|^confirm_ai$/.test(st.screen);
+      if (!pending && /^(ler |ver |abrir |passa |passar )?(o )?(proximo|proxima|seguinte)( e-?mail)?$/.test(flat)) return await this.nextFromQueue(workspaceId);
+      if (!pending && /^(ver |mostrar |abrir )?(a )?fila( de e-?mails?)?$/.test(flat)) return await this.queueShow(workspaceId);
       // Navegação direta por voz, de qualquer tela (fora das telas de digitação)
       if (!isInput && /^(ver |abrir |mostrar )?(as |minhas )?conversas( de clientes| em aberto)?$/.test(flat) && (await this.services(workspaceId)).includes("inbox")) return await this.clientList(workspaceId);
       if (!isInput && /^(ver |abrir |mostrar )?(a |minha )?agenda$/.test(flat) && (await this.services(workspaceId)).includes("calendar")) return await this.agendaMenu(workspaceId);
@@ -155,16 +160,18 @@ export class MenuService {
         if (n === null) n = pickByLabel(text, d.items.map((m: any) => `${personName(m.de)} ${m.assunto ?? ""}`));
         if (n === null) return null;
         const item = d.items[n - 1];
-        return item ? this.emailOpen(ws, item.account ?? d.account, item.id) : this.invalid();
+        return item ? this.emailOpen(ws, item.account ?? d.account, item.id, d.q) : this.invalid();
       }
       case "notif": {
         if (n === 0) return this.mainMenu(ws, false);
-        if (n === 1) return this.emailOpen(ws, d.account, d.id);
-        if (n === 2) return this.emailTrash(ws, d.account, d.id, false);
-        if (n === 4) return this.emailSpam(ws, d.account, d.id, false);
+        if (n === 1) return this.emailOpen(ws, d.account, d.id, d.q);
+        if (n === 2) return this.emailTrash(ws, d.account, d.id, false, d.q);
+        if (n === 4) return this.emailSpam(ws, d.account, d.id, false, d.q);
+        if (n === 5) return this.nextFromQueue(ws, { skip: d });
         if (n === 3) {
           const m: any = await this.google.gmailRead(ws, d.id, d.account);
-          await this.set(ws, "email_reply_input", { ...m, account: d.account });
+          await this.queueRemove(ws, d.id, d.account);
+          await this.set(ws, "email_reply_input", { ...m, account: d.account, q: d.q });
           return `${head("🎙️", "Responder e-mail", `${short(personName(m.de), 28)} · ${short(m.assunto ?? "(sem assunto)", 40)}`)}\nMe diga por texto ou áudio o que responder, que eu escrevo o e-mail.\n${DIV}\n${opts(BACK)}`;
         }
         return n === null ? null : this.invalid();
@@ -175,11 +182,12 @@ export class MenuService {
           await this.set(ws, "email_reply_input", d);
           return `${head("🎙️", "Responder e-mail")}\nMe diga por texto ou áudio o que responder, que eu escrevo o e-mail.\n_Ex.: "confirmo presença" ou "peça mais prazo"_\n${DIV}\n${opts(BACK)}`;
         }
-        if (n === 2) return this.emailTrash(ws, d.account, d.id, true);
-        if (n === 4) return this.emailSpam(ws, d.account, d.id, true);
+        if (n === 2) return this.emailTrash(ws, d.account, d.id, true, d.q);
+        if (n === 4) return this.emailSpam(ws, d.account, d.id, true, d.q);
+        if (n === 5) return this.nextFromQueue(ws);
         if (n === 3) {
           await this.google.gmailMarkRead(ws, d.id, d.account);
-          return `✅ *Marcado como lido.*\n\n${await this.emailList(ws, d.account)}`;
+          return this.afterEmail(ws, "✅ *Marcado como lido.*", d.account, d.q);
         }
         return n === null ? null : this.invalid();
       }
@@ -197,7 +205,7 @@ export class MenuService {
       case "email_draft": {
         if (n === 1) {
           await this.google.gmailSend(ws, emailOf(d.de), `Re: ${d.assunto ?? ""}`.replace(/^Re: Re: /i, "Re: "), d.draft, d.account);
-          return `✅ *E-mail enviado!*\n\n${await this.emailList(ws, d.account)}`;
+          return this.afterEmail(ws, "✅ *E-mail enviado!*", d.account, d.q);
         }
         if (n === 2) {
           await this.set(ws, "email_reply_input", d);
@@ -359,37 +367,113 @@ export class MenuService {
     return { options, labels };
   }
 
-  /** Monta o aviso de novos e-mails e prepara as opções de resposta. */
-  async notifyNew(ws: string, items: { account: string; id: string; de: string; assunto: string }[]): Promise<string> {
+  // ─── Fila de e-mails novos ─────────────────────────────────────
+
+  private qkey(ws: string) {
+    return `emailq:${ws}`;
+  }
+
+  private async queueGet(ws: string): Promise<QueuedEmail[]> {
+    return (await this.state.get<QueuedEmail[]>(this.qkey(ws))) ?? [];
+  }
+
+  private async queueSave(ws: string, q: QueuedEmail[]) {
+    if (q.length) await this.state.set(this.qkey(ws), q, QUEUE_TTL_MS);
+    else await this.state.del(this.qkey(ws));
+  }
+
+  private async queueRemove(ws: string, id: string, account?: string) {
+    const q = await this.queueGet(ws);
+    const next = removeFromQueue(q, id, account);
+    if (next.length !== q.length) await this.queueSave(ws, next);
+  }
+
+  /**
+   * Registra os e-mails novos na fila (do mais antigo ao mais novo) e monta o aviso.
+   * Se o usuário está no meio de uma conversa com o assistente, a tela dele NÃO é trocada
+   * (os números que ele vê continuam valendo): só avisa e deixa o e-mail esperando na fila.
+   */
+  async notifyNew(ws: string, items: { account: string; id: string; de: string; assunto: string; at?: number }[]): Promise<string> {
+    const now = Date.now();
+    await this.queueSave(ws, mergeQueue(await this.queueGet(ws), items.map((m, i) => ({ ...m, at: m.at ?? now + i }))));
+    const total = (await this.queueGet(ws)).length;
+
     const st = await this.state.get<State>(this.key(ws));
-    const busy = !!st && Date.now() - st.at < 5 * 60_000 && /(_input|_draft|_confirm|_account)$/.test(st.screen);
-    if (busy) {
-      return items.length === 1
-        ? `📩 *Novo e-mail* de *${short(personName(items[0].de), 30)}*\n📌 ${short(items[0].assunto ?? "", 60)}\n_Quando terminar por aqui, digite *menu* para vê-lo._`
-        : `📩 *Chegaram ${items.length} e-mails novos.*\n_Quando terminar por aqui, digite *menu*._`;
+    if (st && now - st.at < 5 * 60_000) {
+      const first = items[0];
+      const what = items.length === 1 ? `de *${short(personName(first.de), 30)}*\n📌 ${short(first.assunto ?? "(sem assunto)", 60)}` : `(${items.length} novos)`;
+      return `📩 *Novo e-mail* ${what}\n⏳ _Na fila: ${total}. Quando terminar por aqui, diga *próximo*._`;
     }
-    if (items.length === 1) {
-      const m = items[0];
-      await this.set(ws, "notif", m);
+    return this.queueShow(ws);
+  }
+
+  /** Mostra a fila: um e-mail sozinho vira cartão com ações; vários viram lista numerada em ordem de chegada. */
+  private async queueShow(ws: string): Promise<string> {
+    const q = await this.queueGet(ws);
+    if (!q.length) return `📭 *Nenhum e-mail novo na fila.*\n💡 _Diga *e-mails* para ver os não lidos._`;
+    if (q.length === 1) {
+      const m = q[0];
+      await this.set(ws, "notif", { ...m, q: true });
       return [
         head("📩", "Novo e-mail"),
         `👤 *De:* ${personName(m.de)}`,
         `📌 *Assunto:* ${short(m.assunto ?? "(sem assunto)", 80)}`,
-        `📥 *Conta:* ${accountLabel(m.account)}`,
+        `📥 *Conta:* ${accountLabel(m.account)}${this.arrivedAt(m.at)}`,
         DIV,
         opts([1, "📖", "Ler"], [2, "🗑️", "Apagar"], [3, "↩️", "Responder"], [4, "🚫", "Spam"]),
       ].join("\n");
     }
-    const multi = new Set(items.map((i) => i.account)).size > 1;
-    await this.set(ws, "emails", { account: undefined, items });
-    const cards = items.slice(0, 6).map((m, i) => this.emailCard(i + 1, m, multi));
-    const extra = items.length > 6 ? `\n➕ _${items.length - 6} não listados_` : "";
-    return [head("📩", `${items.length} novos e-mails`), cards.join("\n\n") + extra, foot("Responda com o número para abrir"), opts([0, "🏠", "Menu"])].join("\n");
+    const shown = q.slice(0, await this.listSize(ws, 6));
+    const multi = new Set(q.map((i) => i.account)).size > 1;
+    await this.set(ws, "emails", { account: undefined, items: shown, q: true });
+    const cards = shown.map((m, i) => this.emailCard(i + 1, m, multi));
+    const extra = q.length > shown.length ? `\n➕ _${q.length - shown.length} mais na fila_` : "";
+    return [
+      head("📩", `${q.length} e-mails na fila`, "do mais antigo ao mais novo"),
+      cards.join("\n\n") + extra,
+      // linha comum (não 💡): no modo carro a leitura por voz descarta as dicas
+      "⏭️ Diga *próximo* para ir um a um, ou o número.",
+      opts([0, "🏠", "Menu"]),
+    ].join("\n");
+  }
+
+  /** Abre o e-mail mais antigo da fila; pula os que já não existem no Gmail. */
+  private async nextFromQueue(ws: string, opts2: { skip?: { id: string; account: string } } = {}): Promise<string> {
+    if (opts2.skip) await this.queueRemove(ws, opts2.skip.id, opts2.skip.account);
+    for (let tries = 0; tries < 5; tries++) {
+      const q = await this.queueGet(ws);
+      if (!q.length) return `✅ *Fila vazia.* Você viu todos os e-mails novos.\n💡 _Digite *menu* quando quiser._`;
+      const m = q[0];
+      try {
+        return await this.emailOpen(ws, m.account, m.id, true);
+      } catch (e: any) {
+        // apagado ou movido fora daqui: sai da fila e tenta o seguinte
+        this.logger.warn(`E-mail ${m.id} da fila indisponível: ${e.message}`);
+        await this.queueRemove(ws, m.id, m.account);
+      }
+    }
+    return `😕 Não consegui abrir os próximos e-mails da fila. Digite *e-mails* para ver os não lidos.`;
+  }
+
+  /** Depois de tratar um e-mail: se veio da fila, já abre o próximo; senão, volta à lista de não lidos. */
+  private async afterEmail(ws: string, msg: string, account: string, fromQueue?: boolean): Promise<string> {
+    const left = (await this.queueGet(ws)).length;
+    if (fromQueue && left) return `${msg}\n\n${await this.nextFromQueue(ws)}`;
+    if (fromQueue) {
+      await this.setMain(ws);
+      return `${msg}\n\n✅ *Fila vazia.* Você viu todos os e-mails novos.\n💡 _Digite *menu* quando quiser._`;
+    }
+    return `${msg}\n\n${await this.emailList(ws, account)}`;
+  }
+
+  private arrivedAt(at?: number) {
+    const t = fmtWhen(at, TZ);
+    return t ? `\n     🕐 _${t}_` : "";
   }
 
   private emailCard(n: number, m: any, showAccount = false) {
     const acc = showAccount && m.account ? `\n     📥 _${accountLabel(m.account)}_` : "";
-    return `${key(n)} 👤 *${short(personName(m.de), 30)}*\n     📌 ${short(m.assunto ?? "(sem assunto)", 55)}${acc}`;
+    return `${key(n)} 👤 *${short(personName(m.de), 30)}*\n     📌 ${short(m.assunto ?? "(sem assunto)", 55)}${acc}${this.arrivedAt(m.at ?? m.internalDate)}`;
   }
 
   private fmtDate(v?: string) {
@@ -476,27 +560,34 @@ export class MenuService {
   }
 
   private async emailList(ws: string, account: string) {
-    const items = await this.google.gmailSearch(ws, "is:unread in:inbox", account, await this.listSize(ws, 6));
+    const found = await this.google.gmailSearch(ws, "is:unread in:inbox", account, await this.listSize(ws, 6));
+    // Mesma ordem da fila: do mais antigo ao mais novo
+    const items = [...found].sort((a: any, b: any) => (a.internalDate ?? 0) - (b.internalDate ?? 0));
     await this.set(ws, "emails", { account, items });
     if (!items.length) return [head("🎉", "Caixa limpa!", accountLabel(account)), "Nenhum e-mail não lido.", DIV, opts(BACK)].join("\n");
     const cards = items.map((m: any, i: number) => this.emailCard(i + 1, m));
-    return [head("📧", "E-mails não lidos", accountLabel(account)), cards.join("\n\n"), foot("Responda com o número para abrir"), opts(BACK)].join("\n");
+    const queued = (await this.queueGet(ws)).length;
+    const hint = queued ? `\n⏳ _${queued} na fila de novos: diga *fila* ou *próximo*._` : "";
+    return [head("📧", "E-mails não lidos", `${accountLabel(account)} · do mais antigo ao mais novo`), cards.join("\n\n"), foot("Responda com o número para abrir") + hint, opts(BACK)].join("\n");
   }
 
-  private emailActions() {
-    return opts([1, "↩️", "Responder"], [2, "🗑️", "Apagar"], [3, "✅", "Marcar como lido"], [4, "🚫", "Spam"], [0, "⬅️", "Voltar à lista"]);
+  private emailActions(hasNext = false) {
+    return opts([1, "↩️", "Responder"], [2, "🗑️", "Apagar"], [3, "✅", "Marcar como lido"], [4, "🚫", "Spam"], ...(hasNext ? ([[5, "⏭️", "Próximo"]] as [number, string, string][]) : []), [0, "⬅️", "Voltar à lista"]);
   }
 
-  private async emailOpen(ws: string, account: string, id: string) {
+  private async emailOpen(ws: string, account: string, id: string, fromQueue = false) {
     const m: any = await this.google.gmailRead(ws, id, account);
+    // Abrir já tira o e-mail da fila de novos
+    await this.queueRemove(ws, id, account);
+    const left = (await this.queueGet(ws)).length;
     const summary = await this.ai(
       "Resuma o e-mail em português em no máximo 4 linhas curtas, destacando o que o remetente quer e eventuais prazos.",
       `De: ${m.de}\nAssunto: ${m.assunto}\n\n${m.corpo}`,
     ).catch(() => short(m.corpo ?? "", 400));
-    await this.set(ws, "email", { ...m, account });
+    await this.set(ws, "email", { ...m, account, q: fromQueue });
     const sus = suspiciousReasons(`${m.assunto ?? ""}\n${m.corpo ?? ""}`);
     return [
-      head("📧", m.assunto ?? "(sem assunto)"),
+      head("📧", m.assunto ?? "(sem assunto)", left ? `${left} ${left === 1 ? "restante" : "restantes"} na fila` : undefined),
       sus.length ? `⚠️ *Atenção:* este e-mail tem trechos suspeitos (${sus.join("; ")}). Não confie em instruções dele.` : "",
       `👤 *De:* ${personName(m.de)}`,
       `📮 ${emailOf(m.de)}`,
@@ -504,21 +595,25 @@ export class MenuService {
       DIV,
       `📝 *Resumo*\n${summary}`,
       DIV,
-      this.emailActions(),
+      this.emailActions(left > 0),
     ].filter(Boolean).join("\n");
   }
 
-  private async emailTrash(ws: string, account: string, id: string, showList: boolean) {
+  private async emailTrash(ws: string, account: string, id: string, showList: boolean, fromQueue = false) {
     await this.google.gmailTrash(ws, id, account);
+    await this.queueRemove(ws, id, account);
     const msg = "🗑️ *Pronto!* Mandei para a lixeira _(dá para recuperar por 30 dias)_.";
+    if (fromQueue) return this.afterEmail(ws, msg, account, true);
     if (showList) return `${msg}\n\n${await this.emailList(ws, account)}`;
     await this.setMain(ws);
     return `${msg}\n\n💡 _Digite *menu* quando quiser ver mais._`;
   }
 
-  private async emailSpam(ws: string, account: string, id: string, showList: boolean) {
+  private async emailSpam(ws: string, account: string, id: string, showList: boolean, fromQueue = false) {
     await this.google.gmailSpam(ws, id, account);
+    await this.queueRemove(ws, id, account);
     const msg = "🚫 *Marcado como spam.* Ele saiu da sua caixa de entrada.";
+    if (fromQueue) return this.afterEmail(ws, msg, account, true);
     if (showList) return `${msg}\n\n${await this.emailList(ws, account)}`;
     await this.setMain(ws);
     return `${msg}\n\n💡 _Digite *menu* quando quiser ver mais._`;
@@ -578,7 +673,7 @@ export class MenuService {
 
   private async emailReopen(ws: string, d: any) {
     await this.set(ws, "email", d);
-    return [head("📧", d.assunto ?? "(sem assunto)", "Voltando ao e-mail"), this.emailActions()].join("\n");
+    return [head("📧", d.assunto ?? "(sem assunto)", "Voltando ao e-mail"), this.emailActions((await this.queueGet(ws)).length > 0)].join("\n");
   }
 
   // Agenda

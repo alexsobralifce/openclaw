@@ -50,7 +50,7 @@ export class EmailWatcherService implements OnModuleInit, OnModuleDestroy {
   }
 
   private async checkWorkspace(workspaceId: string, channels: any[]) {
-    const fresh: { account: string; id: string; de: string; assunto: string }[] = [];
+    const fresh: { account: string; id: string; de: string; assunto: string; at: number }[] = [];
     const updates: { id: string; config: any }[] = [];
 
     for (const ch of channels) {
@@ -64,14 +64,17 @@ export class EmailWatcherService implements OnModuleInit, OnModuleDestroy {
       }
 
       const sinceSec = Math.floor(cfg.lastSeenMs / 1000);
-      const items = await this.google.gmailSearch(workspaceId, `is:unread in:inbox after:${sinceSec}`, account, 10);
+      const items = await this.google.gmailSearch(workspaceId, `is:unread in:inbox after:${sinceSec}`, account, 25);
       const news = items.filter((m: any) => m.internalDate > cfg.lastSeenMs);
       if (!news.length) continue;
 
-      news.forEach((m: any) => fresh.push({ account, id: m.id, de: m.de ?? "", assunto: m.assunto ?? "" }));
+      news.forEach((m: any) => fresh.push({ account, id: m.id, de: m.de ?? "", assunto: m.assunto ?? "", at: m.internalDate }));
       const newest = Math.max(...news.map((m: any) => m.internalDate));
       updates.push({ id: ch.id, config: { ...cfg, lastSeenMs: newest } });
     }
+
+    // Do mais antigo ao mais novo, entre todas as contas
+    fresh.sort((a, b) => a.at - b.at);
 
     // Metadados (sem o corpo) para clientes que assinam email.received
     for (const m of fresh) this.webhooks.emit(workspaceId, "email.received", { account: m.account, id: m.id, from: m.de, subject: m.assunto });

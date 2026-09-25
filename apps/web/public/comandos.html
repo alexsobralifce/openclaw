@@ -286,7 +286,7 @@
             <tr data-s><td>Abrir o menu</td><td><span class="say">oi</span> <span class="say">olá</span> <span class="say">menu</span> <span class="say">ajuda</span> <span class="say">bom dia</span></td></tr>
             <tr data-s><td>Escolher uma opção</td><td><span class="say">um</span> <span class="say">dois</span> <span class="say">três</span> <span class="say">quatro</span> <span class="say">cinco</span> <span class="say">seis</span> <span class="say">sete</span> <span class="say">zero</span> · <span class="say">voltar</span></td></tr>
             <tr data-s><td>Aviso de e-mail novo</td><td><span class="say">ler</span> <span class="say">apagar</span> <span class="say">responder</span> <span class="say">spam</span></td></tr>
-            <tr data-s><td>Dentro de um e-mail</td><td><span class="say">responder</span> <span class="say">apagar</span> <span class="say">marcar como lido</span> <span class="say">spam</span></td></tr>
+            <tr data-s><td>Dentro de um e-mail</td><td><span class="say">responder</span> <span class="say">apagar</span> <span class="say">marcar como lido</span> <span class="say">spam</span> <span class="say">próximo</span> (pula sem apagar)</td></tr>
             <tr data-s><td>Rascunho de e-mail ou mensagem</td><td><span class="say">enviar</span> <span class="say">pode enviar</span> <span class="say">refazer</span> <span class="say">cancelar</span></td></tr>
             <tr data-s><td>Confirmar evento</td><td><span class="say">confirmar</span> <span class="say">sim</span> <span class="say">refazer</span> <span class="say">cancelar</span></td></tr>
             <tr data-s><td>Confirmar uma ação da IA</td><td><span class="say">confirmar</span> <span class="say">sim</span> <span class="say">pode enviar</span> · <span class="say">cancelar</span> <span class="say">não</span></td></tr>
@@ -353,7 +353,10 @@
           <thead><tr><th>Quando</th><th>O que você recebe</th></tr></thead>
           <tbody>
             <tr data-s><td>Chega um e-mail novo</td><td>Aviso com remetente e assunto, e as opções <span class="say">1</span> ler · <span class="say">2</span> apagar · <span class="say">3</span> responder · <span class="say">4</span> spam. A checagem acontece a cada minuto, em todas as contas.</td></tr>
-            <tr data-s><td>Chegam vários juntos</td><td>Uma lista numerada. Diga o número do e-mail que quer abrir.</td></tr>
+            <tr data-s><td>Chegam vários juntos</td><td>Uma lista numerada <strong>do mais antigo ao mais novo</strong>, com a hora de cada um. Diga o número, ou <span class="say">próximo</span> para ir um a um.</td></tr>
+            <tr data-s><td>Chega e-mail enquanto você usa o assistente</td><td>A tela não muda (os números continuam valendo). Você recebe só um aviso e o e-mail espera na <strong>fila</strong>.</td></tr>
+            <tr data-s><td><span class="say">próximo</span></td><td>Abre o e-mail mais antigo da fila. Ao apagar, marcar como lido, marcar spam ou enviar a resposta, o seguinte abre sozinho, até a fila acabar.</td></tr>
+            <tr data-s><td><span class="say">fila</span></td><td>Mostra os e-mails novos que ainda esperam por você.</td></tr>
             <tr data-s><td>Você está no meio de outra tarefa</td><td>Um aviso curto, sem opções, para não atrapalhar. Quando terminar, diga <span class="say">menu</span>.</td></tr>
             <tr data-s><td>E-mails antigos</td><td>Só chegam avisos dos e-mails novos, depois da conexão da conta.</td></tr>
           </tbody>
