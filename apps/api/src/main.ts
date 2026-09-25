@@ -1,4 +1,6 @@
 import { NestFactory } from "@nestjs/core";
+import type { NestExpressApplication } from "@nestjs/platform-express";
+import helmet from "helmet";
 import { RequestMethod, ValidationPipe } from "@nestjs/common";
 import { AppModule } from "./app.module";
 
@@ -11,7 +13,12 @@ function assertProductionConfig() {
 
 async function bootstrap() {
   assertProductionConfig();
-  const app = await NestFactory.create(AppModule);
+  const app = await NestFactory.create<NestExpressApplication>(AppModule);
+
+  // Atrás do proxy do Railway: confia só no último salto para que req.ip seja o IP real do cliente
+  app.set("trust proxy", 1);
+  // O painel está em outro domínio e a API pública é chamada por outros sites: recursos podem ser lidos entre origens
+  app.use(helmet({ crossOriginResourcePolicy: { policy: "cross-origin" } }));
 
   // A API pública tem versionamento e prefixo próprios (/api/public/v1)
   app.setGlobalPrefix("api/v1", { exclude: [{ path: "api/public/v1/(.*)", method: RequestMethod.ALL }] });

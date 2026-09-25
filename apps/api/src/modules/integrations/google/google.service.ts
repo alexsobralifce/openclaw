@@ -1,5 +1,6 @@
-import { Injectable, Logger } from "@nestjs/common";
+import { Injectable, Logger, OnModuleInit } from "@nestjs/common";
 import { prisma } from "@openclaw/database";
+import { isSealed, openToken, sealToken } from "../../webhooks/crypto";
 
 const SCOPES = [
   "https://www.googleapis.com/auth/gmail.modify",
@@ -9,8 +10,25 @@ const SCOPES = [
 ];
 
 @Injectable()
-export class GoogleService {
+export class GoogleService implements OnModuleInit {
   private readonly logger = new Logger(GoogleService.name);
+
+  /** Cifra os refresh tokens que ainda estão em texto puro (contas conectadas antes da cifragem). */
+  async onModuleInit() {
+    try {
+      const chs = await prisma.channel.findMany({ where: { type: "EMAIL", config: { path: ["provider"], equals: "google" } } });
+      let migrated = 0;
+      for (const ch of chs) {
+        const cfg = ch.config as any;
+        if (!cfg?.refreshToken || isSealed(cfg.refreshToken)) continue;
+        await prisma.channel.update({ where: { id: ch.id }, data: { config: { ...cfg, refreshToken: sealToken(cfg.refreshToken) } } });
+        migrated++;
+      }
+      if (migrated) this.logger.warn(`${migrated} token(s) do Google passaram a ser guardados cifrados`);
+    } catch (e: any) {
+      this.logger.error(`Migração dos tokens do Google falhou: ${e.message}`);
+    }
+  }
   private tokenCache = new Map<string, { token: string; expiresAt: number }>();
 
   private get clientId() { return process.env.GOOGLE_CLIENT_ID || ""; }
@@ -60,7 +78,7 @@ export class GoogleService {
     const email: string = info.email ?? "google";
 
     const existing = await this.findChannel(workspaceId, email);
-    const config = { provider: "google", email, refreshToken: t.refresh_token };
+    const config = { provider: "google", email, refreshToken: sealToken(t.refresh_token) };
     if (existing) {
       await prisma.channel.update({ where: { id: existing.id }, data: { name: `Google (${email})`, config } });
     } else {
@@ -105,7 +123,7 @@ export class GoogleService {
     if (cached && cached.expiresAt > Date.now() + 60_000) return cached.token;
 
     const t = await this.tokenRequest({
-      refresh_token: (channel.config as any).refreshToken,
+      refresh_token: openToken((channel.config as any).refreshToken),
       grant_type: "refresh_token",
     });
     this.tokenCache.set(channel.id, { token: t.access_token, expiresAt: Date.now() + t.expires_in * 1000 });

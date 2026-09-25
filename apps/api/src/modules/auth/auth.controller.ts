@@ -1,10 +1,15 @@
-import { Body, Controller, Get, Patch, Post, Request } from "@nestjs/common";
+import { Body, Controller, Get, Patch, Post, Request, UseGuards } from "@nestjs/common";
+import { Transform } from "class-transformer";
 import { IsEmail, IsOptional, IsString, Matches, MaxLength, MinLength } from "class-validator";
 import { AuthService } from "./auth.service";
 import { Access } from "./access";
+import { RateLimit, RateLimitGuard } from "./rate-limit";
 import { SERVICES } from "./permissions";
 
+const normalizeEmail = ({ value }: { value: unknown }) => (typeof value === "string" ? value.trim().toLowerCase() : value);
+
 class RegisterDto {
+  @Transform(normalizeEmail)
   @IsEmail()
   email!: string;
 
@@ -20,6 +25,7 @@ class RegisterDto {
 }
 
 class LoginDto {
+  @Transform(normalizeEmail)
   @IsEmail()
   email!: string;
 
@@ -40,11 +46,15 @@ class ProfileDto {
 export class AuthController {
   constructor(private auth: AuthService) {}
 
+  @UseGuards(RateLimitGuard)
+  @RateLimit("register", 5, 3600)
   @Post("register")
   register(@Body() dto: RegisterDto) {
     return this.auth.register(dto.email, dto.name, dto.password, dto.workspaceName);
   }
 
+  @UseGuards(RateLimitGuard)
+  @RateLimit("login", 20, 900)
   @Post("login")
   login(@Body() dto: LoginDto) {
     return this.auth.login(dto.email, dto.password);

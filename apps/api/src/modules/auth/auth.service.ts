@@ -1,20 +1,34 @@
-import { Injectable, UnauthorizedException, ConflictException, ForbiddenException } from "@nestjs/common";
+import { Injectable, UnauthorizedException, ConflictException, ForbiddenException, HttpException, HttpStatus, ServiceUnavailableException } from "@nestjs/common";
 import { JwtService } from "@nestjs/jwt";
 import { prisma } from "@openclaw/database";
 import * as bcrypt from "bcryptjs";
 import { statusMessage } from "./jwt.strategy";
 import { effectiveServices } from "./permissions";
+import { StateService } from "../state/state.service";
+
+// Falhas de senha por e-mail: depois de tantas, a conta espera um tempo (vale mesmo com IPs diferentes)
+const MAX_FAILS = 8;
+const FAIL_WINDOW_MS = 15 * 60_000;
+// Cadastros aguardando aprovação: teto para o cadastro público não encher a fila do administrador
+const MAX_PENDING = Number(process.env.MAX_PENDING_SIGNUPS || 30);
+
+// Hash de uma senha qualquer, só para gastar o mesmo tempo quando o e-mail não existe
+const DUMMY_HASH = bcrypt.hashSync("nao-e-uma-senha-real", 12);
 
 @Injectable()
 export class AuthService {
-  constructor(private jwt: JwtService) {}
+  constructor(private jwt: JwtService, private state: StateService) {}
 
   /**
    * Cada cadastro ganha o próprio workspace. O primeiro usuário do sistema vira ROOT;
    * os demais ficam pendentes até um ROOT/ADMIN aprovar e liberar os serviços.
    */
   async register(email: string, name: string, password: string, workspaceName: string) {
-    const existing = await prisma.user.findUnique({ where: { email } });
+    // O primeiro usuário (root) sempre pode se cadastrar; depois, há um teto de pendentes
+    if ((await prisma.user.count()) > 0 && (await prisma.user.count({ where: { status: "PENDING" } })) >= MAX_PENDING) {
+      throw new ServiceUnavailableException("Cadastros temporariamente indisponíveis. Fale com o administrador.");
+    }
+    const existing = await prisma.user.findFirst({ where: { email: { equals: email, mode: "insensitive" } } });
     if (existing) throw new ConflictException("Email já cadastrado");
 
     const passwordHash = await bcrypt.hash(password, 12);
@@ -52,14 +66,21 @@ export class AuthService {
   }
 
   async login(email: string, password: string) {
-    const user = await prisma.user.findUnique({
-      where: { email },
+    const failKey = `login-fail:${email.toLowerCase()}`;
+    if (((await this.state.get<number>(failKey)) ?? 0) >= MAX_FAILS) {
+      throw new HttpException("Muitas tentativas para esta conta. Aguarde 15 minutos.", HttpStatus.TOO_MANY_REQUESTS);
+    }
+    const user = await prisma.user.findFirst({
+      where: { email: { equals: email, mode: "insensitive" } },
       include: { workspaces: { include: { workspace: true } } },
     });
-    if (!user || !user.passwordHash) throw new UnauthorizedException("Credenciais inválidas");
-
-    const valid = await bcrypt.compare(password, user.passwordHash);
-    if (!valid) throw new UnauthorizedException("Credenciais inválidas");
+    // Sempre compara a senha (mesmo sem usuário) para o tempo de resposta não revelar quais e-mails existem
+    const valid = await bcrypt.compare(password, user?.passwordHash ?? DUMMY_HASH);
+    if (!user || !user.passwordHash || !valid) {
+      await this.state.incr(failKey, FAIL_WINDOW_MS);
+      throw new UnauthorizedException("Credenciais inválidas");
+    }
+    await this.state.del(failKey);
     // Só depois de conferir a senha, para não revelar quais e-mails estão cadastrados
     if (user.status !== "ACTIVE") throw new ForbiddenException(statusMessage(user.status));
 
