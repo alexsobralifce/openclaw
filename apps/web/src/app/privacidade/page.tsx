@@ -53,7 +53,8 @@ export default function PrivacyPage() {
         <h2 className="text-base font-semibold text-gray-200">Seus direitos e exclusão de dados</h2>
         <p>
           Você pode pedir acesso, correção ou exclusão dos seus dados. Veja como em{" "}
-          <a className="text-teal-400 underline" href="/exclusao-de-dados">Exclusão de dados</a>.
+          <a className="text-teal-400 underline" href="/exclusao-de-dados">Exclusão de dados</a>. O uso do serviço também
+          segue os <a className="text-teal-400 underline" href="/termos">Termos de Serviço</a>.
         </p>
       </section>
 
