@@ -12,9 +12,9 @@ import { classifyEmail, groupOrder, isHidden, looksLikeBatchReply, parseBatchPla
 
 const TZ = process.env.ASSISTANT_TZ || "America/Fortaleza";
 const TTL = 30 * 60_000;
-// Modos carro/direção desligam sozinhos depois deste tempo sem uso (para não ficar preso em "texto falado" na mesa)
+// O modo carro desliga sozinho depois deste tempo sem uso (para não ficar preso em "texto falado" na mesa)
 const MODE_TTL = Number(process.env.CAR_MODE_HOURS || 3) * 3600_000;
-type Mode = "car" | "driving";
+type Mode = "car" | "driving"; // "driving" é o valor do antigo modo direção, tratado como "car"
 // Saudações abrem o menu (fora de telas de digitação); "menu"/"ajuda"/... só valem como mensagem inteira.
 // (comparadas sem acentos: o \b do JavaScript não reconhece "á" como letra)
 const SALUTE = /^(oi+|ola|oie|hey|hello|e ai|bom dia|boa tarde|boa noite)\b/;
@@ -92,9 +92,9 @@ export class MenuService {
     try {
       // Em telas de digitação (rascunho de e-mail, evento...), o texto é conteúdo: comandos globais só valem como mensagem inteira
       const cmd = (src: string) => new RegExp(isInput ? `^(${src})$` : `(${src})`);
-      if (cmd("sair do modo (direcao|carro)|desligar (o )?modo (direcao|carro)|desativar (o )?modo (direcao|carro)|parei de dirigir|^cheguei").test(flat)) return await this.drivingSet(workspaceId, false);
-      if (cmd("modo carro|android auto|carplay|car play|estou no carro|to no carro").test(flat)) return await this.carSet(workspaceId);
-      if (cmd("modo direcao|vou dirigir|estou dirigindo|to dirigindo").test(flat)) return await this.drivingSet(workspaceId, true);
+      // Modo carro e modo direção são um só: texto falável, que o Android Auto/CarPlay leem em voz alta
+      if (cmd("sair do modo (direcao|carro)|desligar (o )?modo (direcao|carro)|desativar (o )?modo (direcao|carro)|parei de dirigir|^cheguei").test(flat)) return await this.carSet(workspaceId, false);
+      if (cmd("modo carro|modo direcao|android auto|carplay|car play|estou no carro|to no carro|vou dirigir|estou dirigindo|to dirigindo").test(flat)) return await this.carSet(workspaceId, true);
       if (/^(ler |ver |abrir |checar )?(os |meus )?(novos )?e-?mails?( novos)?$/.test(flat)) return await this.emailsEntry(workspaceId);
       // Fila de e-mails novos: "próximo" e "fila" valem de qualquer tela, menos onde há algo a confirmar ou digitar
       const pending = !!st && /(_input|_draft|_confirm|_account)$|^confirm_ai$/.test(st.screen);
@@ -385,8 +385,8 @@ export class MenuService {
     labels.push({ icon: "🤖", label: "Perguntar à IA" });
     options.push({ type: "memory" });
     labels.push({ icon: "🧠", label: "Minha memória" });
-    options.push({ type: "driving" });
-    labels.push({ icon: "🚗", label: "Modo direção" });
+    options.push({ type: "car" });
+    labels.push({ icon: "🚗", label: "Modo carro" });
     return { options, labels };
   }
 
@@ -530,7 +530,7 @@ export class MenuService {
     const [icon, saud] = h < 12 ? ["☀️", "Bom dia"] : h < 18 ? ["🌤️", "Boa tarde"] : ["🌙", "Boa noite"];
     const title = greet ? `${saud}! Sou seu assistente` : "Menu principal";
     const items = labels.map((l, i) => `${key(i + 1)} ${l.icon} ${l.label}${l.sub ? `\n     _${l.sub}_` : ""}`);
-    return [head(greet ? icon : "🏠", title, "O que vamos ver agora?"), items.join("\n"), foot("Responda com o número, escreva ou mande um áudio 🎙️"), "🚗 _Vai dirigir? Diga *vou dirigir* e eu falo por áudio._"].join("\n");
+    return [head(greet ? icon : "🏠", title, "O que vamos ver agora?"), items.join("\n"), foot("Responda com o número, escreva ou mande um áudio 🎙️"), "🚗 _Vai dirigir? Diga *modo carro* e eu respondo em texto para o carro ler em voz alta._"].join("\n");
   }
 
   /** Volta à tela principal guardando opções e rótulos (os rótulos permitem escolher falando o nome). */
@@ -546,7 +546,8 @@ export class MenuService {
     if (opt.type === "agenda") return this.agendaMenu(ws);
     if (opt.type === "clients") return this.clientList(ws);
     if (opt.type === "memory") return this.memoryList(ws);
-    if (opt.type === "driving") return this.drivingSet(ws, !(await this.isDriving(ws)));
+    // "driving" é o tipo antigo, que ainda pode estar numa tela guardada
+    if (opt.type === "car" || opt.type === "driving") return this.carSet(ws, !(await this.isCar(ws)));
     await this.set(ws, "free");
     return [head("🤖", "Assistente livre"), "Pode falar! Escreva ou mande um áudio 🎙️ com o que precisa.", DIV, opts(BACK)].join("\n");
   }
@@ -778,19 +779,15 @@ export class MenuService {
     return `${msg}\n\n💡 _Digite *menu* quando quiser ver mais._`;
   }
 
-  // Modo direção
+  // Modo carro (inclui o antigo "modo direção"): respostas em texto falável
 
   private async mode(ws: string): Promise<Mode | null> {
     return this.state.get<Mode>(`mode:${ws}`);
   }
 
-  async isDriving(ws: string): Promise<boolean> {
-    return (await this.mode(ws)) === "driving";
-  }
-
-  /** Modo carro: respostas em texto falável, para o Android Auto/CarPlay lerem em voz alta (eles não tocam áudios). */
+  /** Android Auto/CarPlay leem texto em voz alta, mas não tocam áudios. "driving" é o valor antigo, ainda válido. */
   async isCar(ws: string): Promise<boolean> {
-    return (await this.mode(ws)) === "car";
+    return (await this.mode(ws)) !== null;
   }
 
   /** Cada comando renova o prazo do modo ativo. */
@@ -799,15 +796,11 @@ export class MenuService {
     if (m) await this.state.set(`mode:${ws}`, m, MODE_TTL);
   }
 
-  private async saveMode(ws: string, patch: { drivingMode: boolean; carMode: boolean }) {
-    const m: Mode | null = patch.carMode ? "car" : patch.drivingMode ? "driving" : null;
-    if (m) await this.state.set(`mode:${ws}`, m, MODE_TTL);
+  private async carSet(ws: string, on: boolean) {
+    if (on) await this.state.set(`mode:${ws}`, "car", MODE_TTL);
     else await this.state.del(`mode:${ws}`);
-  }
-
-  private async carSet(ws: string) {
-    await this.saveMode(ws, { drivingMode: false, carMode: true });
     await this.setMain(ws);
+    if (!on) return "✅ *Modo carro desligado.*\nVoltei a responder no formato normal.";
     const hours = Math.round(MODE_TTL / 3600_000);
     return [
       head("🚘", "Modo carro ligado", "Para o Android Auto ou CarPlay lerem as respostas"),
@@ -815,19 +808,6 @@ export class MenuService {
       "No Android Auto: _\"Ok Google, mande uma mensagem no WhatsApp para Assistente: ler e-mails\"_. No CarPlay: _\"E aí Siri, manda um WhatsApp para Assistente: ler e-mails\"_.",
       `Para sair, diga *cheguei*. Ele também desliga sozinho após ${hours} h sem uso.`,
     ].join("\n");
-  }
-
-  private async drivingSet(ws: string, on: boolean) {
-    const was = await this.mode(ws);
-    await this.saveMode(ws, { drivingMode: on, carMode: false });
-    await this.setMain(ws);
-    if (!on) return `✅ *Modo ${was === "car" ? "carro" : "direção"} desligado.*\nVoltei a responder no formato normal.`;
-    const warn = process.env.GEMINI_API_KEY ? "" : "\n⚠️ _A voz ainda não está configurada no servidor; por enquanto respondo por texto._";
-    return [
-      head("🚗", "Modo direção ligado", "Mãos no volante, eu falo por você"),
-      "Vou avisar dos e-mails por *áudio*. Responda também por áudio, dizendo *ler*, *apagar*, *responder* ou *spam*.",
-      "Para sair, diga *sair do modo direção*.",
-    ].join("\n") + warn;
   }
 
   private async emailReopen(ws: string, d: any) {

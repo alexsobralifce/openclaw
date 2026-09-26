@@ -205,20 +205,10 @@ export class AssistantService {
   async sendToUser(c: Commander, instanceName: string, text: string) {
     const workspaceId = c.workspaceId;
     const owner = c.phone;
-    let res: any;
 
-    // Modo carro: texto limpo e curto, que o Android Auto lê em voz alta
+    // Modo carro: texto limpo e curto, que o Android Auto/CarPlay leem em voz alta (eles não tocam áudios)
     if (await this.menu.isCar(workspaceId)) text = toSpeech(text);
-    // Modo direção: fala a resposta em áudio (cai para texto se a voz falhar)
-    else if (this.gemini.enabled() && (await this.menu.isDriving(workspaceId))) {
-      try {
-        const wav = await this.gemini.speak(toSpeech(text));
-        res = await this.evolution.sendAudio(instanceName, owner, wav.toString("base64"));
-      } catch (e: any) {
-        this.logger.error(`Voz falhou, enviando texto: ${e.message}`);
-      }
-    }
-    if (!res) res = await this.evolution.sendText(instanceName, owner, text);
+    const res = await this.evolution.sendText(instanceName, owner, text);
     await this.markSent(res);
   }
 
