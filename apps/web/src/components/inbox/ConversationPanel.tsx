@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState, useRef, useCallback } from "react";
+import { useRouter } from "next/navigation";
 import { api } from "@/lib/api";
 import { useInboxSocket } from "@/hooks/useInboxSocket";
 
@@ -19,6 +20,11 @@ export function ConversationPanel({ conversationId }: Props) {
   const [text, setText] = useState("");
   const [sending, setSending] = useState(false);
   const [sendError, setSendError] = useState("");
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  const [alsoContact, setAlsoContact] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState("");
+  const router = useRouter();
   const [status, setStatus] = useState<string>("OPEN");
   const bottomRef = useRef<HTMLDivElement>(null);
 
@@ -49,7 +55,24 @@ export function ConversationPanel({ conversationId }: Props) {
     setStatus(payload.status);
   }, [conversationId]);
 
-  useInboxSocket({ onNewMessage: handleNewMessage, onConversationUpdated: handleConversationUpdated, conversationId });
+  // Outra pessoa da equipe apagou esta conversa: sai da tela dela
+  const handleConversationDeleted = useCallback((payload: { conversationId: string }) => {
+    if (payload.conversationId === conversationId) router.push("/dashboard/inbox");
+  }, [conversationId, router]);
+
+  useInboxSocket({ onNewMessage: handleNewMessage, onConversationUpdated: handleConversationUpdated, onConversationDeleted: handleConversationDeleted, conversationId });
+
+  async function deleteConversation() {
+    setDeleting(true);
+    setDeleteError("");
+    try {
+      await api.inbox.remove(conversationId, alsoContact);
+      router.push("/dashboard/inbox");
+    } catch (e: any) {
+      setDeleteError(e?.message ?? "Não foi possível excluir a conversa");
+      setDeleting(false);
+    }
+  }
 
   async function send() {
     const body = text.trim();
@@ -102,6 +125,33 @@ export function ConversationPanel({ conversationId }: Props) {
     <div className="flex flex-1 overflow-hidden">
       {/* Chat */}
       <div className="flex flex-col flex-1 overflow-hidden">
+        {confirmDelete && (
+          <div className="flex-shrink-0 px-5 py-3 border-b border-red-500/30 bg-red-500/5 text-xs text-gray-300 space-y-2">
+            <p>Excluir esta conversa e todas as mensagens? Isso não pode ser desfeito.</p>
+            <label className="flex items-center gap-2 text-gray-400">
+              <input type="checkbox" checked={alsoContact} onChange={(e) => setAlsoContact(e.target.checked)} />
+              Apagar também o contato (se não tiver outras conversas)
+            </label>
+            {deleteError && <p className="text-red-400">{deleteError}</p>}
+            <div className="flex gap-2">
+              <button
+                onClick={deleteConversation}
+                disabled={deleting}
+                className="px-3 py-1.5 rounded-lg font-medium bg-red-500 text-white hover:bg-red-400 disabled:opacity-50 transition-colors"
+              >
+                {deleting ? "Excluindo..." : "Excluir definitivamente"}
+              </button>
+              <button
+                onClick={() => setConfirmDelete(false)}
+                disabled={deleting}
+                className="px-3 py-1.5 rounded-lg font-medium bg-gray-700 text-gray-300 hover:bg-gray-600 disabled:opacity-50 transition-colors"
+              >
+                Cancelar
+              </button>
+            </div>
+          </div>
+        )}
+
         {/* Header */}
         <div className="h-14 flex items-center justify-between px-5 border-b border-gray-800 bg-gray-900 flex-shrink-0">
           <div className="flex items-center gap-3">
@@ -117,6 +167,12 @@ export function ConversationPanel({ conversationId }: Props) {
             </div>
           </div>
           <div className="flex items-center gap-1">
+            <button
+              onClick={() => { setConfirmDelete(true); setDeleteError(""); }}
+              className="px-3 py-1.5 rounded-lg text-xs font-medium bg-red-500/10 text-red-400 hover:bg-red-500/20 transition-colors"
+            >
+              Excluir
+            </button>
             {status !== "PENDING" && (
               <button
                 onClick={() => updateStatus("PENDING")}

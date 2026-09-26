@@ -11,7 +11,7 @@ import { Logger } from "@nestjs/common";
 import { JwtService } from "@nestjs/jwt";
 import { Server, Socket } from "socket.io";
 import { prisma } from "@openclaw/database";
-import type { WsNewMessage, WsConversationUpdated } from "@openclaw/types";
+import type { WsNewMessage, WsConversationUpdated, WsConversationDeleted } from "@openclaw/types";
 
 @WebSocketGateway({
   cors: { origin: process.env.WEB_URL || "http://localhost:3000", credentials: true },
@@ -56,5 +56,9 @@ export class InboxGateway implements OnGatewayConnection, OnGatewayDisconnect {
 
   emitConversationUpdated(workspaceId: string, payload: WsConversationUpdated) {
     this.server.to(`workspace:${workspaceId}`).emit("conversation:updated", payload);
+  }
+
+  emitConversationDeleted(workspaceId: string, payload: WsConversationDeleted) {
+    this.server.to(`workspace:${workspaceId}`).emit("conversation:deleted", payload);
   }
 }

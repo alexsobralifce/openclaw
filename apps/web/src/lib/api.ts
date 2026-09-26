@@ -70,6 +70,8 @@ export const api = {
       request<any>(`/inbox/conversations/${id}`),
     updateStatus: (id: string, status: string) =>
       request<any>(`/inbox/conversations/${id}/status`, { method: "PATCH", body: JSON.stringify({ status }) }),
+    remove: (id: string, deleteContact = false) =>
+      request<{ ok: boolean; contactDeleted: boolean }>(`/inbox/conversations/${id}${deleteContact ? "?deleteContact=true" : ""}`, { method: "DELETE" }),
   },
   contacts: {
     list: (search?: string) =>

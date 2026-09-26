@@ -58,7 +58,7 @@ Cabeçalho `Idempotency-Key` (8 a 128 caracteres visíveis) em `POST /messages`,
 
 ## Webhooks de saída
 
-- **Eventos:** `message.received`, `message.sent`, `conversation.created`, `conversation.status_changed`, `contact.created`, `contact.updated`, `email.received` (só metadados: conta, id, remetente e assunto), `webhook.test`. Use `*` para receber todos.
+- **Eventos:** `message.received`, `message.sent`, `conversation.created`, `conversation.status_changed`, `conversation.deleted`, `contact.created`, `contact.updated`, `email.received` (só metadados: conta, id, remetente e assunto), `webhook.test`. Use `*` para receber todos.
 - **Cabeçalhos:** `X-OpenClaw-Event`, `X-OpenClaw-Delivery`, `X-OpenClaw-Signature: t=<unix>,v1=<HMAC-SHA256(segredo, "t.corpo")>`.
 - **Corpo:** `{ id, type, createdAt, data }`. Quem recebe deve deduplicar pelo `id` e recusar assinaturas com `t` muito antigo (sugestão: 5 minutos).
 - O segredo `whsec_…` aparece **uma vez**, na criação, e fica cifrado (AES-256-GCM) no banco.

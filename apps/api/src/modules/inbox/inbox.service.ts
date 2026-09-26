@@ -55,6 +55,28 @@ export class InboxService {
   }
 
   /**
+   * Apaga a conversa com todas as mensagens (e os responsáveis, em cascata). Com `deleteContact`, apaga também o
+   * contato quando ele não tiver mais nenhuma conversa: é o que atende a um pedido de exclusão de dados.
+   */
+  async deleteConversation(workspaceId: string, id: string, deleteContact = false) {
+    const conv = await prisma.conversation.findFirstOrThrow({ where: { id, workspaceId }, select: { id: true, contactId: true } });
+    await prisma.conversation.delete({ where: { id: conv.id } });
+
+    let contactDeleted = false;
+    if (deleteContact) {
+      const left = await prisma.conversation.count({ where: { contactId: conv.contactId } });
+      if (!left) {
+        await prisma.contact.delete({ where: { id: conv.contactId } });
+        contactDeleted = true;
+      }
+    }
+
+    this.gateway.emitConversationDeleted(workspaceId, { conversationId: id });
+    this.webhooks.emit(workspaceId, "conversation.deleted", { conversationId: id, contactId: conv.contactId, contactDeleted });
+    return { ok: true, contactDeleted };
+  }
+
+  /**
    * Grava uma mensagem recebida. Idempotente: se o canal reentregar a mesma mensagem (mesmo externalId),
    * devolve null sem duplicar nada.
    */

@@ -10,6 +10,7 @@ export const WEBHOOK_EVENTS = [
   "message.sent",
   "conversation.created",
   "conversation.status_changed",
+  "conversation.deleted",
   "contact.created",
   "contact.updated",
   "email.received",

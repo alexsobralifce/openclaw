@@ -53,7 +53,11 @@ export function ConversationList({ activeId }: Props) {
     );
   }, []);
 
-  useInboxSocket({ onNewMessage: handleNewMessage, onConversationUpdated: handleConversationUpdated });
+  const handleConversationDeleted = useCallback((payload: { conversationId: string }) => {
+    setConversations((prev) => prev.filter((c) => c.id !== payload.conversationId));
+  }, []);
+
+  useInboxSocket({ onNewMessage: handleNewMessage, onConversationUpdated: handleConversationUpdated, onConversationDeleted: handleConversationDeleted });
 
   const filtered = filter === "TODOS"
     ? conversations

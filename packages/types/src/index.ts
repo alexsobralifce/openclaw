@@ -18,6 +18,10 @@ export interface WsConversationUpdated {
   assigneeIds: string[];
 }
 
+export interface WsConversationDeleted {
+  conversationId: string;
+}
+
 export interface WsAgentPresence {
   userId: string;
   online: boolean;
