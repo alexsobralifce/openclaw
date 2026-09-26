@@ -97,6 +97,7 @@ async function connectInstagram() {
 function ChannelCard({ channel, onDelete }: { channel: any; onDelete: () => void }) {
   const [status, setStatus] = useState<string>("checking");
   const [showQr, setShowQr] = useState(false);
+  const [actionError, setActionError] = useState("");
 
   const isInstagram = channel.type === "INSTAGRAM";
   const igNeedsReconnect = isInstagram && (!channel.isActive || channel.config?.needsReconnect);
@@ -111,7 +112,7 @@ function ChannelCard({ channel, onDelete }: { channel: any; onDelete: () => void
 
   const STATE_LABEL: Record<string, string> = {
     open: "Conectado", close: "Desconectado", connecting: "Conectando...",
-    checking: "Verificando...", error: "Erro", unknown: "Desconhecido", reconnect: "Precisa reconectar",
+    checking: "Verificando...", error: "Sem resposta do serviço", unknown: "Desconhecido", reconnect: "Precisa reconectar",
   };
   const STATE_COLOR: Record<string, string> = {
     open: "text-teal-400", close: "text-red-400", connecting: "text-amber-400",
@@ -136,7 +137,7 @@ function ChannelCard({ channel, onDelete }: { channel: any; onDelete: () => void
           </p>
         </div>
         <div className="flex items-center gap-2">
-          {channel.type === "WHATSAPP" && status !== "open" && (
+          {channel.type === "WHATSAPP" && status !== "open" && status !== "checking" && (
             <button
               onClick={() => setShowQr(true)}
               className="px-3 py-1.5 text-xs font-medium bg-teal-500/10 text-teal-400 hover:bg-teal-500/20 rounded-lg transition-colors"
@@ -146,7 +147,7 @@ function ChannelCard({ channel, onDelete }: { channel: any; onDelete: () => void
           )}
           {isInstagram && igNeedsReconnect && (
             <button
-              onClick={connectInstagram}
+              onClick={() => connectInstagram().catch((e: any) => setActionError(e?.message ?? "Não foi possível abrir o login do Instagram"))}
               className="px-3 py-1.5 text-xs font-medium bg-teal-500/10 text-teal-400 hover:bg-teal-500/20 rounded-lg transition-colors"
             >
               Reconectar
@@ -154,9 +155,14 @@ function ChannelCard({ channel, onDelete }: { channel: any; onDelete: () => void
           )}
           <button
             onClick={async () => {
-              if (isInstagram) await api.channels.disconnectInstagram(channel.id);
-              else await api.channels.deleteWhatsapp(channel.id);
-              onDelete();
+              setActionError("");
+              try {
+                if (isInstagram) await api.channels.disconnectInstagram(channel.id);
+                else await api.channels.deleteWhatsapp(channel.id);
+                onDelete();
+              } catch (e: any) {
+                setActionError(e?.message ?? "Não foi possível remover o canal");
+              }
             }}
             className="px-3 py-1.5 text-xs font-medium bg-red-500/10 text-red-400 hover:bg-red-500/20 rounded-lg transition-colors"
           >
@@ -164,6 +170,8 @@ function ChannelCard({ channel, onDelete }: { channel: any; onDelete: () => void
           </button>
         </div>
       </div>
+
+      {actionError && <p className="mt-3 text-xs text-red-400">{actionError}</p>}
 
       {showQr && (
         <QrCodePanel channelId={channel.id} onClose={() => setShowQr(false)} onConnected={() => { setStatus("open"); setShowQr(false); }} />

@@ -1,6 +1,6 @@
 import { BadRequestException, ConflictException, Injectable, NotFoundException } from "@nestjs/common";
 import { prisma } from "@openclaw/database";
-import { EvolutionService } from "../channels/evolution/evolution.service";
+import { EvolutionService, evolutionMessage } from "../channels/evolution/evolution.service";
 import { InboxGateway } from "../inbox/inbox.gateway";
 import { WebhooksService } from "../webhooks/webhooks.service";
 import { ListQuery } from "./dto";
@@ -158,7 +158,7 @@ export class PublicApiService {
     try {
       res = await this.evolution.sendText(instanceName, phone, data.text);
     } catch (e: any) {
-      throw new BadRequestException(`Falha ao enviar pelo WhatsApp: ${String(e.message).slice(0, 200)}`);
+      throw new BadRequestException(`Falha ao enviar pelo WhatsApp: ${evolutionMessage(e)}`);
     }
 
     const known = await prisma.contact.findUnique({ where: { workspaceId_phone: { workspaceId, phone } }, select: { id: true } });

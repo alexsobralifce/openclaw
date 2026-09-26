@@ -1,18 +1,20 @@
 import {
   BadRequestException, Body, Controller, Delete, Get, HttpCode, Param, Query,
-  Post, RawBodyRequest, Req, Request, Res, Headers, Logger, ForbiddenException,
+  Post, RawBodyRequest, Req, Request, Res, Headers, Logger, ForbiddenException, UseFilters,
 } from "@nestjs/common";
 import { JwtService } from "@nestjs/jwt";
 import { Access } from "../auth/access";
 import { timingSafeEqual } from "crypto";
 import { ChannelsService } from "./channels.service";
 import { EvolutionService } from "./evolution/evolution.service";
+import { EvolutionExceptionFilter } from "./evolution/evolution.filter";
 import { InboundService } from "./inbound/inbound.service";
 import { InboxService } from "../inbox/inbox.service";
 import { InstagramApiError, InstagramService, REPLY_WINDOW_MS } from "./instagram/instagram.service";
 import { prisma } from "@openclaw/database";
 
 @Controller("channels")
+@UseFilters(EvolutionExceptionFilter)
 export class ChannelsController {
   private readonly logger = new Logger(ChannelsController.name);
 

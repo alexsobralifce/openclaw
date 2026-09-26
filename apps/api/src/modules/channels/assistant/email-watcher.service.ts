@@ -29,6 +29,20 @@ export class EmailWatcherService implements OnModuleInit, OnModuleDestroy {
     if (this.timer) clearInterval(this.timer);
   }
 
+  private lastFailure = new Map<string, { message: string; at: number }>();
+
+  /**
+   * Com o WhatsApp fora, o aviso é refeito a cada volta (o ponto de partida só avança depois de avisar).
+   * Registra a falha uma vez e volta a registrar se a causa mudar ou passar meia hora, para não encher o log.
+   */
+  private logFailure(workspaceId: string, e: any) {
+    const message = String(e?.message ?? e).slice(0, 300);
+    const last = this.lastFailure.get(workspaceId);
+    if (last && last.message === message && Date.now() - last.at < 30 * 60_000) return;
+    this.lastFailure.set(workspaceId, { message, at: Date.now() });
+    this.logger.error(`Vigia de e-mail falhou (${workspaceId}); tenta de novo na próxima volta: ${message}`);
+  }
+
   private async tick() {
     if (this.running) return;
     this.running = true;
@@ -40,9 +54,9 @@ export class EmailWatcherService implements OnModuleInit, OnModuleDestroy {
       for (const c of channels) byWorkspace.set(c.workspaceId, [...(byWorkspace.get(c.workspaceId) ?? []), c]);
 
       for (const [workspaceId, list] of byWorkspace) {
-        await this.checkWorkspace(workspaceId, list).catch((e) =>
-          this.logger.error(`Vigia de e-mail falhou (${workspaceId}): ${e.message}`),
-        );
+        await this.checkWorkspace(workspaceId, list)
+          .then(() => this.lastFailure.delete(workspaceId))
+          .catch((e) => this.logFailure(workspaceId, e));
       }
     } finally {
       this.running = false;
