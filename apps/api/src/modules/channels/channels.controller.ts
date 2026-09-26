@@ -59,7 +59,15 @@ export class ChannelsController {
     const workspaceId: string = req.user.workspaces[0]?.workspaceId;
     const channel = await prisma.channel.findFirstOrThrow({ where: { id: channelId, workspaceId } });
     const cfg = channel.config as any;
-    return this.evolution.getQrCode(cfg.instanceName);
+    try {
+      return await this.evolution.getQrCode(cfg.instanceName);
+    } catch (e: any) {
+      if (!this.evolution.isMissingInstance(e)) throw e;
+      // A instância sumiu do Evolution: recria com o mesmo nome e webhook e devolve o QR novo
+      this.logger.warn(`Instância ${cfg.instanceName} não existe no Evolution; recriando`);
+      await this.evolution.createInstance(cfg.instanceName, cfg.webhookUrl);
+      return this.evolution.getQrCode(cfg.instanceName);
+    }
   }
 
   @Access("channels")
@@ -68,7 +76,13 @@ export class ChannelsController {
     const workspaceId: string = req.user.workspaces[0]?.workspaceId;
     const channel = await prisma.channel.findFirstOrThrow({ where: { id: channelId, workspaceId } });
     const cfg = channel.config as any;
-    return this.evolution.getConnectionState(cfg.instanceName);
+    try {
+      return await this.evolution.getConnectionState(cfg.instanceName);
+    } catch (e: any) {
+      // Instância que não existe mais no Evolution conta como desconectada (o painel oferece o QR Code para reconectar)
+      if (this.evolution.isMissingInstance(e)) return { state: "close" };
+      throw e;
+    }
   }
 
   @Access("channels")
@@ -78,7 +92,10 @@ export class ChannelsController {
     const channel = await prisma.channel.findFirstOrThrow({ where: { id: channelId, workspaceId } });
     const cfg = channel.config as any;
     await this.evolution.deleteInstance(cfg.instanceName).catch(() => {});
-    await prisma.channel.delete({ where: { id: channelId } });
+    // Com conversas, o canal não pode ser apagado (o histórico depende dele): fica desativado e some da lista
+    const conversations = await prisma.conversation.count({ where: { channelId } });
+    if (conversations) await prisma.channel.update({ where: { id: channelId }, data: { isActive: false } });
+    else await prisma.channel.delete({ where: { id: channelId } });
     return { ok: true };
   }
 

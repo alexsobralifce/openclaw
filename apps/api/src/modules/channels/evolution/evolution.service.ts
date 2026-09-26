@@ -22,6 +22,11 @@ export class EvolutionService {
     return res.json() as Promise<T>;
   }
 
+  /** O Evolution respondeu 404: a instância não existe mais nele (ex.: ele foi reiniciado sem volume). */
+  isMissingInstance(e: unknown) {
+    return String((e as any)?.message ?? "").startsWith("Evolution API 404");
+  }
+
   async createInstance(instanceName: string, webhookUrl: string) {
     const instance = await this.req<any>("/instance/create", {
       method: "POST",

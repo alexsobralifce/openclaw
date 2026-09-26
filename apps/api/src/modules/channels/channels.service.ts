@@ -5,7 +5,7 @@ import { prisma } from "@openclaw/database";
 export class ChannelsService {
   /** Só o que o painel precisa: o `config` guarda tokens e chaves e nunca vai para o navegador. */
   async listChannels(workspaceId: string) {
-    const rows = await prisma.channel.findMany({ where: { workspaceId }, orderBy: { createdAt: "asc" } });
+    const rows = await prisma.channel.findMany({ where: { workspaceId, NOT: { type: "WHATSAPP", isActive: false } }, orderBy: { createdAt: "asc" } });
     return rows.map((c) => {
       const cfg = (c.config ?? {}) as any;
       return {
