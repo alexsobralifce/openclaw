@@ -407,7 +407,10 @@ export class AssistantService {
         return { error: "Google não conectado. Peça ao dono para conectar em Canais > Conectar Google no painel." };
       }
       if (name === "google_list_accounts") return this.google.listAccounts(workspaceId);
-      if (name === "gmail_search") return this.google.gmailSearch(workspaceId, args.query, args.account);
+      if (name === "gmail_search") {
+        // sinais/labels são só para o filtro de spam: a IA não precisa deles
+        return (await this.google.gmailSearch(workspaceId, args.query, args.account)).map(({ labels: _l, sinais: _s, ...m }: any) => m);
+      }
       if (name === "gmail_read") return this.google.gmailRead(workspaceId, args.id, args.account);
       if (name === "gmail_send") return this.google.gmailSend(workspaceId, args.to, args.subject, args.text, args.account);
       if (name === "calendar_list_events") return this.google.calendarList(workspaceId, args.timeMin, args.timeMax, args.account);

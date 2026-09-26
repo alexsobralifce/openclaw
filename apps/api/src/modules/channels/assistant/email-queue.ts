@@ -7,6 +7,8 @@ export interface QueuedEmail {
   assunto: string;
   /** Momento de chegada (internalDate do Gmail, em ms) */
   at: number;
+  /** person (padrão) ou auto: os spam/promoções nem entram na fila (ver email-filter.ts) */
+  kind?: "person" | "auto";
 }
 
 export const QUEUE_MAX = 50;

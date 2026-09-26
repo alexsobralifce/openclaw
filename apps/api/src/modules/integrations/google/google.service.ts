@@ -9,6 +9,9 @@ const SCOPES = [
   "email",
 ];
 
+const SIGNAL_HEADERS = new Set(["list-unsubscribe", "precedence", "auto-submitted", "x-spam-flag", "x-spam-status", "authentication-results"]);
+const GMAIL_HEADERS = ["From", "Subject", "Date", "List-Unsubscribe", "Precedence", "Auto-Submitted", "X-Spam-Flag", "X-Spam-Status", "Authentication-Results"];
+
 @Injectable()
 export class GoogleService implements OnModuleInit {
   private readonly logger = new Logger(GoogleService.name);
@@ -154,10 +157,16 @@ export class GoogleService implements OnModuleInit {
         const m = await this.g<any>(
           workspaceId,
           account,
-          `https://gmail.googleapis.com/gmail/v1/users/me/messages/${id}?format=metadata&metadataHeaders=From&metadataHeaders=Subject&metadataHeaders=Date`,
+          `https://gmail.googleapis.com/gmail/v1/users/me/messages/${id}?format=metadata&${GMAIL_HEADERS.map((n) => `metadataHeaders=${n}`).join("&")}`,
         );
         const h = (n: string) => m.payload?.headers?.find((x: any) => x.name === n)?.value;
-        return { id, de: h("From"), assunto: h("Subject"), data: h("Date"), resumo: m.snippet, internalDate: Number(m.internalDate) };
+        // Sinais para separar spam/promoção/automático (ver email-filter.ts); nomes em minúsculas
+        const sinais: Record<string, string> = {};
+        for (const x of m.payload?.headers ?? []) {
+          const k = String(x.name).toLowerCase();
+          if (SIGNAL_HEADERS.has(k) && x.value) sinais[k] = String(x.value).slice(0, 300);
+        }
+        return { id, de: h("From"), assunto: h("Subject"), data: h("Date"), resumo: m.snippet, internalDate: Number(m.internalDate), labels: m.labelIds ?? [], sinais };
       }),
     );
   }

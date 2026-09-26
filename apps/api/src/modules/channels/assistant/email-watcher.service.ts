@@ -1,3 +1,4 @@
+import { classifyEmail, isHidden } from "./email-filter";
 import { Injectable, Logger, OnModuleDestroy, OnModuleInit } from "@nestjs/common";
 import { prisma } from "@openclaw/database";
 import { GoogleService } from "../../integrations/google/google.service";
@@ -64,7 +65,7 @@ export class EmailWatcherService implements OnModuleInit, OnModuleDestroy {
   }
 
   private async checkWorkspace(workspaceId: string, channels: any[]) {
-    const fresh: { account: string; id: string; de: string; assunto: string; at: number }[] = [];
+    const fresh: { account: string; id: string; de: string; assunto: string; at: number; kind: "person" | "auto" }[] = [];
     const updates: { id: string; config: any }[] = [];
 
     for (const ch of channels) {
@@ -82,7 +83,14 @@ export class EmailWatcherService implements OnModuleInit, OnModuleDestroy {
       const news = items.filter((m: any) => m.internalDate > cfg.lastSeenMs);
       if (!news.length) continue;
 
-      news.forEach((m: any) => fresh.push({ account, id: m.id, de: m.de ?? "", assunto: m.assunto ?? "", at: m.internalDate }));
+      // Spam e promoções não avisam nem entram na fila (continuam no Gmail, intactos)
+      let hidden = 0;
+      for (const m of news) {
+        const c = classifyEmail(m);
+        if (isHidden(c.kind)) hidden++;
+        else fresh.push({ account, id: m.id, de: m.de ?? "", assunto: m.assunto ?? "", at: m.internalDate, kind: c.kind === "auto" ? "auto" : "person" });
+      }
+      if (hidden) this.logger.log(`${hidden} e-mail(s) de spam/promoção não avisados (${account})`);
       const newest = Math.max(...news.map((m: any) => m.internalDate));
       updates.push({ id: ch.id, config: { ...cfg, lastSeenMs: newest } });
     }
