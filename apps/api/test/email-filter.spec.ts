@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { classifyEmail, groupOrder, isHidden, looksLikeBatchReply, parseBatchPlan } from "../src/modules/channels/assistant/email-filter";
+import { classifyEmail, groupOrder, isHidden, looksLikeBatchReply, looksLikeBulkDelete, parseBatchPlan, parseBulkDelete } from "../src/modules/channels/assistant/email-filter";
 
 const c = (m: Parameters<typeof classifyEmail>[0]) => classifyEmail(m).kind;
 
@@ -94,5 +94,32 @@ describe("fala de resposta em lote", () => {
     expect(f("quais reuniões tenho hoje")).toBe(false);
     expect(f("responda 1")).toBe(false);
     expect(f("me dê um resumo dos e-mails")).toBe(false);
+  });
+});
+
+describe("pedido de apagar em lote", () => {
+  const f = (t: string) => looksLikeBulkDelete(t.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/[.,!?]/g, ""));
+  it("reconhece variantes de apagar com números", () => {
+    expect(f("apagar emails 1,2,3,4,5,6")).toBe(true);
+    expect(f("apaga o 1, 2 e 3")).toBe(true);
+    expect(f("excluir 1 2 3")).toBe(true);
+    expect(f("deleta o 4")).toBe(true);
+  });
+  it("não sequestra pedidos sem número ou de outra intenção", () => {
+    expect(f("apagar todos")).toBe(false);
+    expect(f("responda o 1")).toBe(false);
+    expect(f("mostre a agenda")).toBe(false);
+  });
+});
+
+describe("parseBulkDelete", () => {
+  it("dedup, valida range e reporta fora do range separadamente", () => {
+    const p = parseBulkDelete("apagar 1, 1, 2 e 9", 6);
+    expect(p.ns).toEqual([1, 2]);
+    expect(p.outOfRange).toEqual([9]);
+  });
+  it("respeita o teto de itens (max)", () => {
+    const p = parseBulkDelete("1 2 3 4 5 6 7 8", 8, 3);
+    expect(p.ns).toHaveLength(3);
   });
 });

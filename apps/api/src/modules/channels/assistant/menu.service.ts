@@ -8,7 +8,7 @@ import { StateService } from "../../state/state.service";
 import { effectiveServices, Service } from "../../auth/permissions";
 import { normalize, parseChoice, pickByLabel } from "./voice";
 import { fmtWhen, mergeQueue, QUEUE_TTL_MS, QueuedEmail, removeFromQueue } from "./email-queue";
-import { classifyEmail, groupOrder, isHidden, looksLikeBatchReply, parseBatchPlan } from "./email-filter";
+import { classifyEmail, groupOrder, isHidden, looksLikeBatchReply, looksLikeBulkDelete, parseBatchPlan, parseBulkDelete } from "./email-filter";
 
 const TZ = process.env.ASSISTANT_TZ || "America/Fortaleza";
 const TTL = 30 * 60_000;
@@ -33,6 +33,7 @@ const ALIASES: Record<string, Record<string, number>> = {
   email_draft: { enviar: 1, mandar: 1, "pode enviar": 1, confirmar: 1, sim: 1, refazer: 2, cancelar: 0, nao: 0 },
   client_draft: { enviar: 1, mandar: 1, "pode enviar": 1, confirmar: 1, sim: 1, refazer: 2, cancelar: 0, nao: 0 },
   event_confirm: { confirmar: 1, confirma: 1, sim: 1, criar: 1, refazer: 2, cancelar: 0, nao: 0 },
+  email_bulk_delete_confirm: { apagar: 1, excluir: 1, confirmar: 1, confirma: 1, sim: 1, cancelar: 0, nao: 0 },
   client: { responder: 1, resolver: 2 },
   confirm_ai: { confirmar: 1, confirma: 1, sim: 1, "pode enviar": 1, "pode mandar": 1, cancelar: 0, nao: 0 },
   agenda: { hoje: 1, amanha: 2, semana: 3, "proximos 7 dias": 3, "criar evento": 4, "novo evento": 4 },
@@ -160,6 +161,12 @@ export class MenuService {
       case "emails": {
         if (n === 0) return this.mainMenu(ws, false);
         if (n === null && /^(ver |mostrar |abrir )?(os )?(e-?mails? )?(ocultos|spam|promocoes|lixo)$/.test(normalize(text))) return this.emailHidden(ws, d);
+        // Apagar vários de uma vez: "apagar emails 1,2,3,4,5,6" — checar antes do pickByLabel/batchReply para não haver ambiguidade
+        if (n === null && looksLikeBulkDelete(normalize(text))) {
+          const { ns, outOfRange } = parseBulkDelete(text, d.items.length);
+          if (!ns.length) return `🤔 Não encontrei esse(s) número(s) na lista atual (1 a ${d.items.length}). Diga os números certos, ou *menu*.`;
+          return this.bulkDeleteConfirm(ws, "emails", d, ns, outOfRange);
+        }
         if (n === null) n = pickByLabel(text, d.items.map((m: any) => `${personName(m.de)} ${m.assunto ?? ""}`));
         // Fala longa (áudio): instruções para vários e-mails de uma vez
         if (n === null) return looksLikeBatchReply(normalize(text)) ? this.batchReply(ws, d, text) : null;
@@ -168,9 +175,19 @@ export class MenuService {
       }
       case "emails_hidden": {
         if (n === 0) return d.q ? this.queueShow(ws) : this.emailList(ws, d.account);
+        if (n === null && looksLikeBulkDelete(normalize(text))) {
+          const { ns, outOfRange } = parseBulkDelete(text, d.items.length);
+          if (!ns.length) return `🤔 Não encontrei esse(s) número(s) na lista atual (1 a ${d.items.length}). Diga os números certos, ou *menu*.`;
+          return this.bulkDeleteConfirm(ws, "emails_hidden", d, ns, outOfRange);
+        }
         if (n === null) return null;
         const item = d.items[n - 1];
         return item ? this.emailOpen(ws, item.account ?? d.account, item.id, false) : this.invalid();
+      }
+      case "email_bulk_delete_confirm": {
+        if (n === 1) return this.bulkTrash(ws, d);
+        if (n === 0) return d.origin === "emails_hidden" || !d.list.q ? this.emailList(ws, d.list.account) : this.queueShow(ws);
+        return this.invalid();
       }
       case "email_batch_draft": {
         if (n === 1) return this.batchSend(ws, d);
@@ -767,6 +784,46 @@ export class MenuService {
     if (showList) return `${msg}\n\n${await this.emailList(ws, account)}`;
     await this.setMain(ws);
     return `${msg}\n\n💡 _Digite *menu* quando quiser ver mais._`;
+  }
+
+  /** Mostra o que será apagado e pede confirmação antes de mexer em qualquer e-mail. */
+  private async bulkDeleteConfirm(ws: string, origin: "emails" | "emails_hidden", list: any, ns: number[], outOfRange: number[]): Promise<string> {
+    const targets = ns.map((n) => {
+      const it = list.items[n - 1];
+      return { n, id: it.id, account: it.account ?? list.account, de: it.de, assunto: it.assunto };
+    });
+    await this.set(ws, "email_bulk_delete_confirm", { origin, list, targets });
+    const rows = targets.map((t) => `${key(t.n)} 👤 ${short(personName(t.de), 30)} · ${short(t.assunto ?? "(sem assunto)", 40)}`);
+    const warn = outOfRange.length ? `\n⚠️ _Não achei o(s) e-mail(s) ${outOfRange.join(", ")} na lista atual; vou ignorar._` : "";
+    return [
+      head("🗑️", `Apagar ${targets.length} e-mail${targets.length > 1 ? "s" : ""}?`, "vai para a lixeira, recuperável por 30 dias"),
+      rows.join("\n"),
+      warn,
+      DIV,
+      opts([1, "✅", "Apagar"], [0, "❌", "Cancelar"]),
+    ].filter(Boolean).join("\n");
+  }
+
+  /** Apaga cada e-mail confirmado, um de cada vez (a API do Gmail não tem batch nem retry de rate-limit). */
+  private async bulkTrash(ws: string, d: any): Promise<string> {
+    const ok: number[] = [];
+    const failed: number[] = [];
+    for (const t of d.targets) {
+      try {
+        await this.google.gmailTrash(ws, t.id, t.account);
+        await this.queueRemove(ws, t.id, t.account);
+        ok.push(t.n);
+      } catch (e: any) {
+        this.logger.warn(`Apagar e-mail ${t.n} falhou: ${e.message}`);
+        failed.push(t.n);
+      }
+    }
+    const msg = [
+      ok.length ? `🗑️ *${ok.length} e-mail${ok.length > 1 ? "s apagados" : " apagado"}!* _(dá para recuperar por 30 dias)_` : "",
+      failed.length ? `⚠️ Não consegui apagar: ${failed.map((n) => `e-mail ${n}`).join(", ")}.` : "",
+    ].filter(Boolean).join("\n");
+    const refreshed = d.origin === "emails_hidden" || !d.list.q ? await this.emailList(ws, d.list.account) : await this.queueShow(ws);
+    return `${msg}\n\n${refreshed}`;
   }
 
   private async emailSpam(ws: string, account: string, id: string, showList: boolean, fromQueue = false) {

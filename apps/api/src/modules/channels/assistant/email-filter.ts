@@ -148,3 +148,36 @@ export function looksLikeBatchReply(flat: string): boolean {
   const ref = /\b(no|na|o|a|e-?mail|email|numero)\s+(\d{1,2}|primeir[oa]|segund[oa]|terceir[oa]|quart[oa]|quint[oa]|sext[oa]|ultim[oa])\b/.test(flat);
   return verb && (ref || /\b(todos|todas|esses|esse|estes|os dois|as duas)\b/.test(flat));
 }
+
+// ─── Apagar em lote: um comando, vários e-mails ────────────────
+
+export interface BulkDeletePlan {
+  /** números válidos (1..count), sem duplicados, na ordem citada, até `max` itens */
+  ns: number[];
+  /** números citados mas fora do intervalo 1..count (avisar, não silenciar) */
+  outOfRange: number[];
+}
+
+/**
+ * O texto parece um pedido de apagar vários e-mails da lista? ("apagar emails 1,2,3,4,5,6", "apaga o 1, 2 e 3").
+ * `flat` = texto já normalizado (minúsculas, sem acentos nem pontuação).
+ */
+export function looksLikeBulkDelete(flat: string): boolean {
+  const verb = /\b(apag\w*|exclu\w*|delet\w*|remov\w*|jog\w+\s+(no|pro|para o)\s+lixo|mand\w+\s+(pro|para o)\s+lixo)\b/.test(flat);
+  return verb && /\d/.test(flat);
+}
+
+/** Extrai a lista de números citados no texto, valida contra `count` e aplica um teto de itens. */
+export function parseBulkDelete(text: string, count: number, max = 10): BulkDeletePlan {
+  const seen = new Set<number>();
+  const ns: number[] = [];
+  const outOfRange: number[] = [];
+  for (const raw of text.match(/\d{1,3}/g) ?? []) {
+    const n = Number(raw);
+    if (seen.has(n)) continue;
+    seen.add(n);
+    if (n < 1 || n > count) outOfRange.push(n);
+    else if (ns.length < max) ns.push(n);
+  }
+  return { ns, outOfRange };
+}
