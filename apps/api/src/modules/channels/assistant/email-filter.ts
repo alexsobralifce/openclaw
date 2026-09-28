@@ -1,12 +1,14 @@
 // Classificação de e-mails recebidos (lógica pura). Não apaga nem move nada no Gmail: só decide o que mostrar.
+import { isMutedSender, MutePrefs } from "./email-mute";
 
 /**
  * person: parece escrito por uma pessoa (mostrado em destaque)
  * auto:   notificação/recibo/aviso automático (mostrado, mas compacto)
  * promo:  propaganda/newsletter (oculto)
  * spam:   lixo ou golpe provável (oculto)
+ * muted:  remetente marcado como "sem interesse" pelo dono (ou aprendido pelo assistente): não é listado nem avisado, nem em "ocultos"
  */
-export type EmailKind = "person" | "auto" | "promo" | "spam";
+export type EmailKind = "person" | "auto" | "promo" | "spam" | "muted";
 
 export interface EmailSignals {
   de?: string;
@@ -26,7 +28,7 @@ export interface EmailClass {
   warn: string[];
 }
 
-export const isHidden = (k: EmailKind) => k === "spam" || k === "promo";
+export const isHidden = (k: EmailKind) => k === "spam" || k === "promo" || k === "muted";
 
 const SPAM_TEXT: [RegExp, string][] = [
   [/voc[eê] (foi )?(ganhou|sorteado|premiado|selecionado)|ganhe (dinheiro|r\$|\d)|pr[eê]mio (exclusivo|garantido)|\byou have won\b|claim your (prize|reward)/i, "promete prêmio ou dinheiro"],
@@ -44,7 +46,8 @@ const THREAD_REPLY = /^\s*(re|res|enc|fwd?)\s*:/i;
 
 const addrOf = (from = "") => (/<([^>]+)>/.exec(from)?.[1] ?? from).trim();
 
-export function classifyEmail(m: EmailSignals): EmailClass {
+export function classifyEmail(m: EmailSignals, muted?: MutePrefs): EmailClass {
+  if (isMutedSender(muted, m.de)) return { kind: "muted", reasons: ["remetente marcado como sem interesse"], warn: [] };
   const labels = new Set(m.labels ?? []);
   const h = m.sinais ?? {};
   const subject = m.assunto ?? "";

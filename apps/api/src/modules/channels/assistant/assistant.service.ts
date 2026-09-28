@@ -10,6 +10,7 @@ import { suspiciousReasons } from "./security";
 import { StateService } from "../../state/state.service";
 import { Service } from "../../auth/permissions";
 import { Commander, ECHO_TTL_MS, echoKey } from "./commander";
+import { addMute, loadMute, removeMute, saveMute, senderAddress } from "./email-mute";
 
 const TZ = process.env.ASSISTANT_TZ || "America/Fortaleza";
 
@@ -115,6 +116,18 @@ const TOOLS = [
   {
     type: "function",
     function: {
+      name: "email_no_interest",
+      description: "Marca (mark), desmarca (undo) ou lista (list) remetentes de e-mail SEM INTERESSE do dono: e-mails deles não são listados nem avisados (continuam no Gmail). Use só quando o próprio dono pedir. Precisa do endereço de e-mail do remetente (veja o campo de gmail_search).",
+      parameters: {
+        type: "object",
+        properties: { action: { type: "string", enum: ["mark", "undo", "list"] }, sender: { type: "string", description: "Endereço do remetente, ex.: promo@loja.com" } },
+        required: ["action"],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
       name: "calendar_list_events",
       description: "Lista eventos da agenda entre duas datas (ISO 8601 com fuso, ex: 2026-09-25T00:00:00-03:00).",
       parameters: {
@@ -150,6 +163,7 @@ const SENSITIVE = new Set(["gmail_send", "calendar_create_event", "reply_to_conv
 // Ferramentas que trazem texto de terceiros (potencial prompt injection).
 const EXTERNAL = new Set(["gmail_search", "gmail_read", "list_conversations"]);
 const MAX_PENDING = 3;
+const MAX_MEDIA_BYTES = 15 * 1024 * 1024;
 const MAX_ROUNDS = 6;
 
 // Serviço que o usuário precisa ter liberado para cada ferramenta (sem entrada = sempre disponível)
@@ -161,6 +175,7 @@ const TOOL_SERVICE: Record<string, Service | Service[]> = {
   gmail_search: "email",
   gmail_read: "email",
   gmail_send: "email",
+  email_no_interest: "email",
   calendar_list_events: "calendar",
   calendar_create_event: "calendar",
 };
@@ -243,16 +258,40 @@ export class AssistantService {
     return ((await res.json()) as any).text?.trim() ?? "";
   }
 
-  async handle(c: Commander, instanceName: string, text: string, opts: { heard?: boolean } = {}) {
+  async handle(c: Commander, instanceName: string, text: string, opts: { heard?: boolean; quoted?: string } = {}) {
     const workspaceId = c.workspaceId;
     let answer: string;
     try {
-      answer = (await this.menu.respond(workspaceId, text)) ?? (await this.think(c, text));
+      answer = (await this.menu.respond(workspaceId, text, opts.quoted || undefined)) ?? (await this.think(c, text));
     } catch (err: any) {
       this.logger.error(`Assistente falhou: ${err.message}`);
       answer = "Erro ao processar o comando. Tente novamente.";
     }
     if (opts.heard && !(await this.menu.isCar(workspaceId))) answer = `🎙️ _"${text}"_\n\n${answer}`;
+    await this.sendToUser(c, instanceName, answer);
+  }
+
+  /**
+   * Imagem ou PDF enviado pelo dono: se ele está criando eventos (ou pediu "agenda" na legenda), o arquivo é lido e vira uma
+   * lista para confirmar. Fora disso só orienta, sem baixar nada.
+   */
+  async handleAgendaMedia(c: Commander, instanceName: string, key: object, media: { mime: string; caption: string }) {
+    const workspaceId = c.workspaceId;
+    const mode = await this.menu.agendaMediaIntent(workspaceId, media.caption);
+    if (mode === "no") return;
+    let answer: string;
+    if (mode === "hint") {
+      answer = "📷 Recebi o arquivo. Para eu ler compromissos dele, abra a *agenda* → *Criar eventos* e envie de novo (ou escreva _adicionar na agenda_ na legenda).";
+    } else {
+      try {
+        const m = await this.evolution.getMediaBase64(instanceName, key);
+        if (m.base64.length * 0.75 > MAX_MEDIA_BYTES) answer = "📎 Esse arquivo é grande demais para eu ler (limite de 15 MB). Mande um print menor.";
+        else answer = await this.menu.agendaIngest(workspaceId, { text: media.caption || undefined, media: [{ mime: m.mimetype || media.mime, base64: m.base64 }] });
+      } catch (err: any) {
+        this.logger.error(`Leitura de arquivo para a agenda falhou: ${err.message}`);
+        answer = "😕 Não consegui baixar ou ler o arquivo. Tente de novo, ou cole o texto dos compromissos.";
+      }
+    }
     await this.sendToUser(c, instanceName, answer);
   }
 
@@ -311,8 +350,8 @@ export class AssistantService {
             pending.push({ name, args });
             result = { status: "aguardando_confirmacao_do_dono" };
           }
-        } else if (name === "remember" && tainted) {
-          result = { error: "não posso salvar memória depois de ler conteúdo externo neste comando; peça em uma mensagem separada" };
+        } else if ((name === "remember" || name === "email_no_interest") && tainted) {
+          result = { error: "não posso salvar preferências depois de ler conteúdo externo neste comando; peça em uma mensagem separada" };
         } else {
           result = await this.runTool(workspaceId, name, args).catch((e) => {
             this.logger.error(`Ferramenta ${name} falhou: ${e.message}`);
@@ -344,6 +383,14 @@ export class AssistantService {
     if (name === "forget") {
       await this.memory.remove(workspaceId, String(args.id ?? ""));
       return { ok: true };
+    }
+    if (name === "email_no_interest") {
+      const prefs = await loadMute(this.state, workspaceId);
+      if (args.action === "list") return { remetentes: prefs.muted };
+      const addr = senderAddress(String(args.sender ?? ""));
+      if (!addr) return { error: "informe o endereço de e-mail do remetente (ex.: promo@loja.com)" };
+      await saveMute(this.state, workspaceId, args.action === "undo" ? removeMute(prefs, addr) : addMute(prefs, addr));
+      return { ok: true, remetente: addr, sem_interesse: args.action !== "undo" };
     }
     if (name === "list_memories") {
       return (await this.memory.list(workspaceId)).map((m) => ({ id: m.id, conteudo: m.content }));

@@ -6,7 +6,7 @@ import { WhatsappWorker } from "../workers/whatsapp.worker";
 import { InstagramWorker } from "../workers/instagram.worker";
 import { InstagramEvent, parseInstagramWebhook } from "../instagram/parse";
 import { AutomationRunner } from "../../automations/automation-runner.service";
-import { commandText, isVoiceOrAudio } from "../whatsapp/parse";
+import { agendaMedia, commandText, isVoiceOrAudio, quotedText } from "../whatsapp/parse";
 import { isGroupOrBroadcast, phoneFromJid, samePhone, senderPhone } from "../whatsapp/phone";
 
 // Retentativas: 5 s, 30 s, 2 min, 10 min, 1 h (depois disso o evento fica FAILED para inspeção)
@@ -163,7 +163,13 @@ export class InboundService implements OnModuleInit, OnModuleDestroy {
           return;
         }
       }
-      if (text) await this.assistant.handle(commander, instance, text, { heard });
+      if (text) {
+        await this.assistant.handle(commander, instance, text, { heard, quoted: quotedText(data.message) });
+        return;
+      }
+      // Imagem ou PDF (print de convite, cartaz, post encaminhado): o assistente tenta ler os compromissos
+      const media = agendaMedia(data.message);
+      if (media) await this.assistant.handleAgendaMedia(commander, instance, data.key, media);
       return;
     }
 

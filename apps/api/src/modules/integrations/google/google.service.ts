@@ -1,6 +1,7 @@
 import { Injectable, Logger, OnModuleInit } from "@nestjs/common";
 import { prisma } from "@openclaw/database";
 import { isSealed, openToken, sealToken } from "../../webhooks/crypto";
+import { nextDay } from "../../channels/assistant/agenda-events";
 
 const SCOPES = [
   "https://www.googleapis.com/auth/gmail.modify",
@@ -240,16 +241,20 @@ export class GoogleService implements OnModuleInit {
 
   async calendarCreate(
     workspaceId: string,
-    ev: { title: string; start: string; end: string; description?: string; attendees?: string[] },
+    ev: { title: string; start: string; end: string; description?: string | null; attendees?: string[] },
     account?: string,
   ) {
+    // Sem hora ("2026-10-03"): evento de dia inteiro, cujo fim no Google é o dia seguinte
+    const allDay = !ev.start.includes("T");
+    const start = allDay ? { date: ev.start } : { dateTime: ev.start, timeZone: "America/Fortaleza" };
+    const end = allDay ? { date: nextDay(ev.start) } : { dateTime: ev.end, timeZone: "America/Fortaleza" };
     const e = await this.g<any>(workspaceId, account, "https://www.googleapis.com/calendar/v3/calendars/primary/events", {
       method: "POST",
       body: JSON.stringify({
         summary: ev.title,
-        description: ev.description,
-        start: { dateTime: ev.start, timeZone: "America/Fortaleza" },
-        end: { dateTime: ev.end, timeZone: "America/Fortaleza" },
+        description: ev.description ?? undefined,
+        start,
+        end,
         attendees: ev.attendees?.map((email) => ({ email })),
       }),
     });

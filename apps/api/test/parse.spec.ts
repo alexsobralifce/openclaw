@@ -49,3 +49,22 @@ describe("parseWhatsappMessage", () => {
     expect(isVoiceOrAudio({ ephemeralMessage: { message: { audioMessage: {} } } })).toBe(true);
   });
 });
+
+import { agendaMedia, quotedText } from "../src/modules/channels/whatsapp/parse";
+
+describe("mídia e citação para a agenda", () => {
+  it("imagem e PDF são reconhecidos, com a legenda; áudio e texto não", () => {
+    expect(agendaMedia({ imageMessage: { mimetype: "image/png", caption: "adicione na agenda" } })).toEqual({ mime: "image/png", caption: "adicione na agenda" });
+    expect(agendaMedia({ documentMessage: { mimetype: "application/pdf" } })).toEqual({ mime: "application/pdf", caption: "" });
+    expect(agendaMedia({ documentMessage: { mimetype: "application/zip" } })).toBeNull();
+    expect(agendaMedia({ audioMessage: {} })).toBeNull();
+    expect(agendaMedia({ conversation: "oi" })).toBeNull();
+  });
+
+  it("lê o texto da mensagem citada, inclusive legenda de imagem", () => {
+    const q = (quotedMessage: any) => ({ extendedTextMessage: { text: "põe na agenda", contextInfo: { quotedMessage } } });
+    expect(quotedText(q({ conversation: "Reunião dia 5 às 10h" }))).toBe("Reunião dia 5 às 10h");
+    expect(quotedText(q({ imageMessage: { caption: "Festa dia 12" } }))).toBe("Festa dia 12");
+    expect(quotedText({ conversation: "sem citação" })).toBe("");
+  });
+});

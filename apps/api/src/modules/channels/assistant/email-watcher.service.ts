@@ -6,6 +6,8 @@ import { AssistantService } from "./assistant.service";
 import { MenuService } from "./menu.service";
 import { WebhooksService } from "../../webhooks/webhooks.service";
 import { assistantInstance, can, workspaceCommander } from "./commander";
+import { loadMute } from "./email-mute";
+import { StateService } from "../../state/state.service";
 
 const INTERVAL_MS = Number(process.env.EMAIL_POLL_SECONDS || 60) * 1000;
 
@@ -20,6 +22,7 @@ export class EmailWatcherService implements OnModuleInit, OnModuleDestroy {
     private assistant: AssistantService,
     private menu: MenuService,
     private webhooks: WebhooksService,
+    private state: StateService,
   ) {}
 
   onModuleInit() {
@@ -67,6 +70,7 @@ export class EmailWatcherService implements OnModuleInit, OnModuleDestroy {
   private async checkWorkspace(workspaceId: string, channels: any[]) {
     const fresh: { account: string; id: string; de: string; assunto: string; at: number; kind: "person" | "auto" }[] = [];
     const updates: { id: string; config: any }[] = [];
+    const mute = await loadMute(this.state, workspaceId);
 
     for (const ch of channels) {
       const cfg = ch.config as any;
@@ -83,14 +87,14 @@ export class EmailWatcherService implements OnModuleInit, OnModuleDestroy {
       const news = items.filter((m: any) => m.internalDate > cfg.lastSeenMs);
       if (!news.length) continue;
 
-      // Spam e promoções não avisam nem entram na fila (continuam no Gmail, intactos)
+      // Spam, promoções e remetentes "sem interesse" não avisam nem entram na fila (continuam no Gmail, intactos)
       let hidden = 0;
       for (const m of news) {
-        const c = classifyEmail(m);
+        const c = classifyEmail(m, mute);
         if (isHidden(c.kind)) hidden++;
         else fresh.push({ account, id: m.id, de: m.de ?? "", assunto: m.assunto ?? "", at: m.internalDate, kind: c.kind === "auto" ? "auto" : "person" });
       }
-      if (hidden) this.logger.log(`${hidden} e-mail(s) de spam/promoção não avisados (${account})`);
+      if (hidden) this.logger.log(`${hidden} e-mail(s) de spam/promoção/sem interesse não avisados (${account})`);
       const newest = Math.max(...news.map((m: any) => m.internalDate));
       updates.push({ id: ch.id, config: { ...cfg, lastSeenMs: newest } });
     }

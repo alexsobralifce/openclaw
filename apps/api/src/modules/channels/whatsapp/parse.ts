@@ -90,3 +90,19 @@ export function commandText(message: any): string {
 export function isVoiceOrAudio(message: any): boolean {
   return !!unwrap(message)?.audioMessage;
 }
+
+/** Imagem ou PDF enviado ao assistente (para ler compromissos), com a legenda; nulo para qualquer outra mensagem. */
+export function agendaMedia(message: any): { mime: string; caption: string } | null {
+  const m = unwrap(message);
+  if (m?.imageMessage) return { mime: m.imageMessage.mimetype || "image/jpeg", caption: m.imageMessage.caption ?? "" };
+  const d = m?.documentMessage;
+  if (d && /pdf/i.test(d.mimetype ?? "")) return { mime: "application/pdf", caption: d.caption ?? "" };
+  return null;
+}
+
+/** Texto da mensagem que o usuário respondeu/citou ("adicione isso na agenda" respondendo a um post); vazio se não houver. */
+export function quotedText(message: any): string {
+  const q = unwrap(message)?.extendedTextMessage?.contextInfo?.quotedMessage;
+  const inner = unwrap(q);
+  return String(inner?.conversation || inner?.extendedTextMessage?.text || inner?.imageMessage?.caption || inner?.videoMessage?.caption || "").slice(0, 4000);
+}

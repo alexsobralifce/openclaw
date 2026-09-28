@@ -74,6 +74,30 @@ export class GeminiService {
     throw lastErr ?? new Error("Gemini não devolveu texto");
   }
 
+  /**
+   * Lê imagens/PDFs e/ou links junto com o texto e devolve a resposta do modelo (usado para extrair compromissos).
+   * Os links são abertos pelo próprio Gemini (ferramenta url_context), não por este servidor.
+   */
+  async extract(prompt: string, input: { text?: string; urls?: string[]; media?: { mime: string; base64: string }[] }): Promise<string> {
+    const parts: any[] = [{ text: prompt }];
+    if (input.text) parts.push({ text: `Texto enviado:\n${input.text}` });
+    if (input.urls?.length) parts.push({ text: `Links para ler:\n${input.urls.join("\n")}` });
+    for (const m of input.media ?? []) parts.push({ inline_data: { mime_type: m.mime.split(";")[0].trim(), data: m.base64 } });
+    const body: any = { contents: [{ parts }], ...(input.urls?.length ? { tools: [{ url_context: {} }] } : {}) };
+    const models = [process.env.GEMINI_MODEL || "gemini-3.8-flash", ...(process.env.GEMINI_FALLBACK_MODEL ? [process.env.GEMINI_FALLBACK_MODEL] : [])];
+    let lastErr: any;
+    for (const model of models) {
+      try {
+        const data = await this.call(model, body, 45_000, 1);
+        const text = (data.candidates?.[0]?.content?.parts ?? []).map((p: any) => p.text ?? "").join("").trim();
+        if (text) return text;
+      } catch (e) {
+        lastErr = e;
+      }
+    }
+    throw lastErr ?? new Error("Gemini não devolveu texto");
+  }
+
   /** Converte texto em voz (WAV). */
   async speak(text: string): Promise<Buffer> {
     const data = await this.call(process.env.GEMINI_TTS_MODEL || "gemini-3.8-flash-tts", {
