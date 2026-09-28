@@ -79,6 +79,27 @@ export const api = {
     get: (id: string) => request<any>(`/contacts/${id}`),
     create: (data: any) => request<any>("/contacts", { method: "POST", body: JSON.stringify(data) }),
   },
+  vault: {
+    status: () => request<{ exists: boolean; unlocked: boolean; hasRecovery?: boolean; expiresAt?: number; whatsapp?: boolean }>("/vault/status"),
+    setup: (password: string) => request<{ recoveryKey: string }>("/vault/setup", { method: "POST", body: JSON.stringify({ password }) }),
+    requestReset: () => request<{ sentTo: string; expiresMinutes: number }>("/vault/recovery/request", { method: "POST" }),
+    recover: (token: string, recoveryKey: string, newPassword: string) =>
+      request<{ recoveryKey: string }>("/vault/recovery/complete", { method: "POST", body: JSON.stringify({ token, recoveryKey, newPassword }) }),
+    resetEmpty: (token: string, confirm: string, newPassword: string) =>
+      request<{ recoveryKey: string }>("/vault/recovery/reset", { method: "POST", body: JSON.stringify({ token, confirm, newPassword }) }),
+    newRecoveryKey: (password: string) => request<{ recoveryKey: string }>("/vault/recovery-key", { method: "POST", body: JSON.stringify({ password }) }),
+    unlock: (password: string, minutes: number, whatsapp: boolean) =>
+      request<any>("/vault/unlock", { method: "POST", body: JSON.stringify({ password, minutes, whatsapp }) }),
+    lock: () => request<any>("/vault/lock", { method: "POST" }),
+    list: () => request<any[]>("/vault/entries"),
+    reveal: (id: string) => request<any>(`/vault/entries/${id}`),
+    create: (data: any) => request<{ id: string }>("/vault/entries", { method: "POST", body: JSON.stringify(data) }),
+    update: (id: string, data: any) => request<{ id: string }>(`/vault/entries/${id}`, { method: "PUT", body: JSON.stringify(data) }),
+    remove: (id: string) => request<any>(`/vault/entries/${id}`, { method: "DELETE" }),
+    verify: () => request<{ ok: boolean; blocks: number; problem?: string; unreadable: number }>("/vault/verify", { method: "POST" }),
+    changeMaster: (oldPassword: string, newPassword: string) =>
+      request<any>("/vault/change-master", { method: "POST", body: JSON.stringify({ oldPassword, newPassword }) }),
+  },
   google: {
     authUrl: () => request<{ url: string; connected: boolean }>("/integrations/google/auth-url"),
   },

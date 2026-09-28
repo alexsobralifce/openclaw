@@ -11,6 +11,7 @@ import { PublicApiModule } from "./modules/public-api/public-api.module";
 import { AutomationsModule } from "./modules/automations/automations.module";
 import { StateModule } from "./modules/state/state.module";
 import { UsersModule } from "./modules/users/users.module";
+import { VaultModule } from "./modules/vault/vault.module";
 import { HealthModule } from "./modules/health/health.module";
 
 @Module({
@@ -28,6 +29,7 @@ import { HealthModule } from "./modules/health/health.module";
     GoogleModule,
     WebhooksModule,
     PublicApiModule,
+    VaultModule,
   ],
 })
 export class AppModule {}

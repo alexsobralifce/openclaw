@@ -50,6 +50,17 @@ const nav: { href: string; label: string; icon: React.ReactNode; service?: strin
     ),
   },
   {
+    href: "/dashboard/vault",
+    label: "Cofre",
+    service: "vault",
+    icon: (
+      <svg width="20" height="20" fill="none" viewBox="0 0 24 24">
+        <rect x="3" y="11" width="18" height="11" rx="2" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
+        <path d="M7 11V7a5 5 0 0 1 10 0v4" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
+      </svg>
+    ),
+  },
+  {
     href: "/dashboard/api",
     label: "API",
     service: "api",

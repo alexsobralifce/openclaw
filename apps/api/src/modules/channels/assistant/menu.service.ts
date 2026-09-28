@@ -5,9 +5,12 @@ import { GoogleService } from "../../integrations/google/google.service";
 import { MemoryService } from "./memory.service";
 import { GeminiService } from "./gemini.service";
 import { WeatherService } from "./weather.service";
+import { VaultService } from "../../vault/vault.service";
+import { isVaultHome, isVaultLock, looksLikeSharedSecret, vaultQuery } from "./vault-command";
 import { weatherDetail, weatherLines } from "./weather";
 import { isLocationQuery, isWeatherQuery, loadLocation, parseCityCommand, saveLocation, UserLocation } from "./location";
 import { todayItems, when as routineWhen } from "./routine";
+import { AssistantConfig, configKey, fmtInterval, IDLE_MENU_MS, intervalProblem, parseInterval, PRESETS } from "./chat-clean";
 import { driveQueryFrom, fileIcon, fmtSize, looksLikeDriveRequest, parseDriveQuery, rankFiles, sanitizeAlternates } from "./drive";
 import { suspiciousReasons } from "./security";
 import { StateService } from "../../state/state.service";
@@ -51,6 +54,7 @@ const ALIASES: Record<string, Record<string, number>> = {
   email_bulk_delete_confirm: { apagar: 1, excluir: 1, confirmar: 1, confirma: 1, sim: 1, cancelar: 0, nao: 0 },
   client: { responder: 1, resolver: 2 },
   confirm_ai: { confirmar: 1, confirma: 1, sim: 1, "pode enviar": 1, "pode mandar": 1, cancelar: 0, nao: 0 },
+  config: { limpeza: 1, "limpar chat": 1, "mudar limpeza": 1, "limpar agora": 2, limpar: 2 },
   agenda: { hoje: 1, amanha: 2, semana: 3, "proximos 7 dias": 3, "criar evento": 4, "criar eventos": 4, "novo evento": 4, "novos eventos": 4 },
 };
 
@@ -76,6 +80,7 @@ const dateStr = (offsetDays: number) =>
 export class MenuService {
   private readonly logger = new Logger(MenuService.name);
   private executor?: (ws: string, action: { name: string; args: any }) => Promise<any>;
+  private chatCleaner?: (ws: string, minAgeMs: number) => Promise<{ deleted: number; failed: number }>;
   private fileSender?: (ws: string, file: { nome: string; mime: string; base64: string; caption?: string }) => Promise<void>;
 
   constructor(
@@ -85,10 +90,16 @@ export class MenuService {
     private state: StateService,
     private gemini?: GeminiService,
     private weather?: WeatherService,
+    private vault?: VaultService,
   ) {}
 
   setExecutor(fn: (ws: string, action: { name: string; args: any }) => Promise<any>) {
     this.executor = fn;
+  }
+
+  /** Apaga as mensagens do chat com mais de `minAgeMs` (registrado pelo AssistantService, que conhece o WhatsApp). */
+  setChatCleaner(fn: (ws: string, minAgeMs: number) => Promise<{ deleted: number; failed: number }>) {
+    this.chatCleaner = fn;
   }
 
   /** Envia um arquivo ao WhatsApp do dono (registrado pelo AssistantService, que conhece o número e a instância). */
@@ -128,12 +139,21 @@ export class MenuService {
       if (!isInput && /^(ver |abrir |mostrar )?(as |minhas )?conversas( de clientes| em aberto)?$/.test(flat) && (await this.services(workspaceId)).includes("inbox")) return await this.clientList(workspaceId);
       if (!isInput && /^(ver |abrir |mostrar )?(a |minha )?agenda$/.test(flat) && (await this.services(workspaceId)).includes("calendar")) return await this.agendaMenu(workspaceId);
       if (!isInput && !pending && /^((ver|mostrar|abrir) )?(os )?(remetentes )?silenciados$|^((ver|mostrar|abrir) )?(os )?remetentes sem interesse$/.test(flat) && (await this.services(workspaceId)).includes("email")) return await this.mutedList(workspaceId);
+      // Senha digitada no chat: fica gravada em texto puro no servidor por dias e nunca deve chegar à IA
+      if (!isInput && looksLikeSharedSecret(text)) return this.secretWarning();
+      if (!isInput && !pending && (await this.services(workspaceId)).includes("vault")) {
+        if (isVaultLock(flat)) return this.vaultLock(workspaceId);
+        if (isVaultHome(flat)) return await this.vaultHome(workspaceId);
+        const vq = vaultQuery(flat);
+        if (vq) return await this.vaultLookup(workspaceId, vq);
+      }
       // Clima, localização, Drive e rotina: de qualquer tela (menos onde há algo a digitar ou confirmar)
       if (!isInput && !pending) {
         if (isWeatherQuery(flat)) return await this.weatherView(workspaceId);
         const city = parseCityCommand(text);
         if (city) return await this.setCity(workspaceId, city);
         if (isLocationQuery(flat)) return await this.locationView(workspaceId);
+        if (/^(ver |mostrar |abrir )?(as )?(config|configuracoes|configuracao|ajustes)$/.test(flat)) return await this.configMenu(workspaceId);
         if (/^(ver |mostrar |abrir )?(a |minha )?rotina$/.test(flat)) return await this.routineList(workspaceId);
         if (looksLikeDriveRequest(flat) && (await this.services(workspaceId)).includes("drive")) {
           const q = driveQueryFrom(text);
@@ -239,6 +259,43 @@ export class MenuService {
         await saveMute(this.state, ws, removeMute(await loadMute(this.state, ws), addr));
         return `🔔 *Voltei a listar e avisar de* ${addr}.\n\n${await this.mutedList(ws)}`;
       }
+      // Configurações
+      case "config": {
+        if (n === 0) return this.mainMenu(ws, false);
+        if (n === 1) {
+          await this.set(ws, "config_clean_input");
+          return [
+            head("🧹", "Limpeza do chat", "quando apago as mensagens daqui"),
+            "De quanto em quanto tempo devo limpar as mensagens do chat?",
+            PRESETS.map((p, i) => `${key(i + 1)} ${p.label}`).join("\n"),
+            '_Ou escreva do seu jeito: "a cada 2 horas", "30 minutos", "meia hora"._',
+            DIV,
+            opts(BACK),
+          ].join("\n");
+        }
+        if (n === 2) return this.cleanNow(ws);
+        return n === null ? null : this.invalid();
+      }
+      case "config_clean_input": {
+        if (n === 0) return this.configMenu(ws);
+        let minutes: number | null = null;
+        if (n !== null) minutes = PRESETS[n - 1]?.minutes ?? null;
+        else minutes = parseInterval(text);
+        if (minutes === null) return `🤔 Não entendi. Escolha de 1 a ${PRESETS.length} ou escreva, por exemplo, *a cada 2 horas*.`;
+        const problem = intervalProblem(minutes);
+        if (problem) return `⚠️ ${problem}\n_Escolha outro tempo ou digite 0 para voltar._`;
+        await this.cfgSet(ws, { cleanMinutes: minutes, nextCleanAt: minutes ? Date.now() + minutes * 60_000 : undefined });
+        return `✅ *Limpeza do chat:* ${fmtInterval(minutes)}.\n\n${await this.configMenu(ws)}`;
+      }
+
+      // Cofre de senhas: a lista só tem nomes; a senha só aparece ao escolher um item
+      case "vault": {
+        if (n === 0) return this.mainMenu(ws, false);
+        if (n === null) return null;
+        const it = d.items[n - 1];
+        return it ? this.vaultReveal(ws, it.id) : this.invalid();
+      }
+
       // Drive
       case "drive_input": {
         if (n === 0) return this.mainMenu(ws, false);
@@ -483,6 +540,12 @@ export class MenuService {
     }
     options.push({ type: "routine" });
     labels.push({ icon: "🗓️", label: "Minha rotina" });
+    if (services.includes("vault")) {
+      options.push({ type: "vault" });
+      labels.push({ icon: "🔐", label: "Cofre de senhas", sub: "peça: senha do github" });
+    }
+    options.push({ type: "config" });
+    labels.push({ icon: "⚙️", label: "Configurações", sub: "limpeza do chat" });
     return { options, labels };
   }
 
@@ -644,6 +707,8 @@ export class MenuService {
     if (opt.type === "memory") return this.memoryList(ws);
     if (opt.type === "drive") return this.driveEntry(ws);
     if (opt.type === "routine") return this.routineList(ws);
+    if (opt.type === "config") return this.configMenu(ws);
+    if (opt.type === "vault") return this.vaultHome(ws);
     // "driving" é o tipo antigo, que ainda pode estar numa tela guardada
     if (opt.type === "car" || opt.type === "driving") return this.carSet(ws, !(await this.isCar(ws)));
     await this.set(ws, "free");
@@ -816,6 +881,144 @@ export class MenuService {
       this.logger.warn(`Enviar arquivo do Drive falhou: ${e.message}`);
       return `😕 ${short(e.message, 200)}`;
     }
+  }
+
+  // Cofre de senhas (cadastro e edição só no painel; aqui, consulta com o cofre liberado)
+
+  private secretWarning() {
+    return [
+      "⚠️ *Não envie senhas por aqui.*",
+      "Esta conversa fica gravada no servidor por alguns dias, em texto legível.",
+      "Guarde senhas no painel, em *Cofre de senhas*. Se essa senha é real, troque-a e apague a mensagem do chat.",
+    ].join("\n");
+  }
+
+  private async ownerId(ws: string): Promise<string | null> {
+    const m = await prisma.workspaceMember.findFirst({ where: { workspaceId: ws, role: "OWNER" } });
+    return m?.userId ?? null;
+  }
+
+  /** Marca a resposta atual como secreta: o AssistantService a apaga do chat depois de ~1 minuto. */
+  private async markSecret(ws: string) {
+    await this.state.set(`secret:${ws}`, 1, 60_000);
+  }
+
+  /** Lê e limpa a marca de resposta secreta. */
+  async takeSecret(ws: string): Promise<boolean> {
+    const v = await this.state.get(`secret:${ws}`);
+    if (v) await this.state.del(`secret:${ws}`);
+    return !!v;
+  }
+
+  private async vaultHome(ws: string) {
+    const uid = await this.ownerId(ws);
+    if (!this.vault || !uid) return "🔐 O cofre não está disponível agora.";
+    const st = await this.vault.status(uid);
+    const state = !st.exists
+      ? "Você ainda não criou o cofre. Crie no painel, em *Cofre de senhas*."
+      : !st.unlocked
+        ? "🔒 *Bloqueado.* No painel, digite a senha mestra e marque *Liberar consulta pelo WhatsApp*."
+        : st.whatsapp
+          ? `🔓 *Liberado para o WhatsApp* até ${new Date(st.expiresAt!).toLocaleTimeString("pt-BR", { timeZone: TZ, hour: "2-digit", minute: "2-digit" })}.`
+          : "🔓 Aberto no painel, mas *sem* liberar o WhatsApp. Desbloqueie de novo marcando a opção de liberar.";
+    await this.setMain(ws);
+    return [
+      head("🔐", "Cofre de senhas"),
+      state,
+      DIV,
+      'Peça, por exemplo: *senha do github*. Para trancar agora: *bloquear cofre*.',
+      "_Cadastro e edição de senhas só no painel: aqui a senha nunca é digitada, só consultada. A resposta some do chat em ~1 minuto._",
+    ].join("\n");
+  }
+
+  private vaultLock(ws: string) {
+    return this.ownerId(ws).then((uid) => {
+      if (uid) this.vault?.lock(uid);
+      return "🔒 *Cofre bloqueado.*";
+    });
+  }
+
+  private async vaultLookup(ws: string, query: string): Promise<string> {
+    if (await this.isCar(ws)) return "🚗 Por segurança, não leio senhas em voz alta no modo carro. Desligue o modo carro para consultar.";
+    const uid = await this.ownerId(ws);
+    if (!this.vault || !uid) return "🔐 O cofre não está disponível agora.";
+    const r = await this.vault.lookup(uid, query);
+    if (r.state === "none") return "🔐 Você ainda não criou o cofre. Crie no painel, em *Cofre de senhas*.";
+    if (r.state === "locked") return "🔒 *O cofre está bloqueado.* No painel, em *Cofre de senhas*, digite a senha mestra e marque *Liberar consulta pelo WhatsApp*.";
+    if (r.state === "no_whatsapp") return "🔒 O cofre está aberto no painel, mas sem liberar o WhatsApp. Desbloqueie de novo marcando *Liberar consulta pelo WhatsApp*.";
+    if (!r.matches.length) return `🤔 Não achei nada parecido com *${short(query, 40)}* no cofre.`;
+    if (r.matches.length === 1) return this.vaultReveal(ws, r.matches[0].id);
+    await this.set(ws, "vault", { items: r.matches.map((m) => ({ id: m.id })) });
+    const rows = r.matches.map((m, i) => `${key(i + 1)} 🔑 *${short(m.title, 40)}*${m.username ? `\n     _${short(m.username, 40)}_` : ""}`);
+    return [head("🔐", "Qual deles?", `"${short(query, 30)}"`), rows.join("\n"), foot("Responda com o número para eu mostrar a senha"), opts(BACK)].join("\n");
+  }
+
+  private async vaultReveal(ws: string, entryId: string): Promise<string> {
+    if (await this.isCar(ws)) return "🚗 Por segurança, não leio senhas em voz alta no modo carro.";
+    const uid = await this.ownerId(ws);
+    if (!this.vault || !uid) return "🔐 O cofre não está disponível agora.";
+    let d;
+    try {
+      d = await this.vault.revealForWhatsapp(uid, entryId);
+    } catch (e: any) {
+      this.logger.warn(`Cofre: não abriu a entrada: ${e.message}`);
+      return "😕 Não consegui abrir essa entrada. Use *Verificar integridade* no painel.";
+    }
+    if (!d) return "🔒 O cofre foi bloqueado. Desbloqueie no painel marcando *Liberar consulta pelo WhatsApp*.";
+    await this.markSecret(ws);
+    await this.setMain(ws);
+    return [
+      `🔐 *${short(d.title, 60)}*`,
+      d.username ? `👤 ${d.username}` : "",
+      d.password ? `🔑 \`\`\`${d.password}\`\`\`` : "🔑 _(sem senha guardada)_",
+      d.url ? `🔗 ${short(d.url, 80)}` : "",
+      "⏱️ _Apago esta mensagem do chat em cerca de 1 minuto._",
+    ].filter(Boolean).join("\n");
+  }
+
+  // Configurações
+
+  private async cfgGet(ws: string): Promise<AssistantConfig> {
+    const v = await this.state.get<AssistantConfig>(configKey(ws));
+    return { cleanMinutes: Number(v?.cleanMinutes) > 0 ? Number(v!.cleanMinutes) : 0, nextCleanAt: v?.nextCleanAt };
+  }
+
+  private async cfgSet(ws: string, cfg: AssistantConfig) {
+    await this.state.set(configKey(ws), cfg);
+  }
+
+  private async configMenu(ws: string) {
+    const cfg = await this.cfgGet(ws);
+    await this.set(ws, "config");
+    const next = cfg.cleanMinutes && cfg.nextCleanAt ? `\n     _próxima: ${fmtWhen(cfg.nextCleanAt, TZ) || "em instantes"}_` : "";
+    return [
+      head("⚙️", "Configurações"),
+      `🧹 *Limpeza do chat:* ${fmtInterval(cfg.cleanMinutes)}${next}`,
+      `⏱️ *Volto ao menu principal* após ${Math.round(IDLE_MENU_MS / 60_000)} min sem resposta`,
+      DIV,
+      opts([1, "🧹", "Mudar a limpeza do chat"], [2, "🗑️", "Limpar agora"], BACK),
+      foot("Só apago mensagens enviadas pelo número conectado (as minhas respostas) e recentes, de até 2 dias. As suas mensagens para mim o WhatsApp não me deixa apagar: limpe por aí."),
+    ].join("\n");
+  }
+
+  private async cleanNow(ws: string) {
+    if (!this.chatCleaner) return "🧹 A limpeza não está disponível agora.";
+    const r = await this.chatCleaner(ws, 15_000);
+    const msg = r.deleted ? `🧹 *Apaguei ${r.deleted} ${r.deleted > 1 ? "mensagens" : "mensagem"} do chat.*` : "🧹 Não havia mensagens minhas para apagar.";
+    return `${msg}${r.failed ? `\n⚠️ _${r.failed} não deu para apagar agora; tento de novo na próxima limpeza._` : ""}\n\n${await this.configMenu(ws)}`;
+  }
+
+  /**
+   * Passado o tempo sem resposta do dono, volta ao menu principal (cancelando o que estivesse pendente).
+   * Devolve o texto a enviar, ou null se não há nada a fazer (já estava no menu) ou se está no modo carro
+   * (o carro leria o menu em voz alta sem ninguém ter pedido: aí só a tela é reiniciada).
+   */
+  async idleReturn(ws: string): Promise<string | null> {
+    const st = await this.state.get<State>(this.key(ws));
+    if (!st || st.screen === "main") return null;
+    const text = await this.mainMenu(ws, false);
+    if (await this.isCar(ws)) return null;
+    return `⏱️ _Voltei ao menu principal (${Math.round(IDLE_MENU_MS / 60_000)} min sem resposta). O que estava em andamento foi cancelado._\n\n${text}`;
   }
 
   // Rotina

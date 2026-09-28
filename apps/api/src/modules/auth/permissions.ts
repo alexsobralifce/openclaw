@@ -7,6 +7,7 @@ export const SERVICES = {
   email: "E-mail (Gmail)",
   calendar: "Agenda (Google)",
   drive: "Google Drive (buscar e receber arquivos)",
+  vault: "Cofre de senhas",
   automations: "Automações",
   api: "API e webhooks",
 } as const;

@@ -149,6 +149,9 @@ export class InboundService implements OnModuleInit, OnModuleDestroy {
         return;
       }
 
+      // Modo "mensagem para si mesmo": as mensagens do dono também são do número conectado e podem ser apagadas na limpeza
+      if (data.key.fromMe) await this.assistant.trackMessage(commander.workspaceId, instance, data.key);
+
       let text = commandText(data.message);
       let heard = false;
       if (!text && isVoiceOrAudio(data.message)) {

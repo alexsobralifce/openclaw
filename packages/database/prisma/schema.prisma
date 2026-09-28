@@ -361,3 +361,41 @@ model Memory {
 
   @@index([workspaceId, createdAt])
 }
+
+// ─── COFRE DE SENHAS ─────────────────────────────────────────────
+// Tudo que é sensível fica cifrado (AES-256-GCM). A chave do cofre é guardada cifrada pela senha mestra do usuário,
+// que nunca é gravada. Os blocos formam uma cadeia de hashes com chave para detectar adulteração.
+// Sem @unique de propósito (ver nota do db push em produção): o serviço garante uma linha por usuário.
+
+model Vault {
+  id          String   @id
+  userId      String
+  workspaceId String
+  kdf         Json
+  wrappedKey  String
+  // Segundo cadeado da mesma chave, aberto pela chave de recuperação do dono (vazio se ainda não existir)
+  recoverySalt    String @default("")
+  recoveryWrapped String @default("")
+  seq         Int      @default(0)
+  headHash    String   @default("")
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([userId])
+}
+
+model VaultBlock {
+  id          String   @id @default(cuid())
+  vaultId     String
+  seq         Int
+  prevHash    String
+  op          String
+  entryId     String
+  payload     String   @default("")
+  payloadHash String
+  hash        String
+  createdAt   DateTime @default(now())
+
+  @@index([vaultId, seq])
+  @@index([vaultId, entryId])
+}

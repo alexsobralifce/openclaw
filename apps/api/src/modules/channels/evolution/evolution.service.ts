@@ -119,6 +119,11 @@ export class EvolutionService {
     });
   }
 
+  /** Apaga "para todos" uma mensagem enviada por este número (o WhatsApp só permite nas mais recentes). */
+  async deleteMessage(instanceName: string, key: { id: string; remoteJid: string; fromMe: boolean }) {
+    return this.req<any>(`/chat/deleteMessageForEveryone/${instanceName}`, { method: "DELETE", body: JSON.stringify(key) });
+  }
+
   /** Envia um arquivo (base64) como documento; o nome e o tipo aparecem no WhatsApp. */
   async sendDocument(instanceName: string, to: string, base64: string, fileName: string, mimetype: string, caption?: string) {
     return this.req<any>(`/message/sendMedia/${instanceName}`, {
