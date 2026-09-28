@@ -6,6 +6,7 @@ export const SERVICES = {
   assistant: "Assistente no WhatsApp",
   email: "E-mail (Gmail)",
   calendar: "Agenda (Google)",
+  drive: "Google Drive (buscar e receber arquivos)",
   automations: "Automações",
   api: "API e webhooks",
 } as const;

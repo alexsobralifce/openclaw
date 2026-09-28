@@ -2,13 +2,33 @@ import { Injectable, Logger, OnModuleInit } from "@nestjs/common";
 import { prisma } from "@openclaw/database";
 import { isSealed, openToken, sealToken } from "../../webhooks/crypto";
 import { nextDay } from "../../channels/assistant/agenda-events";
+import { DriveKind, KIND_Q, wordVariants } from "../../channels/assistant/drive";
 
 const SCOPES = [
   "https://www.googleapis.com/auth/gmail.modify",
   "https://www.googleapis.com/auth/calendar",
+  // Só leitura: o assistente busca e baixa arquivos, nunca altera nem apaga nada no Drive
+  "https://www.googleapis.com/auth/drive.readonly",
   "openid",
   "email",
 ];
+
+/** Limite de envio pelo WhatsApp (o arquivo passa em base64 pela Evolution API). */
+export const DRIVE_MAX_BYTES = 15 * 1024 * 1024;
+/** Arquivo pronto para enviar (base64) ou, quando não dá, o motivo e o link. */
+export interface DriveFileResult {
+  nome: string;
+  mime: string;
+  link?: string;
+  base64?: string;
+  motivo?: string;
+}
+const DRIVE_EXPORTS: Record<string, { mime: string; ext: string }> = {
+  "application/vnd.google-apps.document": { mime: "application/pdf", ext: ".pdf" },
+  "application/vnd.google-apps.presentation": { mime: "application/pdf", ext: ".pdf" },
+  "application/vnd.google-apps.drawing": { mime: "application/pdf", ext: ".pdf" },
+  "application/vnd.google-apps.spreadsheet": { mime: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", ext: ".xlsx" },
+};
 
 const SIGNAL_HEADERS = new Set(["list-unsubscribe", "precedence", "auto-submitted", "x-spam-flag", "x-spam-status", "authentication-results"]);
 const GMAIL_HEADERS = ["From", "Subject", "Date", "List-Unsubscribe", "Precedence", "Auto-Submitted", "X-Spam-Flag", "X-Spam-Status", "Authentication-Results"];
@@ -223,6 +243,93 @@ export class GoogleService implements OnModuleInit {
       body: JSON.stringify({ raw: Buffer.from(raw).toString("base64url") }),
     });
     return { ok: true };
+  }
+
+  // ─── Drive (somente leitura) ──────────────────────────────────
+
+  /** Erros do Drive em português claro: conta conectada antes do Drive, ou API desativada no Google Cloud. */
+  private driveError(e: any): Error {
+    const m = String(e?.message ?? e);
+    if (/ACCESS_TOKEN_SCOPE_INSUFFICIENT|insufficientPermissions|insufficient authentication scopes/i.test(m)) {
+      return new Error("Esta conta ainda não liberou o Drive. Reconecte o Google em Canais → Conectar Google.");
+    }
+    if (/SERVICE_DISABLED|accessNotConfigured|has not been used in project/i.test(m)) {
+      return new Error("A API do Google Drive está desativada no projeto do Google Cloud (ative \"Google Drive API\").");
+    }
+    return e instanceof Error ? e : new Error(m);
+  }
+
+  /**
+   * Busca no Drive de uma conta. strict: o nome tem TODAS as palavras lembradas. fuzzy: o nome tem QUALQUER uma delas
+   * (mais as variações/sinônimos), e, se ainda assim nada aparecer, procura dentro do texto dos arquivos.
+   * Em fuzzy devolve até 25 candidatos para quem chamou ordenar por semelhança.
+   */
+  async driveSearch(workspaceId: string, spec: { terms: string[]; alternates?: string[]; kind?: DriveKind }, account?: string, max = 8, mode: "strict" | "fuzzy" = "strict") {
+    const esc = (w: string) => w.replace(/\\/g, "\\\\").replace(/'/g, "\\'");
+    const kindQ = spec.kind ? KIND_Q[spec.kind] : "";
+    const run = async (cond: string, withKind: boolean) => {
+      const q = [cond, "trashed=false", "mimeType!='application/vnd.google-apps.folder'", withKind && kindQ].filter(Boolean).join(" and ");
+      const p = new URLSearchParams({
+        q,
+        pageSize: String(mode === "fuzzy" ? 25 : max),
+        orderBy: "modifiedTime desc",
+        fields: "files(id,name,mimeType,size,modifiedTime,webViewLink)",
+        corpora: "allDrives",
+        includeItemsFromAllDrives: "true",
+        supportsAllDrives: "true",
+      });
+      const r = await this.g<any>(workspaceId, account, `https://www.googleapis.com/drive/v3/files?${p}`);
+      return (r.files ?? []).map((f: any) => ({ id: f.id, nome: f.name, tipo: f.mimeType, tamanho: f.size ? Number(f.size) : undefined, modificado: f.modifiedTime, link: f.webViewLink }));
+    };
+    try {
+      if (mode === "strict") {
+        if (!spec.terms.length && !kindQ) return [];
+        return await run(spec.terms.map((w) => `name contains '${esc(w)}'`).join(" and "), true);
+      }
+      const words = [...new Set([...spec.terms, ...(spec.alternates ?? [])].flatMap(wordVariants))].slice(0, 16);
+      if (!words.length) return [];
+      const byName = `(${words.map((w) => `name contains '${esc(w)}'`).join(" or ")})`;
+      const byText = `(${words.map((w) => `fullText contains '${esc(w)}'`).join(" or ")})`;
+      const attempts: [string, boolean][] = [[byName, true], ...(kindQ ? ([[byName, false]] as [string, boolean][]) : []), [byText, true], ...(kindQ ? ([[byText, false]] as [string, boolean][]) : [])];
+      for (const [cond, withKind] of attempts) {
+        const found = await run(cond, withKind);
+        if (found.length) return found;
+      }
+      return [];
+    } catch (e) {
+      throw this.driveError(e);
+    }
+  }
+
+  /**
+   * Baixa um arquivo do Drive para enviar ao dono. Documentos, planilhas e apresentações do Google são exportados
+   * (PDF; planilha em XLSX). Arquivos acima do limite não são baixados: só devolve o link.
+   */
+  async driveFile(workspaceId: string, id: string, account?: string, maxBytes = DRIVE_MAX_BYTES): Promise<DriveFileResult> {
+    try {
+      const meta = await this.g<any>(workspaceId, account, `https://www.googleapis.com/drive/v3/files/${encodeURIComponent(id)}?fields=id,name,mimeType,size,webViewLink&supportsAllDrives=true`);
+      const native = String(meta.mimeType).startsWith("application/vnd.google-apps.");
+      const exp = native ? DRIVE_EXPORTS[meta.mimeType] : undefined;
+      const base = { nome: String(meta.name), link: meta.webViewLink as string | undefined };
+      if (native && !exp) return { ...base, mime: meta.mimeType as string, motivo: "este tipo de arquivo do Google não pode ser baixado" };
+      if (!native && meta.size && Number(meta.size) > maxBytes) return { ...base, mime: meta.mimeType as string, motivo: "arquivo grande demais para enviar pelo WhatsApp" };
+      const url = exp
+        ? `https://www.googleapis.com/drive/v3/files/${encodeURIComponent(id)}/export?mimeType=${encodeURIComponent(exp.mime)}`
+        : `https://www.googleapis.com/drive/v3/files/${encodeURIComponent(id)}?alt=media&supportsAllDrives=true`;
+      const bytes = await this.gBytes(workspaceId, account, url);
+      if (bytes.length > maxBytes) return { ...base, mime: meta.mimeType as string, motivo: "arquivo grande demais para enviar pelo WhatsApp" };
+      const nome = exp && !base.nome.toLowerCase().endsWith(exp.ext) ? `${base.nome}${exp.ext}` : base.nome;
+      return { ...base, nome, mime: exp?.mime ?? (meta.mimeType as string), base64: bytes.toString("base64") };
+    } catch (e) {
+      throw this.driveError(e);
+    }
+  }
+
+  private async gBytes(workspaceId: string, account: string | undefined, url: string): Promise<Buffer> {
+    const token = await this.accessToken(workspaceId, account);
+    const res = await fetch(url, { headers: { Authorization: `Bearer ${token}` }, signal: AbortSignal.timeout(60_000) });
+    if (!res.ok) throw new Error(`Google API ${res.status}: ${(await res.text()).slice(0, 300)}`);
+    return Buffer.from(await res.arrayBuffer());
   }
 
   // ─── Calendar ─────────────────────────────────────────────────

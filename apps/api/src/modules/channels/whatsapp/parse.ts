@@ -100,6 +100,14 @@ export function agendaMedia(message: any): { mime: string; caption: string } | n
   return null;
 }
 
+/** Localização compartilhada (pin do WhatsApp); nula para qualquer outra mensagem. */
+export function locationOf(message: any): { lat: number; lng: number; name: string } | null {
+  const m = unwrap(message);
+  const l = m?.locationMessage ?? m?.liveLocationMessage;
+  if (!l || typeof l.degreesLatitude !== "number" || typeof l.degreesLongitude !== "number") return null;
+  return { lat: l.degreesLatitude, lng: l.degreesLongitude, name: [l.name, l.address].filter(Boolean).join(" - ") };
+}
+
 /** Texto da mensagem que o usuário respondeu/citou ("adicione isso na agenda" respondendo a um post); vazio se não houver. */
 export function quotedText(message: any): string {
   const q = unwrap(message)?.extendedTextMessage?.contextInfo?.quotedMessage;

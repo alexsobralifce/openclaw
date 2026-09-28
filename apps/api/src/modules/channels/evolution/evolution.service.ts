@@ -119,6 +119,14 @@ export class EvolutionService {
     });
   }
 
+  /** Envia um arquivo (base64) como documento; o nome e o tipo aparecem no WhatsApp. */
+  async sendDocument(instanceName: string, to: string, base64: string, fileName: string, mimetype: string, caption?: string) {
+    return this.req<any>(`/message/sendMedia/${instanceName}`, {
+      method: "POST",
+      body: JSON.stringify({ number: to, mediatype: "document", media: base64, fileName, mimetype, caption }),
+    });
+  }
+
   async sendMedia(instanceName: string, to: string, mediaUrl: string, caption?: string) {
     return this.req<any>(`/message/sendMedia/${instanceName}`, {
       method: "POST",

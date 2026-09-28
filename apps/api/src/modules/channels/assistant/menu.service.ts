@@ -4,13 +4,18 @@ import { EvolutionService } from "../evolution/evolution.service";
 import { GoogleService } from "../../integrations/google/google.service";
 import { MemoryService } from "./memory.service";
 import { GeminiService } from "./gemini.service";
+import { WeatherService } from "./weather.service";
+import { weatherDetail, weatherLines } from "./weather";
+import { isLocationQuery, isWeatherQuery, loadLocation, parseCityCommand, saveLocation, UserLocation } from "./location";
+import { todayItems, when as routineWhen } from "./routine";
+import { driveQueryFrom, fileIcon, fmtSize, looksLikeDriveRequest, parseDriveQuery, rankFiles, sanitizeAlternates } from "./drive";
 import { suspiciousReasons } from "./security";
 import { StateService } from "../../state/state.service";
 import { effectiveServices, Service } from "../../auth/permissions";
 import { normalize, parseChoice, pickByLabel } from "./voice";
 import { fmtWhen, mergeQueue, QUEUE_TTL_MS, QueuedEmail, removeFromQueue } from "./email-queue";
 import { addMute, loadMute, MutePrefs, recordDismiss, removeMute, saveMute, senderAddress } from "./email-mute";
-import { AgendaEvent, EventsPlan, extractUrls, looksLikeAgendaIntent, parseEventsPlan } from "./agenda-events";
+import { AgendaEvent, EventsPlan, extractJson, extractUrls, looksLikeAgendaIntent, parseEventsPlan } from "./agenda-events";
 import { classifyEmail, groupOrder, isHidden, looksLikeBatchReply, looksLikeBulkDelete, parseBatchPlan, parseBulkDelete } from "./email-filter";
 
 const TZ = process.env.ASSISTANT_TZ || "America/Fortaleza";
@@ -71,6 +76,7 @@ const dateStr = (offsetDays: number) =>
 export class MenuService {
   private readonly logger = new Logger(MenuService.name);
   private executor?: (ws: string, action: { name: string; args: any }) => Promise<any>;
+  private fileSender?: (ws: string, file: { nome: string; mime: string; base64: string; caption?: string }) => Promise<void>;
 
   constructor(
     private google: GoogleService,
@@ -78,10 +84,16 @@ export class MenuService {
     private memory: MemoryService,
     private state: StateService,
     private gemini?: GeminiService,
+    private weather?: WeatherService,
   ) {}
 
   setExecutor(fn: (ws: string, action: { name: string; args: any }) => Promise<any>) {
     this.executor = fn;
+  }
+
+  /** Envia um arquivo ao WhatsApp do dono (registrado pelo AssistantService, que conhece o número e a instância). */
+  setFileSender(fn: (ws: string, file: { nome: string; mime: string; base64: string; caption?: string }) => Promise<void>) {
+    this.fileSender = fn;
   }
 
   // ─── Entrada ──────────────────────────────────────────────────
@@ -116,6 +128,18 @@ export class MenuService {
       if (!isInput && /^(ver |abrir |mostrar )?(as |minhas )?conversas( de clientes| em aberto)?$/.test(flat) && (await this.services(workspaceId)).includes("inbox")) return await this.clientList(workspaceId);
       if (!isInput && /^(ver |abrir |mostrar )?(a |minha )?agenda$/.test(flat) && (await this.services(workspaceId)).includes("calendar")) return await this.agendaMenu(workspaceId);
       if (!isInput && !pending && /^((ver|mostrar|abrir) )?(os )?(remetentes )?silenciados$|^((ver|mostrar|abrir) )?(os )?remetentes sem interesse$/.test(flat) && (await this.services(workspaceId)).includes("email")) return await this.mutedList(workspaceId);
+      // Clima, localização, Drive e rotina: de qualquer tela (menos onde há algo a digitar ou confirmar)
+      if (!isInput && !pending) {
+        if (isWeatherQuery(flat)) return await this.weatherView(workspaceId);
+        const city = parseCityCommand(text);
+        if (city) return await this.setCity(workspaceId, city);
+        if (isLocationQuery(flat)) return await this.locationView(workspaceId);
+        if (/^(ver |mostrar |abrir )?(a |minha )?rotina$/.test(flat)) return await this.routineList(workspaceId);
+        if (looksLikeDriveRequest(flat) && (await this.services(workspaceId)).includes("drive")) {
+          const q = driveQueryFrom(text);
+          return q ? await this.driveSearch(workspaceId, q) : await this.driveEntry(workspaceId);
+        }
+      }
       // Colou compromissos, um link ou um post e pediu para pôr na agenda (na tela de novo evento, tudo já é lido como evento)
       const ingestText = quoted ? `${text}\n\n${quoted}` : text;
       const lines = text.split("\n").filter((l) => l.trim()).length;
@@ -214,6 +238,29 @@ export class MenuService {
         if (!addr) return this.invalid();
         await saveMute(this.state, ws, removeMute(await loadMute(this.state, ws), addr));
         return `🔔 *Voltei a listar e avisar de* ${addr}.\n\n${await this.mutedList(ws)}`;
+      }
+      // Drive
+      case "drive_input": {
+        if (n === 0) return this.mainMenu(ws, false);
+        return this.driveSearch(ws, driveQueryFrom(text) || text);
+      }
+      case "drive": {
+        if (n === 0) return this.mainMenu(ws, false);
+        if (n !== null) {
+          const it = d.items[n - 1];
+          return it ? this.driveSend(ws, it) : this.invalid();
+        }
+        return this.driveSearch(ws, driveQueryFrom(text) || text);
+      }
+
+      // Rotina: números removem; texto livre vai para a IA, que atualiza (routine_set)
+      case "routine": {
+        if (n === 0) return this.mainMenu(ws, false);
+        if (n === null) return null;
+        const it = d.items[n - 1];
+        if (!it) return this.invalid();
+        const removed = await this.memory.removeRoutine(ws, it.id);
+        return `${removed ? `🧽 *Removi da rotina:* ${it.topic}` : "Esse item já não existe."}\n\n${await this.routineList(ws)}`;
       }
       case "email_batch_draft": {
         if (n === 1) return this.batchSend(ws, d);
@@ -430,6 +477,12 @@ export class MenuService {
     labels.push({ icon: "🧠", label: "Minha memória" });
     options.push({ type: "car" });
     labels.push({ icon: "🚗", label: "Modo carro" });
+    if (accounts.length && services.includes("drive")) {
+      options.push({ type: "drive" });
+      labels.push({ icon: "📁", label: "Google Drive", sub: "pedir um arquivo" });
+    }
+    options.push({ type: "routine" });
+    labels.push({ icon: "🗓️", label: "Minha rotina" });
     return { options, labels };
   }
 
@@ -573,7 +626,7 @@ export class MenuService {
     const [icon, saud] = h < 12 ? ["☀️", "Bom dia"] : h < 18 ? ["🌤️", "Boa tarde"] : ["🌙", "Boa noite"];
     const title = greet ? `${saud}! Sou seu assistente` : "Menu principal";
     const items = labels.map((l, i) => `${key(i + 1)} ${l.icon} ${l.label}${l.sub ? `\n     _${l.sub}_` : ""}`);
-    return [head(greet ? icon : "🏠", title, "O que vamos ver agora?"), items.join("\n"), foot("Responda com o número, escreva ou mande um áudio 🎙️"), "🚗 _Vai dirigir? Diga *modo carro* e eu respondo em texto para o carro ler em voz alta._"].join("\n");
+    return [head(greet ? icon : "🏠", title, "O que vamos ver agora?"), ...(await this.contextLines(ws, greet)), items.join("\n"), foot("Responda com o número, escreva ou mande um áudio 🎙️"), "🚗 _Vai dirigir? Diga *modo carro* e eu respondo em texto para o carro ler em voz alta._"].join("\n");
   }
 
   /** Volta à tela principal guardando opções e rótulos (os rótulos permitem escolher falando o nome). */
@@ -589,10 +642,192 @@ export class MenuService {
     if (opt.type === "agenda") return this.agendaMenu(ws);
     if (opt.type === "clients") return this.clientList(ws);
     if (opt.type === "memory") return this.memoryList(ws);
+    if (opt.type === "drive") return this.driveEntry(ws);
+    if (opt.type === "routine") return this.routineList(ws);
     // "driving" é o tipo antigo, que ainda pode estar numa tela guardada
     if (opt.type === "car" || opt.type === "driving") return this.carSet(ws, !(await this.isCar(ws)));
     await this.set(ws, "free");
     return [head("🤖", "Assistente livre"), "Pode falar! Escreva ou mande um áudio 🎙️ com o que precisa.", DIV, opts(BACK)].join("\n");
+  }
+
+  // Hora, lugar, clima e rotina do dia (no topo do menu)
+
+  /** Melhor esforço: se o clima ou a rotina falharem, o menu sai sem essas linhas. */
+  private async contextLines(ws: string, greet: boolean): Promise<string[]> {
+    const lines: string[] = [];
+    try {
+      const loc = await loadLocation(this.state, ws);
+      const now = new Date();
+      const day = now.toLocaleDateString("pt-BR", { timeZone: TZ, weekday: "short", day: "2-digit", month: "2-digit" });
+      const time = now.toLocaleTimeString("pt-BR", { timeZone: TZ, hour: "2-digit", minute: "2-digit" });
+      lines.push(`🕐 ${day} ${time} · 📍 ${loc.name}${loc.source === "default" ? " _(padrão)_" : ""}`);
+      if (this.weather) {
+        try {
+          lines.push(...weatherLines(await this.weather.forecast(loc.lat, loc.lng)));
+        } catch (e: any) {
+          this.logger.warn(`Clima indisponível: ${e.message}`);
+        }
+      }
+      if (loc.source === "default" && greet) lines.push("     _Envie sua localização (📎 → Localização) ou diga *minha cidade é Recife* para ajustar o clima._");
+    } catch (e: any) {
+      this.logger.warn(`Linha de contexto do menu falhou: ${e.message}`);
+    }
+    try {
+      const weekday = new Date(new Date().toLocaleString("en-US", { timeZone: TZ })).getDay();
+      const today = todayItems(await this.memory.listRoutine(ws), weekday);
+      if (today.length) lines.push(`🗓️ *Hoje:* ${today.slice(0, 4).map((i) => `${i.time ? `${i.time} ` : ""}${i.topic}`).join(" · ")}`);
+    } catch (e: any) {
+      this.logger.warn(`Rotina do dia indisponível: ${e.message}`);
+    }
+    return lines.length ? [lines.join("\n"), DIV] : [];
+  }
+
+  /** Clima completo do lugar do dono (também usado pela ferramenta get_weather da IA). */
+  async weatherView(ws: string) {
+    if (!this.weather) return "🌦️ O clima não está disponível agora.";
+    const loc = await loadLocation(this.state, ws);
+    try {
+      const w = await this.weather.forecast(loc.lat, loc.lng);
+      const hint = loc.source === "default" ? "\n💡 _Não sei onde você está: envie sua localização ou diga *minha cidade é Recife*._" : "";
+      return [head("🌦️", "Clima"), ...weatherDetail(w, loc.name), `_Fonte: Open-Meteo_${hint}`].join("\n");
+    } catch (e: any) {
+      this.logger.warn(`Clima indisponível: ${e.message}`);
+      return "😕 Não consegui consultar o clima agora. Tente de novo em instantes.";
+    }
+  }
+
+  private async locationView(ws: string) {
+    const loc = await loadLocation(this.state, ws);
+    const how = { pin: "pela localização que você enviou", city: "pela cidade que você informou", default: "padrão (você ainda não informou)" }[loc.source];
+    return [head("📍", "Sua localização"), `*${loc.name}* _(${how})_`, DIV, "Para mudar: envie sua *localização* pelo WhatsApp (📎 → Localização) ou diga, por exemplo, *minha cidade é Recife*."].join("\n");
+  }
+
+  private async setCity(ws: string, city: string) {
+    if (!this.weather) return "📍 Não consigo buscar cidades agora.";
+    let place;
+    try {
+      place = await this.weather.geocode(city);
+    } catch (e: any) {
+      this.logger.warn(`Busca de cidade falhou: ${e.message}`);
+      return "😕 Não consegui buscar essa cidade agora. Tente de novo em instantes.";
+    }
+    if (!place) return `🤔 Não achei a cidade *${short(city, 40)}*. Tente com o estado, por exemplo *Recife, Pernambuco*.`;
+    return this.locationUpdated(ws, { lat: place.lat, lng: place.lng, name: place.name, source: "city" });
+  }
+
+  /** Grava a localização (cidade dita ou pin do WhatsApp) e responde com o clima do novo lugar. */
+  async locationUpdated(ws: string, loc: UserLocation): Promise<string> {
+    await saveLocation(this.state, ws, loc);
+    let extra: string[] = [];
+    try {
+      if (this.weather) extra = weatherLines(await this.weather.forecast(loc.lat, loc.lng));
+    } catch (e: any) {
+      this.logger.warn(`Clima indisponível: ${e.message}`);
+    }
+    return [`📍 *Localização atualizada:* ${loc.name}`, ...extra].join("\n");
+  }
+
+  // Google Drive
+
+  private async driveEntry(ws: string) {
+    const accounts = await this.google.listAccounts(ws);
+    if (!accounts.length) return this.noGoogle();
+    await this.set(ws, "drive_input");
+    return [
+      head("📁", "Google Drive", accounts.map(accountLabel).join(" · ")),
+      "Diga o nome (ou parte do nome) do arquivo. Eu procuro em *todas as suas contas Google* e mando aqui.",
+      '_Ex.: "contrato de aluguel" ou "planilha de gastos setembro"_',
+      DIV,
+      opts(BACK),
+    ].join("\n");
+  }
+
+  /**
+   * Procura nas contas Google vinculadas, todas ao mesmo tempo. Primeiro pelo nome exato (todas as palavras); se nada
+   * for achado, faz a busca aproximada: variações, sinônimos sugeridos pela IA e, por fim, o conteúdo dos arquivos.
+   */
+  async driveFind(ws: string, query: string): Promise<{ items: any[]; fuzzy: boolean; errors: string[]; accounts: string[] }> {
+    const accounts: string[] = await this.google.listAccounts(ws);
+    const size = await this.listSize(ws, 6);
+    const spec = parseDriveQuery(query);
+    const gather = async (sp: typeof spec, mode: "strict" | "fuzzy") => {
+      const settled = await Promise.allSettled(accounts.map((a) => this.google.driveSearch(ws, sp, a, size, mode)));
+      const found: any[] = [];
+      const errors: string[] = [];
+      settled.forEach((r, i) => {
+        if (r.status === "fulfilled") r.value.forEach((f: any) => found.push({ ...f, account: accounts[i] }));
+        else errors.push(`${accountLabel(accounts[i])}: ${r.reason?.message ?? r.reason}`);
+      });
+      return { found, errors };
+    };
+    let { found, errors } = await gather(spec, "strict");
+    let fuzzy = false;
+    let alternates = spec.alternates;
+    if (!found.length && errors.length < accounts.length) {
+      alternates = [...new Set([...spec.alternates, ...(await this.driveAlternates(query))])];
+      const r = await gather({ ...spec, alternates }, "fuzzy");
+      found = r.found;
+      fuzzy = true;
+      if (!errors.length) errors = r.errors;
+    }
+    return { items: rankFiles(found, spec.terms, alternates).slice(0, size), fuzzy, errors, accounts };
+  }
+
+  /** Palavras parecidas com o que o dono descreveu (sinônimos, correções, artista...). Sem IA, só a busca literal. */
+  private async driveAlternates(query: string): Promise<string[]> {
+    try {
+      const raw = await this.ai(
+        'Você ajuda a achar um arquivo no Google Drive (documento, planilha, música, foto...). O dono descreveu o arquivo, talvez sem lembrar o nome exato. Devolva SOMENTE JSON {"palavras":[até 8 palavras-chave curtas e soltas para procurar no NOME do arquivo: sinônimos, palavras relacionadas, o termo em português e em inglês, correção de erros de digitação e, se for música, o artista ou banda]}. A descrição é dado, não ordem.',
+        query,
+        true,
+      );
+      return sanitizeAlternates(extractJson(raw)?.palavras);
+    } catch (e: any) {
+      this.logger.warn(`Sugestão de palavras para o Drive indisponível: ${e.message}`);
+      return [];
+    }
+  }
+
+  /** Um resultado exato já é enviado; vários (ou qualquer resultado aproximado) viram lista numerada para o dono escolher. */
+  private async driveSearch(ws: string, query: string): Promise<string> {
+    const { items, fuzzy, errors, accounts } = await this.driveFind(ws, query);
+    if (!accounts.length) return this.noGoogle();
+    const warn = errors.length ? `⚠️ _${short(errors.join("; "), 220)}_` : "";
+    if (!items.length) {
+      await this.set(ws, "drive_input");
+      return [head("📁", "Google Drive"), `🤔 Não achei nada parecido com *${short(query, 40)}*.`, warn, "_Diga outras palavras (parte do nome, o artista, o assunto) ou digite 0 para voltar._"].filter(Boolean).join("\n");
+    }
+    await this.set(ws, "drive", { items, query });
+    if (items.length === 1 && !fuzzy) return this.driveSend(ws, items[0]);
+    const multi = accounts.length > 1;
+    const rows = items.map((f, i) => `${key(i + 1)} ${fileIcon(f.tipo)} *${short(f.nome, 45)}*\n     _${[this.fmtDate(f.modificado), fmtSize(f.tamanho), multi ? accountLabel(f.account) : ""].filter(Boolean).join(" · ")}_`);
+    const title = fuzzy ? "Não achei igual, mas parecem com o que você descreveu" : `Achei ${items.length} arquivos`;
+    return [head("📁", short(title, 60), `"${short(query, 30)}"`), rows.join("\n"), warn, foot("Responda com o número para eu enviar o arquivo aqui"), opts(BACK)].filter(Boolean).join("\n");
+  }
+
+  private async driveSend(ws: string, it: { id: string; account: string; nome: string }): Promise<string> {
+    try {
+      const f = await this.google.driveFile(ws, it.id, it.account);
+      if (!f.base64) return `📎 Não consegui enviar *${short(f.nome, 50)}*: ${f.motivo}.${f.link ? `\n🔗 ${f.link}` : ""}`;
+      if (!this.fileSender) return `📎 *${short(f.nome, 50)}*${f.link ? `\n🔗 ${f.link}` : ""}`;
+      await this.fileSender(ws, { nome: f.nome, mime: f.mime, base64: f.base64 });
+      return `✅ *Enviei* ${fileIcon(f.mime)} *${short(f.nome, 50)}* aqui na conversa.\n💡 _Quer outro? Diga o nome ou o número da lista. Digite *menu* para sair._`;
+    } catch (e: any) {
+      this.logger.warn(`Enviar arquivo do Drive falhou: ${e.message}`);
+      return `😕 ${short(e.message, 200)}`;
+    }
+  }
+
+  // Rotina
+
+  private async routineList(ws: string) {
+    const items = await this.memory.listRoutine(ws);
+    await this.set(ws, "routine", { items: items.map((i: any) => ({ id: i.id, topic: i.topic })) });
+    if (!items.length) {
+      return [head("🗓️", "Minha rotina"), "Ainda não sei nada da sua rotina.", '_Me conte, por exemplo: "toda terça e quinta tenho aula às 19h" ou "academia seg, qua e sex às 6h"._', "_Quando algo mudar, é só me avisar que eu atualizo._", DIV, opts(BACK)].join("\n");
+    }
+    const rows = items.map((r: any, i: number) => `${key(i + 1)} 🗓️ *${short(r.topic, 40)}*${routineWhen(r) ? ` — ${routineWhen(r)}` : ""}\n     _${short(r.description, 90)}_`);
+    return [head("🗓️", "Minha rotina", "eu lembro disso ao sugerir horários"), rows.join("\n"), foot("Para mudar ou incluir, é só me dizer. Digite o número para remover"), opts(BACK)].join("\n");
   }
 
   // Memória e confirmações

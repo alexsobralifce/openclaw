@@ -4,6 +4,7 @@ import { JwtModule } from "@nestjs/jwt";
 import { ChannelsController } from "./channels.controller";
 import { ChannelsService } from "./channels.service";
 import { WhatsappWorker } from "./workers/whatsapp.worker";
+import { WeatherService } from "./assistant/weather.service";
 import { AssistantService } from "./assistant/assistant.service";
 import { MenuService } from "./assistant/menu.service";
 import { MemoryService } from "./assistant/memory.service";
@@ -27,7 +28,7 @@ import { InstagramWorker } from "./workers/instagram.worker";
     }),
   ],
   controllers: [ChannelsController],
-  providers: [ChannelsService, WhatsappWorker, InstagramWorker, InstagramService, InboundService, AssistantService, MenuService, MemoryService, GeminiService, EmailWatcherService],
+  providers: [ChannelsService, WhatsappWorker, InstagramWorker, InstagramService, InboundService, AssistantService, MenuService, MemoryService, GeminiService, EmailWatcherService, WeatherService],
   exports: [ChannelsService, EvolutionModule],
 })
 export class ChannelsModule {}
