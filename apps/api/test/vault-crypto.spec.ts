@@ -1,11 +1,12 @@
 import { describe, expect, it } from "vitest";
 import {
+  newPinSalt, newWaKey, openEntryWa, pinKek, pinProblem, sealEntryWa, unwrapWaKeyMaster, unwrapWaKeyPin, wrapWaKeyMaster, wrapWaKeyPin,
   hashResetToken, maskEmail, newRecoveryKey, newRecoverySalt, newResetToken, parseRecoveryKey, recoveryKek, resetTokenShape, unwrapVaultKeyRecovery, wrapVaultKeyRecovery,
   assertKdf, blockHash, checkEntry, deriveKek, GENESIS, liveEntries, masterPasswordProblem, newKdf, newVaultKey, open, openEntry,
   seal, sealEntry, sha256, StoredBlock, subkeys, unwrapVaultKey, verifyChain, wrapVaultKey,
 } from "../src/modules/vault/vault-crypto";
 
-const entry = { title: "GitHub", url: "https://github.com", username: "ana@x.com", password: "s3nh@-Forte!", notes: "2FA no app" };
+const entry = { title: "GitHub", url: "https://github.com", username: "ana@x.com", password: "s3nh@-Forte!", notes: "2FA no app", whatsapp: true };
 
 describe("cifra", () => {
   const key = newVaultKey();
@@ -209,5 +210,49 @@ describe("token do link", () => {
   });
   it("mascara o e-mail", () => {
     expect(maskEmail("ana.souza@gmail.com")).toBe("a***@gmail.com");
+  });
+});
+
+describe("código de 4 dígitos", () => {
+  it("aceita 4 números comuns e recusa fracos e mal formados", () => {
+    for (const ok of ["4827", "0193", "7391"]) expect(pinProblem(ok)).toBe("");
+    for (const bad of ["", "123", "12345", "abcd", "12 4", "1111", "0000", "1234", "4321", "0123", "9876", "1212", "5656"]) expect(pinProblem(bad)).not.toBe("");
+    expect(pinProblem(4827 as any)).not.toBe("");
+  });
+
+  it("a chave do WhatsApp só abre com o código certo, o mesmo salt e o mesmo segredo do servidor", async () => {
+    const kw = newWaKey();
+    const salt = newPinSalt();
+    const wrapped = wrapWaKeyPin(await pinKek("4827", salt), kw, "v1");
+    expect(unwrapWaKeyPin(await pinKek("4827", salt), wrapped, "v1").equals(kw)).toBe(true);
+    await expect(async () => unwrapWaKeyPin(await pinKek("4828", salt), wrapped, "v1")).rejects.toThrow();
+    await expect(async () => unwrapWaKeyPin(await pinKek("4827", newPinSalt()), wrapped, "v1")).rejects.toThrow();
+    await expect(async () => unwrapWaKeyPin(await pinKek("4827", salt), wrapped, "v2")).rejects.toThrow();
+    const prev = process.env.VAULT_PEPPER;
+    process.env.VAULT_PEPPER = "segredo-diferente";
+    try {
+      await expect(async () => unwrapWaKeyPin(await pinKek("4827", salt), wrapped, "v1")).rejects.toThrow();
+    } finally {
+      if (prev === undefined) delete process.env.VAULT_PEPPER;
+      else process.env.VAULT_PEPPER = prev;
+    }
+  });
+
+  it("a cópia do WhatsApp nunca leva as notas e só abre no seu contexto", () => {
+    const kw = newWaKey();
+    const sealed = sealEntryWa(kw, "v1", "e1", 2, entry);
+    expect(sealed).not.toContain("2FA");
+    const back = openEntryWa(kw, "v1", "e1", 2, sealed);
+    expect(back).toMatchObject({ title: "GitHub", password: "s3nh@-Forte!", notes: "" });
+    expect(() => openEntryWa(kw, "v1", "e2", 2, sealed)).toThrow();
+    expect(() => openEntryWa(kw, "v1", "e1", 3, sealed)).toThrow();
+    expect(() => openEntryWa(newWaKey(), "v1", "e1", 2, sealed)).toThrow();
+  });
+
+  it("a chave do WhatsApp também fica guardada pela chave do cofre (o painel cria cópias sem o código)", () => {
+    const kw = newWaKey();
+    const enc = subkeys(newVaultKey()).enc;
+    expect(unwrapWaKeyMaster(enc, wrapWaKeyMaster(enc, kw, "v1"), "v1").equals(kw)).toBe(true);
+    expect(() => unwrapWaKeyMaster(subkeys(newVaultKey()).enc, wrapWaKeyMaster(enc, kw, "v1"), "v1")).toThrow();
   });
 });

@@ -33,8 +33,18 @@ export class VaultController {
   @UseGuards(RateLimitGuard)
   @RateLimit("vault-unlock", 20, 900)
   @Header("Cache-Control", "no-store")
-  unlock(@Request() req: any, @Body() body: { password?: string; minutes?: number; whatsapp?: boolean }) {
-    return this.vault.unlock(req.user.id, str(body?.password, "a senha mestra"), body?.minutes, body?.whatsapp === true);
+  unlock(@Request() req: any, @Body() body: { password?: string; minutes?: number }) {
+    return this.vault.unlock(req.user.id, str(body?.password, "a senha mestra"), body?.minutes);
+  }
+
+  /** Define ou troca o código de 4 dígitos da consulta pelo WhatsApp (exige a senha mestra). */
+  @Post("pin")
+  @UseGuards(RateLimitGuard)
+  @RateLimit("vault-pin", 10, 900)
+  @Header("Cache-Control", "no-store")
+  async setPin(@Request() req: any, @Body() body: { password?: string; pin?: string }) {
+    await this.vault.setPin(req.user.id, str(body?.password, "a senha mestra"), str(body?.pin, "o código de 4 dígitos"));
+    return { ok: true };
   }
 
   @Post("lock")

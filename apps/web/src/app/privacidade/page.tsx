@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 
-export const metadata: Metadata = { title: "Política de Privacidade — OpenClaw" };
+export const metadata: Metadata = { title: "Política de Privacidade — Assist.IA" };
 
 const CONTACT = process.env.NEXT_PUBLIC_CONTACT_EMAIL || "o contato de suporte informado pela empresa que atende você";
 
@@ -11,17 +11,17 @@ export default function PrivacyPage() {
       <p className="text-gray-500">Última atualização: 25 de setembro de 2026</p>
 
       <section className="space-y-2">
-        <h2 className="text-base font-semibold text-gray-200">O que é o OpenClaw</h2>
+        <h2 className="text-base font-semibold text-gray-200">O que é o Assist.IA</h2>
         <p>
-          O OpenClaw é uma plataforma de atendimento que reúne, em uma única caixa de entrada, as mensagens que empresas recebem em canais como
-          WhatsApp, e-mail e Instagram. A empresa que usa o OpenClaw (nosso cliente) decide quem atende e como.
+          O Assist.IA é uma plataforma de atendimento que reúne, em uma única caixa de entrada, as mensagens que empresas recebem em canais como
+          WhatsApp, e-mail e Instagram. A empresa que usa o Assist.IA (nosso cliente) decide quem atende e como.
         </p>
       </section>
 
       <section className="space-y-2">
         <h2 className="text-base font-semibold text-gray-200">Dados do Instagram que tratamos</h2>
         <p>
-          Quando uma empresa conecta sua conta profissional do Instagram, ela autoriza o OpenClaw, pelo login oficial do Instagram, a ler e responder
+          Quando uma empresa conecta sua conta profissional do Instagram, ela autoriza o Assist.IA, pelo login oficial do Instagram, a ler e responder
           as mensagens diretas dessa conta. Tratamos apenas:
         </p>
         <ul className="list-disc pl-6 space-y-1">

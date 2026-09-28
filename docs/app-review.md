@@ -17,7 +17,7 @@ Ao escolher *Permissões e recursos → Ações → Adicionar à análise do app
 - [x] Exclusão de dados: `https://web-production-0bb3d.up.railway.app/exclusao-de-dados`
 - [x] Termos de Serviço: `https://web-production-0bb3d.up.railway.app/termos`
 - [x] Login OAuth e webhook configurados e funcionando
-- [ ] Ícone do app (1024×1024): arquivo em `apps/web/public/brand/icon-1024.png`, soltar em Configurações do app → Básico
+- [ ] Ícone do app (1024×1024): arquivo em `apps/web/public/brand/assistia-icon-1024.png`, soltar em Configurações do app → Básico
 - [ ] Portfólio empresarial conectado e verificado
 - [ ] Login de teste no sistema para o revisor (sem 2FA), com o serviço `inbox` e `channels` liberados
 - [ ] Conta de Instagram **profissional** de teste, com papel de Testador no app, e uma segunda conta para mandar a DM

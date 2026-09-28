@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { api } from "@/lib/api";
 import { setToken, setUser } from "@/lib/auth";
+import { Logo } from "@/components/brand/Logo";
 
 export default function RegisterPage() {
   const router = useRouter();
@@ -41,7 +42,7 @@ export default function RegisterPage() {
     <div className="min-h-screen flex items-center justify-center bg-gray-950 px-4">
       <div className="w-full max-w-sm">
         <div className="text-center mb-8">
-          <h1 className="text-2xl font-bold text-teal-400 tracking-tight">openclaw</h1>
+          <h1 className="flex justify-center"><Logo size={56} className="flex-col !gap-3" textClassName="text-3xl font-bold tracking-tight text-white" /></h1>
           <p className="text-sm text-gray-500 mt-1">Crie seu workspace</p>
         </div>
 

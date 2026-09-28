@@ -98,6 +98,8 @@ export interface EntryData {
   username: string;
   password: string;
   notes: string;
+  /** consultável pelo WhatsApp (com o código de 4 dígitos); desmarque para o que só a senha mestra deve abrir */
+  whatsapp: boolean;
 }
 
 export const LIMITS = { title: 120, url: 300, username: 200, password: 500, notes: 2000, entries: 500 } as const;
@@ -105,10 +107,10 @@ export const LIMITS = { title: 120, url: 300, username: 200, password: 500, note
 /** Valida e normaliza o que veio do cliente; devolve mensagem de erro em vez de lançar. */
 export function checkEntry(raw: any): { ok: true; data: EntryData } | { ok: false; error: string } {
   const s = (v: unknown) => (typeof v === "string" ? v : "");
-  const data: EntryData = { title: s(raw?.title).trim(), url: s(raw?.url).trim(), username: s(raw?.username).trim(), password: s(raw?.password), notes: s(raw?.notes) };
+  const data: EntryData = { title: s(raw?.title).trim(), url: s(raw?.url).trim(), username: s(raw?.username).trim(), password: s(raw?.password), notes: s(raw?.notes), whatsapp: raw?.whatsapp !== false };
   if (!data.title) return { ok: false, error: "Informe o nome do site ou serviço." };
   for (const k of Object.keys(LIMITS) as (keyof typeof LIMITS)[]) {
-    if (k !== "entries" && data[k as keyof EntryData].length > LIMITS[k]) return { ok: false, error: `O campo ${k} passou de ${LIMITS[k]} caracteres.` };
+    if (k !== "entries" && (data[k as keyof EntryData] as string).length > LIMITS[k]) return { ok: false, error: `O campo ${k} passou de ${LIMITS[k]} caracteres.` };
   }
   return { ok: true, data };
 }
@@ -121,7 +123,7 @@ export function sealEntry(enc: Buffer, vaultId: string, entryId: string, seq: nu
 
 export function openEntry(enc: Buffer, vaultId: string, entryId: string, seq: number, payload: string): EntryData {
   const j = JSON.parse(open(enc, payload, entryAad(vaultId, entryId, seq)).toString("utf8"));
-  return { title: String(j.title ?? ""), url: String(j.url ?? ""), username: String(j.username ?? ""), password: String(j.password ?? ""), notes: String(j.notes ?? "") };
+  return { title: String(j.title ?? ""), url: String(j.url ?? ""), username: String(j.username ?? ""), password: String(j.password ?? ""), notes: String(j.notes ?? ""), whatsapp: j.whatsapp !== false };
 }
 
 // ─── Senha mestra ────────────────────────────────────────────────
@@ -260,4 +262,50 @@ export const resetTokenShape = (t: unknown): t is string => typeof t === "string
 export function maskEmail(email: string): string {
   const [user, domain] = email.split("@");
   return `${user.slice(0, 1)}***@${domain ?? ""}`;
+}
+
+// ─── Consulta pelo WhatsApp com código de 4 dígitos ──────────────
+//
+// 4 dígitos são só 10 mil combinações: sozinhos, não protegeriam nada de quem tivesse o banco. Por isso:
+//  - a chave do WhatsApp deriva do código MAIS um segredo que só o servidor tem (VAULT_PEPPER): quem só tem o banco não
+//    consegue nem testar os 10 mil códigos;
+//  - só as entradas marcadas "consultável pelo WhatsApp" têm cópia cifrada com essa chave; o resto exige a senha mestra;
+//  - 3 códigos errados bloqueiam o WhatsApp até o dono confirmar a senha mestra no painel.
+// Se o banco E o segredo do servidor vazarem juntos, o código cai em segundos: só as entradas do WhatsApp ficam expostas.
+
+export const MAX_PIN_ATTEMPTS = 3;
+
+/** Segredo do servidor misturado ao código (mesmo esquema de fallback dos outros segredos do projeto). */
+const pepper = () => process.env.VAULT_PEPPER || process.env.WEBHOOK_SECRET || process.env.JWT_SECRET || "change-me-in-production";
+
+/** Vazio se o código serve: 4 dígitos, sem repetição óbvia nem sequência. */
+export function pinProblem(pin: unknown): string {
+  if (typeof pin !== "string" || !/^\d{4}$/.test(pin)) return "O código precisa ter exatamente 4 números.";
+  if (/^(\d)\1{3}$/.test(pin)) return "Não use o mesmo número quatro vezes.";
+  if ("0123456789".includes(pin) || "9876543210".includes(pin)) return "Não use uma sequência como 1234.";
+  if (/^(\d\d)\1$/.test(pin)) return "Não use um par repetido como 1212.";
+  return "";
+}
+
+export const newPinSalt = () => randomBytes(16).toString("base64");
+
+export function pinKek(pin: string, saltB64: string): Promise<Buffer> {
+  const secret = createHmac("sha256", pepper()).update(`vault-pin|${pin}`).digest();
+  const N = process.env.NODE_ENV === "test" ? 2 ** 10 : 2 ** 15;
+  return new Promise((resolve, reject) =>
+    scrypt(secret, Buffer.from(saltB64, "base64"), 32, { N, r: 8, p: 1, maxmem: 64 * 1024 * 1024 }, (err, key) => (err ? reject(err) : resolve(key))),
+  );
+}
+
+export const newWaKey = () => randomBytes(32);
+export const wrapWaKeyPin = (kek: Buffer, kw: Buffer, vaultId: string) => seal(kek, kw, `wa-key-pin|${vaultId}`);
+export const unwrapWaKeyPin = (kek: Buffer, wrapped: string, vaultId: string) => open(kek, wrapped, `wa-key-pin|${vaultId}`);
+export const wrapWaKeyMaster = (enc: Buffer, kw: Buffer, vaultId: string) => seal(enc, kw, `wa-key-master|${vaultId}`);
+export const unwrapWaKeyMaster = (enc: Buffer, wrapped: string, vaultId: string) => open(enc, wrapped, `wa-key-master|${vaultId}`);
+
+export const waAad = (vaultId: string, entryId: string, seq: number) => `wa-entry|${vaultId}|${entryId}|${seq}`;
+export const sealEntryWa = (kw: Buffer, vaultId: string, entryId: string, seq: number, data: EntryData) => seal(kw, JSON.stringify({ ...data, notes: "" }), waAad(vaultId, entryId, seq)); // notas nunca vão para o WhatsApp
+export function openEntryWa(kw: Buffer, vaultId: string, entryId: string, seq: number, payload: string): EntryData {
+  const j = JSON.parse(open(kw, payload, waAad(vaultId, entryId, seq)).toString("utf8"));
+  return { title: String(j.title ?? ""), url: String(j.url ?? ""), username: String(j.username ?? ""), password: String(j.password ?? ""), notes: "", whatsapp: true };
 }

@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="color-scheme" content="light dark">
 <meta name="robots" content="noindex">
-<title>API pública do openclaw</title>
+<title>API pública do Assist.IA</title>
 <style>
   :root { --bg:#f2f7f5; --surface:#fff; --ink:#0e1f1b; --muted:#52686a; --line:#d3e2dc; --accent:#0a8a7c; --chip:#dff3ee; --chip-ink:#06564c; --warn:#a4530a; --warn-bg:#fdf0dc; }
   @media (prefers-color-scheme: dark) { :root { --bg:#08100e; --surface:#0e1a17; --ink:#e7f0ed; --muted:#92a9a3; --line:#1f342f; --accent:#2dd4bf; --chip:#113029; --chip-ink:#7ce9d8; --warn:#f5a524; --warn-bg:#2b2110; } }
@@ -33,19 +33,19 @@
 <body>
 <div class="wrap">
   <span class="badge">Implementada · v1 (fases 1 a 4)</span>
-  <h1>API pública do openclaw</h1>
-  <p>Projeto para clientes integrarem CRM, site, BI, e-mails, agenda e WhatsApp ao openclaw. Fonte: <code>docs/api-publica.md</code>.</p>
+  <h1>API pública do Assist.IA</h1>
+  <p>Projeto para clientes integrarem CRM, site, BI, e-mails, agenda e WhatsApp ao Assist.IA. Fonte: <code>docs/api-publica.md</code>.</p>
 
   <h2>Decisões tomadas</h2>
   <div class="card"><ul>
-    <li><b>Público:</b> clientes do openclaw (multi-tenant). Cada workspace gerencia as próprias chaves.</li>
+    <li><b>Público:</b> clientes do Assist.IA (multi-tenant). Cada workspace gerencia as próprias chaves.</li>
     <li><b>Integrações:</b> CRM, site, BI, e-mails (Gmail), agenda (Google Agenda) e WhatsApp.</li>
     <li><b>Base existente:</b> API NestJS <code>/api/v1</code>; o modelo <code>ApiKey</code> já existe no Prisma, sem uso; Google já é integrado por workspace.</li>
   </ul></div>
 
   <h2>Arquitetura</h2>
   <pre>Sistema externo ─► /api/public/v1/* ─► ApiKeyGuard ─► Escopo ─► Rate limit ─► Serviço de domínio
-openclaw ─► fila (Bull) ─► entregador de webhooks ─► URL do cliente (HMAC)</pre>
+Assist.IA ─► fila (Bull) ─► entregador de webhooks ─► URL do cliente (HMAC)</pre>
   <p>Módulo novo <code>public-api</code> no mesmo app, reaproveitando os serviços de domínio.</p>
 
   <h2>Segurança</h2>

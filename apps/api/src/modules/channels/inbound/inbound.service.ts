@@ -6,7 +6,7 @@ import { WhatsappWorker } from "../workers/whatsapp.worker";
 import { InstagramWorker } from "../workers/instagram.worker";
 import { InstagramEvent, parseInstagramWebhook } from "../instagram/parse";
 import { AutomationRunner } from "../../automations/automation-runner.service";
-import { agendaMedia, commandText, isVoiceOrAudio, locationOf, quotedText } from "../whatsapp/parse";
+import { agendaMedia, commandText, isVoiceOrAudio, locationOf, quotedText, redactText } from "../whatsapp/parse";
 import { isGroupOrBroadcast, phoneFromJid, samePhone, senderPhone } from "../whatsapp/phone";
 
 // Retentativas: 5 s, 30 s, 2 min, 10 min, 1 h (depois disso o evento fica FAILED para inspeção)
@@ -111,8 +111,12 @@ export class InboundService implements OnModuleInit, OnModuleDestroy {
 
   private async run(id: string, instance: string, payload: any, attempts: number) {
     try {
-      await this.process(instance, payload);
-      await prisma.inboundEvent.update({ where: { id }, data: { status: "DONE", lastError: null } });
+      const out = await this.process(instance, payload);
+      // Mensagem com código do cofre: o texto não fica gravado no registro de entrada
+      await prisma.inboundEvent.update({
+        where: { id },
+        data: { status: "DONE", lastError: null, ...(out && out.redact ? { payload: redactText(payload) as Prisma.InputJsonValue } : {}) },
+      });
     } catch (e: any) {
       const error = String(e?.message ?? e).slice(0, 500);
       this.logger.error(`Evento ${id} falhou (tentativa ${attempts}): ${error}`);
@@ -125,7 +129,7 @@ export class InboundService implements OnModuleInit, OnModuleDestroy {
   }
 
   /** Decide se a mensagem é um comando de um usuário para o assistente ou uma mensagem de cliente. */
-  private async process(instance: string, body: any) {
+  private async process(instance: string, body: any): Promise<{ redact?: boolean } | void> {
     if (instance.startsWith(IG_PREFIX)) return this.processInstagram(body as InstagramEvent);
     const data = body?.data;
     if (!data?.key) return;
@@ -155,6 +159,11 @@ export class InboundService implements OnModuleInit, OnModuleDestroy {
       let text = commandText(data.message);
       let heard = false;
       if (!text && isVoiceOrAudio(data.message)) {
+        // Esperando o código do cofre: áudio não serve (iria para a transcrição de terceiros). Nada é baixado nem enviado.
+        if (await this.assistant.awaitingPin(commander.workspaceId)) {
+          await this.assistant.sendToUser(commander, instance, "🔢 Por segurança, digite o código de 4 dígitos por *texto*, não por áudio.");
+          return;
+        }
         try {
           text = await this.assistant.transcribe(instance, data.key);
           heard = true;
@@ -167,8 +176,10 @@ export class InboundService implements OnModuleInit, OnModuleDestroy {
         }
       }
       if (text) {
-        await this.assistant.handle(commander, instance, text, { heard, quoted: quotedText(data.message) });
-        return;
+        const { redact } = await this.assistant.handle(commander, instance, text, { heard, quoted: quotedText(data.message) });
+        // No modo "mensagem para si mesmo" dá para apagar também a mensagem do código do chat
+        if (redact && data.key.fromMe) await this.assistant.wipeSoon(instance, data.key);
+        return { redact };
       }
       // Imagem ou PDF (print de convite, cartaz, post encaminhado): o assistente tenta ler os compromissos
       const media = agendaMedia(data.message);

@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 
-export const metadata: Metadata = { title: "Termos de Serviço — OpenClaw" };
+export const metadata: Metadata = { title: "Termos de Serviço — Assist.IA" };
 
 const CONTACT = process.env.NEXT_PUBLIC_CONTACT_EMAIL || "o contato de suporte informado pela empresa que atende você";
 
@@ -13,7 +13,7 @@ export default function TermsPage() {
       <section className="space-y-2">
         <h2 className="text-base font-semibold text-gray-200">1. O serviço</h2>
         <p>
-          O OpenClaw é uma plataforma de atendimento que reúne, em uma caixa de entrada, as mensagens que uma empresa recebe em canais como WhatsApp,
+          O Assist.IA é uma plataforma de atendimento que reúne, em uma caixa de entrada, as mensagens que uma empresa recebe em canais como WhatsApp,
           e-mail e Instagram, e permite que a equipe responda, organize conversas e automatize tarefas. Ao criar uma conta ou conectar um canal, você
           concorda com estes termos.
         </p>
@@ -42,7 +42,7 @@ export default function TermsPage() {
       <section className="space-y-2">
         <h2 className="text-base font-semibold text-gray-200">4. Canais de terceiros</h2>
         <p>
-          O OpenClaw depende de serviços de terceiros (como a API do Instagram e o WhatsApp). Eles têm regras próprias, podem mudar ou ficar
+          O Assist.IA depende de serviços de terceiros (como a API do Instagram e o WhatsApp). Eles têm regras próprias, podem mudar ou ficar
           indisponíveis, e podem suspender contas. Não controlamos esses serviços e não garantimos que estarão sempre disponíveis. Você pode
           desconectar um canal a qualquer momento, em Canais.
         </p>

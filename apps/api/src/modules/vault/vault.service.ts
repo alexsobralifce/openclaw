@@ -7,6 +7,7 @@ import {
   BlockOp, blockHash, checkEntry, deriveKek, EntryData, GENESIS, hashResetToken, KdfParams, LIMITS, liveEntries, maskEmail, masterPasswordProblem, newKdf,
   newRecoveryKey, newRecoverySalt, newResetToken, newVaultKey, openEntry, parseRecoveryKey, recoveryKek, resetTokenShape, sealEntry, sha256, subkeys,
   unwrapVaultKey, unwrapVaultKeyRecovery, VaultKeys, verifyChain, wipe, wrapVaultKey, wrapVaultKeyRecovery,
+  MAX_PIN_ATTEMPTS, newPinSalt, newWaKey, openEntryWa, pinKek, pinProblem, sealEntryWa, unwrapWaKeyMaster, unwrapWaKeyPin, wrapWaKeyMaster, wrapWaKeyPin,
 } from "./vault-crypto";
 
 const MAX_FAILS = 5;
@@ -14,6 +15,8 @@ const FAIL_WINDOW_MS = 15 * 60_000;
 const DEFAULT_MINUTES = 15;
 const MAX_MINUTES = 120;
 const RESET_TTL_MS = 30 * 60_000;
+/** Depois do código certo, o dono tem este tempo para escolher na lista; ao revelar uma senha o código é gasto. */
+const WA_WINDOW_MS = 2 * 60_000;
 
 /** Sem acento, minúsculas: "Instagrám" casa com "instagram". */
 const flat = (s: string) => s.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase();
@@ -25,6 +28,7 @@ export interface EntrySummary {
   username: string;
   hasPassword: boolean;
   hasNotes: boolean;
+  whatsapp: boolean;
   updatedAt: Date;
   /** não foi possível abrir: o registro foi alterado ou está corrompido */
   corrupted?: boolean;
@@ -37,6 +41,10 @@ export interface VaultStatus {
   whatsapp?: boolean;
   /** o cofre tem chave de recuperação (permite redefinir a senha mestra sem perder as senhas) */
   hasRecovery?: boolean;
+  /** já existe o código de 4 dígitos da consulta pelo WhatsApp */
+  hasPin?: boolean;
+  /** o WhatsApp foi bloqueado por códigos errados; a senha mestra no painel reativa */
+  waLocked?: boolean;
 }
 
 /** Entradas que combinam com o que o dono lembra (título, site ou usuário), as mais parecidas primeiro. */
@@ -60,7 +68,14 @@ interface Session {
   keys: VaultKeys;
   vaultId: string;
   expiresAt: number;
-  whatsapp: boolean;
+  timer: NodeJS.Timeout;
+}
+
+/** Chave do WhatsApp aberta pelo código certo: vale poucos minutos, só na memória. */
+interface WaSession {
+  kw: Buffer;
+  vaultId: string;
+  until: number;
   timer: NodeJS.Timeout;
 }
 
@@ -72,6 +87,8 @@ interface Session {
 export class VaultService {
   private readonly logger = new Logger(VaultService.name);
   private sessions = new Map<string, Session>();
+  private waSessions = new Map<string, WaSession>();
+  private waFails = new Map<string, number>();
   private kdfQueue: Promise<unknown> = Promise.resolve();
 
   constructor(private state: StateService, private google: GoogleService) {}
@@ -84,6 +101,7 @@ export class VaultService {
   }
 
   private failKey = (userId: string) => `vaultfail:${userId}`;
+  private waLockKey = (userId: string) => `vaultwalock:${userId}`;
 
   private async vaultOf(userId: string) {
     return prisma.vault.findFirst({ where: { userId }, orderBy: { createdAt: "asc" } });
@@ -123,7 +141,14 @@ export class VaultService {
     const exists = !!(await this.vaultOf(userId));
     const s = this.live(userId);
     const vault = exists ? await this.vaultOf(userId) : null;
-    return { exists, unlocked: !!s, hasRecovery: !!vault?.recoveryWrapped, ...(s ? { expiresAt: s.expiresAt, whatsapp: s.whatsapp } : {}) };
+    return {
+      exists,
+      unlocked: !!s,
+      hasRecovery: !!vault?.recoveryWrapped,
+      hasPin: !!vault?.waKeyPin,
+      waLocked: !!(await this.state.get(this.waLockKey(userId))),
+      ...(s ? { expiresAt: s.expiresAt } : {}),
+    };
   }
 
   /** Chave de recuperação nova para esta chave de cofre: cadeado extra + o texto que o dono guarda (mostrado uma vez). */
@@ -192,7 +217,7 @@ export class VaultService {
     }
   }
 
-  async unlock(userId: string, password: string, minutes = DEFAULT_MINUTES, whatsapp = false): Promise<VaultStatus> {
+  async unlock(userId: string, password: string, minutes = DEFAULT_MINUTES): Promise<VaultStatus> {
     const vault = await this.vaultOf(userId);
     if (!vault) throw new NotFoundException("Você ainda não criou o cofre.");
     const vk = await this.unwrap(userId, vault, String(password ?? ""));
@@ -202,8 +227,11 @@ export class VaultService {
     wipe(vk);
     const timer = setTimeout(() => this.destroy(userId), ms);
     timer.unref?.();
-    this.sessions.set(userId, { keys, vaultId: vault.id, expiresAt: Date.now() + ms, whatsapp: !!whatsapp, timer });
-    this.logger.log(`[AUDIT] vault_unlocked user=${userId} minutos=${ms / 60_000} whatsapp=${!!whatsapp}`);
+    this.sessions.set(userId, { keys, vaultId: vault.id, expiresAt: Date.now() + ms, timer });
+    // A senha mestra certa prova que é o dono: reativa o WhatsApp se ele tinha sido bloqueado por códigos errados
+    await this.state.del(this.waLockKey(userId));
+    this.waFails.delete(userId);
+    this.logger.log(`[AUDIT] vault_unlocked user=${userId} minutos=${ms / 60_000}`);
     return this.status(userId);
   }
 
@@ -224,9 +252,9 @@ export class VaultService {
     const out: EntrySummary[] = live.map((b) => {
       try {
         const d = openEntry(s.keys.enc, s.vaultId, b.entryId, b.seq, b.payload);
-        return { id: b.entryId, title: d.title, url: d.url, username: d.username, hasPassword: !!d.password, hasNotes: !!d.notes, updatedAt: b.createdAt };
+        return { id: b.entryId, title: d.title, url: d.url, username: d.username, hasPassword: !!d.password, hasNotes: !!d.notes, whatsapp: d.whatsapp, updatedAt: b.createdAt };
       } catch {
-        return { id: b.entryId, title: "(ilegível)", url: "", username: "", hasPassword: false, hasNotes: false, updatedAt: b.createdAt, corrupted: true };
+        return { id: b.entryId, title: "(ilegível)", url: "", username: "", hasPassword: false, hasNotes: false, whatsapp: false, updatedAt: b.createdAt, corrupted: true };
       }
     });
     return out.sort((a, b) => flat(a.title).localeCompare(flat(b.title)));
@@ -257,12 +285,22 @@ export class VaultService {
       const payload = op === "put" ? sealEntry(s.keys.enc, s.vaultId, entryId, seq, data!) : "";
       const payloadHash = sha256(payload);
       const hash = blockHash(s.keys.mac, { vaultId: s.vaultId, seq, prevHash, op, entryId, payloadHash });
+      // Cópia para a consulta pelo WhatsApp (só se a entrada permite e já existe o código): cifrada com a chave do WhatsApp
+      let waPayload = "";
+      if (op === "put" && data!.whatsapp && v.waKeyMaster) {
+        const kw = unwrapWaKeyMaster(s.keys.enc, v.waKeyMaster, s.vaultId);
+        try {
+          waPayload = sealEntryWa(kw, s.vaultId, entryId, seq, data!);
+        } finally {
+          wipe(kw);
+        }
+      }
       // Se outra gravação entrou no meio, a numeração mudou: recusa em vez de bifurcar a cadeia
       const moved = await tx.vault.updateMany({ where: { id: s.vaultId, seq: v.seq }, data: { seq, headHash: hash } });
       if (moved.count !== 1) throw new ConflictException("O cofre foi alterado ao mesmo tempo. Tente de novo.");
-      await tx.vaultBlock.create({ data: { vaultId: s.vaultId, seq, prevHash, op, entryId, payload, payloadHash, hash } });
+      await tx.vaultBlock.create({ data: { vaultId: s.vaultId, seq, prevHash, op, entryId, payload, payloadHash, waPayload, hash } });
       // O conteúdo anterior da entrada deixa de existir; a cadeia mantém só o hash dele
-      await tx.vaultBlock.updateMany({ where: { vaultId: s.vaultId, entryId, seq: { lt: seq } }, data: { payload: "" } });
+      await tx.vaultBlock.updateMany({ where: { vaultId: s.vaultId, entryId, seq: { lt: seq } }, data: { payload: "", waPayload: "" } });
       return seq;
     });
   }
@@ -499,23 +537,140 @@ export class VaultService {
     }
   }
 
-  // ─── Consulta pelo WhatsApp ───────────────────────────────────
+  // ─── Código de 4 dígitos e consulta pelo WhatsApp ─────────────
 
-  /** Só responde se o dono liberou o WhatsApp ao desbloquear no painel. Devolve resumos, nunca senhas. */
-  async lookup(userId: string, query: string): Promise<{ state: "none" | "locked" | "no_whatsapp" | "ok"; matches: { id: string; title: string; username: string; url: string }[] }> {
-    if (!(await this.vaultOf(userId))) return { state: "none", matches: [] };
-    const s = this.live(userId);
-    if (!s) return { state: "locked", matches: [] };
-    if (!s.whatsapp) return { state: "no_whatsapp", matches: [] };
-    const all = (await this.list(userId)).filter((e) => !e.corrupted);
+  private closeWa(userId: string) {
+    const w = this.waSessions.get(userId);
+    if (!w) return;
+    clearTimeout(w.timer);
+    wipe(w.kw);
+    this.waSessions.delete(userId);
+  }
+
+  private waLive(userId: string): WaSession | null {
+    const w = this.waSessions.get(userId);
+    if (!w) return null;
+    if (w.until <= Date.now()) {
+      this.closeWa(userId);
+      return null;
+    }
+    return w;
+  }
+
+  /**
+   * Define (ou troca) o código de 4 dígitos. Exige a senha mestra. Gera uma chave nova do WhatsApp e refaz as cópias das
+   * entradas marcadas: a chave antiga, se tiver vazado junto com um código antigo, não abre mais nada.
+   */
+  async setPin(userId: string, password: string, pin: string): Promise<void> {
+    const vault = await this.vaultOf(userId);
+    if (!vault) throw new NotFoundException("Você ainda não criou o cofre.");
+    const problem = pinProblem(pin);
+    if (problem) throw new BadRequestException(problem);
+    const vk = await this.unwrap(userId, vault, String(password ?? ""));
+    const keys = subkeys(vk);
+    wipe(vk);
+    const kw = newWaKey();
+    const salt = newPinSalt();
+    const kek = await this.serial(() => pinKek(pin, salt));
+    try {
+      await prisma.vault.update({ where: { id: vault.id }, data: { waSalt: salt, waKeyPin: wrapWaKeyPin(kek, kw, vault.id), waKeyMaster: wrapWaKeyMaster(keys.enc, kw, vault.id) } });
+      for (const b of liveEntries(await this.blocksOf(vault.id))) {
+        let waPayload = "";
+        try {
+          const d = openEntry(keys.enc, vault.id, b.entryId, b.seq, b.payload);
+          if (d.whatsapp) waPayload = sealEntryWa(kw, vault.id, b.entryId, b.seq, d);
+        } catch {
+          waPayload = "";
+        }
+        await prisma.vaultBlock.updateMany({ where: { vaultId: vault.id, seq: b.seq }, data: { waPayload } });
+      }
+    } finally {
+      wipe(kek, kw, keys.enc, keys.mac);
+    }
+    await this.state.del(this.waLockKey(userId));
+    this.waFails.delete(userId);
+    this.closeWa(userId);
+    this.logger.log(`[AUDIT] vault_pin_set user=${userId}`);
+  }
+
+  /**
+   * Confere o código digitado no WhatsApp. A tentativa é contada ANTES de qualquer espera, para várias tentativas
+   * simultâneas não furarem o limite; ao 3º erro seguido o WhatsApp fica bloqueado até a senha mestra ser digitada no painel.
+   */
+  async whatsappOpen(userId: string, pin: string): Promise<{ ok: true } | { ok: false; reason: "none" | "no_pin" | "locked" | "wrong"; left?: number }> {
+    const vault = await this.vaultOf(userId);
+    if (!vault) return { ok: false, reason: "none" };
+    if (!vault.waKeyPin) return { ok: false, reason: "no_pin" };
+    if (await this.state.get(this.waLockKey(userId))) return { ok: false, reason: "locked" };
+    if (typeof pin !== "string" || !/^\d{4}$/.test(pin)) return { ok: false, reason: "wrong", left: MAX_PIN_ATTEMPTS - (this.waFails.get(userId) ?? 0) };
+
+    const attempt = (this.waFails.get(userId) ?? 0) + 1;
+    this.waFails.set(userId, attempt);
+    const lockNow = async () => {
+      await this.state.set(this.waLockKey(userId), 1);
+      this.closeWa(userId);
+      this.logger.warn(`[AUDIT] vault_whatsapp_locked user=${userId}`);
+      return { ok: false as const, reason: "locked" as const };
+    };
+    if (attempt > MAX_PIN_ATTEMPTS) return lockNow();
+
+    let kw: Buffer | null = null;
+    const kek = await this.serial(() => pinKek(pin, vault.waSalt));
+    try {
+      kw = unwrapWaKeyPin(kek, vault.waKeyPin, vault.id);
+    } catch {
+      kw = null;
+    } finally {
+      wipe(kek);
+    }
+    if (!kw) {
+      this.logger.warn(`[AUDIT] vault_bad_pin user=${userId} tentativa=${attempt}`);
+      return attempt >= MAX_PIN_ATTEMPTS ? lockNow() : { ok: false, reason: "wrong", left: MAX_PIN_ATTEMPTS - attempt };
+    }
+    this.waFails.delete(userId);
+    this.closeWa(userId);
+    const timer = setTimeout(() => this.closeWa(userId), WA_WINDOW_MS);
+    timer.unref?.();
+    this.waSessions.set(userId, { kw, vaultId: vault.id, until: Date.now() + WA_WINDOW_MS, timer });
+    this.logger.log(`[AUDIT] vault_whatsapp_open user=${userId}`);
+    return { ok: true };
+  }
+
+  /** Cópias do WhatsApp abertas com a chave da janela atual. */
+  private async waEntries(w: WaSession) {
+    const out: (EntryData & { id: string })[] = [];
+    for (const b of liveEntries(await this.blocksOf(w.vaultId))) {
+      if (!b.waPayload) continue;
+      try {
+        out.push({ id: b.entryId, ...openEntryWa(w.kw, w.vaultId, b.entryId, b.seq, b.waPayload) });
+      } catch {
+        // cópia alterada: ignorada (a entrada continua no painel)
+      }
+    }
+    return out;
+  }
+
+  /** Busca entre as entradas do WhatsApp; devolve nomes, nunca senhas. Sem o código digitado antes: pin_required. */
+  async whatsappLookup(userId: string, query: string): Promise<{ state: "none" | "no_pin" | "locked" | "pin_required" | "ok"; matches: { id: string; title: string; username: string; url: string }[] }> {
+    const vault = await this.vaultOf(userId);
+    if (!vault) return { state: "none", matches: [] };
+    if (!vault.waKeyPin) return { state: "no_pin", matches: [] };
+    if (await this.state.get(this.waLockKey(userId))) return { state: "locked", matches: [] };
+    const w = this.waLive(userId);
+    if (!w) return { state: "pin_required", matches: [] };
+    const all = await this.waEntries(w);
     return { state: "ok", matches: matchEntries(all, query).map((e) => ({ id: e.id, title: e.title, username: e.username, url: e.url })) };
   }
 
-  async revealForWhatsapp(userId: string, entryId: string): Promise<EntryData | null> {
-    const s = this.live(userId);
-    if (!s?.whatsapp) return null;
-    const d = await this.open(s, entryId);
+  /** Mostra a senha e GASTA o código: a próxima consulta pede o código de novo. */
+  async whatsappReveal(userId: string, entryId: string): Promise<EntryData | "pin_required" | null> {
+    const w = this.waLive(userId);
+    if (!w) return "pin_required";
+    const entry = (await this.waEntries(w)).find((e) => e.id === entryId);
+    this.closeWa(userId);
+    if (!entry) return null;
+    const { id: _id, ...data } = entry;
     this.logger.log(`[AUDIT] vault_reveal_whatsapp user=${userId} entry=${entryId}`);
-    return d;
+    return data;
   }
 }

@@ -59,7 +59,7 @@ const state = {
 };
 
 const PW = "Correta-Horse-9!";
-const gh = { title: "GitHub", url: "https://github.com", username: "ana@x.com", password: "S3nh@-do-GitHub!", notes: "2FA no app" };
+const gh = { title: "GitHub", url: "https://github.com", username: "ana@x.com", password: "S3nh@-do-GitHub!", notes: "2FA no app", whatsapp: true };
 
 const sent: { to: string; subject: string; text: string }[] = [];
 const google = {
@@ -83,9 +83,9 @@ beforeEach(() => {
   svc = new VaultService(state as any, google as any);
 });
 
-async function ready(whatsapp = false) {
+async function ready() {
   await svc.setup("u1", "w1", PW);
-  await svc.unlock("u1", PW, 15, whatsapp);
+  await svc.unlock("u1", PW, 15);
 }
 
 describe("criar e desbloquear", () => {
@@ -94,7 +94,7 @@ describe("criar e desbloquear", () => {
     const dump = JSON.stringify(vaults);
     expect(dump).not.toContain(PW);
     expect(vaults[0].wrappedKey).toMatch(/^v1\./);
-    expect(await svc.status("u1")).toEqual({ exists: true, unlocked: false, hasRecovery: true });
+    expect(await svc.status("u1")).toEqual({ exists: true, unlocked: false, hasRecovery: true, hasPin: false, waLocked: false });
   });
 
   it("recusa senha fraca e segundo cofre", async () => {
@@ -264,32 +264,157 @@ describe("senha mestra", () => {
   });
 });
 
-describe("consulta pelo WhatsApp", () => {
-  it("responde o estado certo em cada situação", async () => {
-    expect((await svc.lookup("u1", "github")).state).toBe("none");
-    await svc.setup("u1", "w1", PW);
-    expect((await svc.lookup("u1", "github")).state).toBe("locked");
-    await svc.unlock("u1", PW, 15, false);
-    expect((await svc.lookup("u1", "github")).state).toBe("no_whatsapp");
+const PIN = "4827";
+
+describe("consulta pelo WhatsApp com código de 4 dígitos", () => {
+  async function withPin() {
+    await ready();
+    const a = await svc.save("u1", undefined, gh);
+    await svc.save("u1", undefined, { ...gh, title: "Instagram", url: "https://instagram.com", username: "ana_insta", password: "Insta#Pass-99" });
+    await svc.save("u1", undefined, { ...gh, title: "Banco", username: "12345", password: "Banco#Segredo-77", whatsapp: false });
+    await svc.setPin("u1", PW, PIN);
+    svc.lock("u1"); // o painel pode estar trancado: o WhatsApp não depende dele
+    return a.id;
+  }
+
+  it("define o código só com a senha mestra e recusa códigos fracos", async () => {
+    await ready();
+    await expect(svc.setPin("u1", "Errada-Horse-9!!", PIN)).rejects.toThrow("incorreta");
+    for (const bad of ["123", "12345", "abcd", "1111", "1234", "4321", "1212"]) await expect(svc.setPin("u1", PW, bad)).rejects.toThrow();
+    await svc.setPin("u1", PW, PIN);
+    expect((await svc.status("u1")).hasPin).toBe(true);
   });
 
-  it("com o WhatsApp liberado, acha sem acento e sem revelar a senha na busca", async () => {
-    await ready(true);
-    const a = await svc.save("u1", undefined, gh);
-    await svc.save("u1", undefined, { ...gh, title: "Instagram", url: "https://instagram.com", username: "ana_insta" });
-    const r = await svc.lookup("u1", "instagrám");
+  it("responde o estado certo antes do código", async () => {
+    expect((await svc.whatsappLookup("u1", "github")).state).toBe("none");
+    await svc.setup("u1", "w1", PW);
+    expect((await svc.whatsappLookup("u1", "github")).state).toBe("no_pin");
+    await svc.unlock("u1", PW);
+    await svc.setPin("u1", PW, PIN);
+    expect((await svc.whatsappLookup("u1", "github")).state).toBe("pin_required");
+    expect(await svc.whatsappReveal("u1", "qualquer")).toBe("pin_required");
+  });
+
+  it("com o cofre trancado no painel, o código certo abre; lista sem senhas; revelar gasta o código", async () => {
+    const id = await withPin();
+    expect((await svc.status("u1")).unlocked).toBe(false);
+    expect(await svc.whatsappOpen("u1", PIN)).toEqual({ ok: true });
+    const r = await svc.whatsappLookup("u1", "instagrám");
     expect(r.state).toBe("ok");
     expect(r.matches.map((m) => m.title)).toEqual(["Instagram"]);
-    expect(JSON.stringify(r)).not.toContain(gh.password);
-    expect((await svc.revealForWhatsapp("u1", a.id))?.password).toBe(gh.password);
+    expect(JSON.stringify(r)).not.toContain("Insta#Pass");
+
+    const gh1 = await svc.whatsappReveal("u1", id);
+    expect(gh1).toMatchObject({ title: "GitHub", password: gh.password });
+    expect(JSON.stringify(gh1)).not.toContain("2FA"); // notas nunca vão para o WhatsApp
+    expect(await svc.whatsappReveal("u1", id)).toBe("pin_required"); // gasto: pede o código de novo
+    expect((await svc.whatsappLookup("u1", "github")).state).toBe("pin_required");
   });
 
-  it("sem a liberação do WhatsApp ou bloqueado, não revela", async () => {
-    await ready(false);
-    const { id } = await svc.save("u1", undefined, gh);
-    expect(await svc.revealForWhatsapp("u1", id)).toBeNull();
-    svc.lock("u1");
-    expect(await svc.revealForWhatsapp("u1", id)).toBeNull();
+  it("entradas não marcadas para o WhatsApp só existem no painel", async () => {
+    await withPin();
+    await svc.whatsappOpen("u1", PIN);
+    expect((await svc.whatsappLookup("u1", "banco")).matches).toEqual([]);
+    expect(blocks.filter((b) => b.waPayload).length).toBe(2);
+  });
+
+  it("entradas salvas depois do código também ganham cópia; editar desmarcando remove", async () => {
+    await withPin();
+    await svc.unlock("u1", PW);
+    const { id } = await svc.save("u1", undefined, { ...gh, title: "Spotify", password: "Spot#Pass-55" });
+    await svc.whatsappOpen("u1", PIN);
+    expect((await svc.whatsappLookup("u1", "spotify")).matches).toHaveLength(1);
+    await svc.save("u1", id, { ...gh, title: "Spotify", password: "Spot#Pass-55", whatsapp: false });
+    await svc.whatsappOpen("u1", PIN);
+    expect((await svc.whatsappLookup("u1", "spotify")).matches).toEqual([]);
+  });
+
+  it("nada legível no banco, nem nas cópias do WhatsApp", async () => {
+    await withPin();
+    const dump = JSON.stringify([vaults, blocks]);
+    for (const secret of [gh.password, "Insta#Pass", "ana_insta", PIN]) expect(dump).not.toContain(secret);
+  });
+
+  it("código errado: conta, avisa quantas restam e no 3º bloqueia o WhatsApp", async () => {
+    await withPin();
+    expect(await svc.whatsappOpen("u1", "1357")).toEqual({ ok: false, reason: "wrong", left: 2 });
+    expect(await svc.whatsappOpen("u1", "2468")).toEqual({ ok: false, reason: "wrong", left: 1 });
+    expect(await svc.whatsappOpen("u1", "9753")).toEqual({ ok: false, reason: "locked" });
+    // bloqueado: nem o código certo funciona
+    expect(await svc.whatsappOpen("u1", PIN)).toEqual({ ok: false, reason: "locked" });
+    expect((await svc.whatsappLookup("u1", "github")).state).toBe("locked");
+    expect((await svc.status("u1")).waLocked).toBe(true);
+  });
+
+  it("a senha mestra no painel reativa o WhatsApp", async () => {
+    await withPin();
+    for (const p of ["1357", "2468", "9753"]) await svc.whatsappOpen("u1", p);
+    await svc.unlock("u1", PW);
+    expect((await svc.status("u1")).waLocked).toBe(false);
+    expect(await svc.whatsappOpen("u1", PIN)).toEqual({ ok: true });
+  });
+
+  it("um acerto zera a contagem de erros", async () => {
+    await withPin();
+    await svc.whatsappOpen("u1", "1357");
+    await svc.whatsappOpen("u1", "2468");
+    expect(await svc.whatsappOpen("u1", PIN)).toEqual({ ok: true });
+    expect(await svc.whatsappOpen("u1", "1357")).toEqual({ ok: false, reason: "wrong", left: 2 });
+  });
+
+  it("tentativas simultâneas não furam o limite", async () => {
+    await withPin();
+    const guesses = ["1357", "2468", "9753", "1590", "6420", "7913", PIN];
+    const results = await Promise.all(guesses.map((g) => svc.whatsappOpen("u1", g)));
+    expect(results.filter((r) => r.ok)).toHaveLength(0); // o código certo, na 7ª tentativa, já não passa
+    expect((await svc.status("u1")).waLocked).toBe(true);
+  });
+
+  it("sem o segredo do servidor, o código não abre nada (quem só tem o banco não testa os 10 mil códigos)", async () => {
+    await withPin();
+    const prev = process.env.VAULT_PEPPER;
+    process.env.VAULT_PEPPER = "outro-segredo";
+    try {
+      expect(await svc.whatsappOpen("u1", PIN)).toMatchObject({ ok: false, reason: "wrong" });
+    } finally {
+      if (prev === undefined) delete process.env.VAULT_PEPPER;
+      else process.env.VAULT_PEPPER = prev;
+    }
+  });
+
+  it("trocar o código gera chave nova: o código antigo deixa de valer", async () => {
+    await withPin();
+    await svc.setPin("u1", PW, "7391");
+    expect((await svc.whatsappOpen("u1", PIN)).ok).toBe(false);
+    expect(await svc.whatsappOpen("u1", "7391")).toEqual({ ok: true });
+    expect((await svc.whatsappLookup("u1", "github")).matches).toHaveLength(1);
+  });
+
+  it("formato inválido não gasta tentativa", async () => {
+    await withPin();
+    expect(await svc.whatsappOpen("u1", "12")).toMatchObject({ ok: false, reason: "wrong" });
+    expect(await svc.whatsappOpen("u1", "abcd")).toMatchObject({ ok: false, reason: "wrong" });
+    expect(await svc.whatsappOpen("u1", "1357")).toEqual({ ok: false, reason: "wrong", left: 2 });
+  });
+
+  it("redefinir a senha mestra com a chave de recuperação mantém o código e as cópias do WhatsApp", async () => {
+    const { recoveryKey } = await svc.setup("u1", "w1", PW);
+    await svc.unlock("u1", PW);
+    await svc.save("u1", undefined, gh);
+    await svc.setPin("u1", PW, PIN);
+    await svc.requestReset("u1");
+    await svc.recoverWithKey("u1", linkToken(), recoveryKey, "Nova-Frase-Forte-3!");
+    expect(await svc.whatsappOpen("u1", PIN)).toEqual({ ok: true });
+    expect((await svc.whatsappLookup("u1", "github")).matches).toHaveLength(1);
+  });
+
+  it("recomeçar com cofre vazio apaga também o código: é preciso definir outro", async () => {
+    await svc.setup("u1", "w1", PW);
+    await svc.unlock("u1", PW);
+    await svc.setPin("u1", PW, PIN);
+    await svc.requestReset("u1");
+    await svc.resetEmpty("u1", linkToken(), "APAGAR", "Nova-Frase-Forte-3!");
+    expect((await svc.whatsappLookup("u1", "github")).state).toBe("no_pin");
   });
 });
 

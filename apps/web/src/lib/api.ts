@@ -80,7 +80,7 @@ export const api = {
     create: (data: any) => request<any>("/contacts", { method: "POST", body: JSON.stringify(data) }),
   },
   vault: {
-    status: () => request<{ exists: boolean; unlocked: boolean; hasRecovery?: boolean; expiresAt?: number; whatsapp?: boolean }>("/vault/status"),
+    status: () => request<{ exists: boolean; unlocked: boolean; hasRecovery?: boolean; hasPin?: boolean; waLocked?: boolean; expiresAt?: number }>("/vault/status"),
     setup: (password: string) => request<{ recoveryKey: string }>("/vault/setup", { method: "POST", body: JSON.stringify({ password }) }),
     requestReset: () => request<{ sentTo: string; expiresMinutes: number }>("/vault/recovery/request", { method: "POST" }),
     recover: (token: string, recoveryKey: string, newPassword: string) =>
@@ -88,8 +88,9 @@ export const api = {
     resetEmpty: (token: string, confirm: string, newPassword: string) =>
       request<{ recoveryKey: string }>("/vault/recovery/reset", { method: "POST", body: JSON.stringify({ token, confirm, newPassword }) }),
     newRecoveryKey: (password: string) => request<{ recoveryKey: string }>("/vault/recovery-key", { method: "POST", body: JSON.stringify({ password }) }),
-    unlock: (password: string, minutes: number, whatsapp: boolean) =>
-      request<any>("/vault/unlock", { method: "POST", body: JSON.stringify({ password, minutes, whatsapp }) }),
+    unlock: (password: string, minutes: number) =>
+      request<any>("/vault/unlock", { method: "POST", body: JSON.stringify({ password, minutes }) }),
+    setPin: (password: string, pin: string) => request<any>("/vault/pin", { method: "POST", body: JSON.stringify({ password, pin }) }),
     lock: () => request<any>("/vault/lock", { method: "POST" }),
     list: () => request<any[]>("/vault/entries"),
     reveal: (id: string) => request<any>(`/vault/entries/${id}`),

@@ -30,7 +30,7 @@ export function openApiSpec() {
   return {
     openapi: "3.0.3",
     info: {
-      title: "API pública do openclaw",
+      title: "API pública do Assist.IA",
       version: "1.0.0",
       description:
         "Integre CRM, site, BI, e-mail, agenda e WhatsApp ao openclaw. Autentique com `Authorization: Bearer oc_live_…` (crie a chave no painel, com os escopos mínimos necessários). Listas usam paginação por cursor (`nextCursor`) e ordenam por atualização crescente. Erros: `{ error: { code, message } }`.\n\n**Webhooks:** cada entrega leva `X-OpenClaw-Signature: t=<unix>,v1=<HMAC-SHA256 hex de \"t.corpo\" com o segredo whsec_…>`. Rejeite entregas com `t` muito antigo (recomendado: 5 minutos).",

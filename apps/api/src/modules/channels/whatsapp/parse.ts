@@ -114,3 +114,14 @@ export function quotedText(message: any): string {
   const inner = unwrap(q);
   return String(inner?.conversation || inner?.extendedTextMessage?.text || inner?.imageMessage?.caption || inner?.videoMessage?.caption || "").slice(0, 4000);
 }
+
+/** Cópia do evento com o texto da mensagem trocado: o registro de entrada não guarda códigos digitados. */
+export function redactText(body: any, replacement = "[código ocultado]"): any {
+  const copy = JSON.parse(JSON.stringify(body ?? {}));
+  const msg = copy?.data?.message;
+  if (msg) {
+    if (typeof msg.conversation === "string") msg.conversation = replacement;
+    if (msg.extendedTextMessage) msg.extendedTextMessage.text = replacement;
+  }
+  return copy;
+}

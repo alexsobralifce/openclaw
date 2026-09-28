@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 
-export const metadata: Metadata = { title: "Exclusão de dados — OpenClaw" };
+export const metadata: Metadata = { title: "Exclusão de dados — Assist.IA" };
 
 const CONTACT = process.env.NEXT_PUBLIC_CONTACT_EMAIL || "o contato de suporte informado pela empresa que atende você";
 
@@ -12,9 +12,9 @@ export default function DataDeletionPage() {
       <section className="space-y-2">
         <h2 className="text-base font-semibold text-gray-200">Se você é uma empresa que conectou o Instagram</h2>
         <ol className="list-decimal pl-6 space-y-1">
-          <li>Entre no OpenClaw e abra <strong>Canais</strong>.</li>
-          <li>No canal do Instagram, clique em <strong>Remover</strong>. O token de acesso é apagado e o OpenClaw deixa de receber mensagens da conta.</li>
-          <li>Opcionalmente, no Instagram, vá em Configurações › Site e apps (ou Apps e sites) e remova o OpenClaw.</li>
+          <li>Entre no Assist.IA e abra <strong>Canais</strong>.</li>
+          <li>No canal do Instagram, clique em <strong>Remover</strong>. O token de acesso é apagado e o Assist.IA deixa de receber mensagens da conta.</li>
+          <li>Opcionalmente, no Instagram, vá em Configurações › Site e apps (ou Apps e sites) e remova o Assist.IA.</li>
           <li>Para apagar também as conversas e contatos guardados, peça a exclusão por e-mail (abaixo).</li>
         </ol>
       </section>

@@ -289,6 +289,10 @@ export class MenuService {
       }
 
       // Cofre de senhas: a lista só tem nomes; a senha só aparece ao escolher um item
+      case "vault_pin_input": {
+        if (n === 0) return this.mainMenu(ws, false);
+        return this.vaultPin(ws, d, text);
+      }
       case "vault": {
         if (n === 0) return this.mainMenu(ws, false);
         if (n === null) return null;
@@ -687,7 +691,7 @@ export class MenuService {
     const { labels } = await this.setMain(ws);
     const h = Number(new Date().toLocaleString("en-GB", { timeZone: TZ, hour: "2-digit", hour12: false }));
     const [icon, saud] = h < 12 ? ["☀️", "Bom dia"] : h < 18 ? ["🌤️", "Boa tarde"] : ["🌙", "Boa noite"];
-    const title = greet ? `${saud}! Sou seu assistente` : "Menu principal";
+    const title = greet ? `${saud}! Sou o Assist.IA` : "Menu principal";
     const items = labels.map((l, i) => `${key(i + 1)} ${l.icon} ${l.label}${l.sub ? `\n     _${l.sub}_` : ""}`);
     return [head(greet ? icon : "🏠", title, "O que vamos ver agora?"), ...(await this.contextLines(ws, greet)), items.join("\n"), foot("Responda com o número, escreva ou mande um áudio 🎙️"), "🚗 _Vai dirigir? Diga *modo carro* e eu respondo em texto para o carro ler em voz alta._"].join("\n");
   }
@@ -910,43 +914,62 @@ export class MenuService {
     return !!v;
   }
 
+  /** Marca a mensagem atual como contendo um código digitado: o registro de entrada a esconde depois. */
+  private async markRedact(ws: string) {
+    await this.state.set(`redact:${ws}`, 1, 60_000);
+  }
+
+  async takeRedact(ws: string): Promise<boolean> {
+    const v = await this.state.get(`redact:${ws}`);
+    if (v) await this.state.del(`redact:${ws}`);
+    return !!v;
+  }
+
+  /** O assistente está esperando o código de 4 dígitos? (Áudio não vale: seria enviado à transcrição.) */
+  async awaitingPin(ws: string): Promise<boolean> {
+    return (await this.state.get<State>(this.key(ws)))?.screen === "vault_pin_input";
+  }
+
   private async vaultHome(ws: string) {
     const uid = await this.ownerId(ws);
     if (!this.vault || !uid) return "🔐 O cofre não está disponível agora.";
     const st = await this.vault.status(uid);
     const state = !st.exists
       ? "Você ainda não criou o cofre. Crie no painel, em *Cofre de senhas*."
-      : !st.unlocked
-        ? "🔒 *Bloqueado.* No painel, digite a senha mestra e marque *Liberar consulta pelo WhatsApp*."
-        : st.whatsapp
-          ? `🔓 *Liberado para o WhatsApp* até ${new Date(st.expiresAt!).toLocaleTimeString("pt-BR", { timeZone: TZ, hour: "2-digit", minute: "2-digit" })}.`
-          : "🔓 Aberto no painel, mas *sem* liberar o WhatsApp. Desbloqueie de novo marcando a opção de liberar.";
+      : !st.hasPin
+        ? "⚙️ Falta definir o *código de 4 dígitos* no painel (Cofre de senhas). Com ele você consulta por aqui."
+        : st.waLocked
+          ? "🔒 *WhatsApp bloqueado* por códigos errados. No painel, digite a senha mestra para reativar."
+          : "✅ *Pronto para consulta.*";
     await this.setMain(ws);
     return [
       head("🔐", "Cofre de senhas"),
       state,
       DIV,
-      'Peça, por exemplo: *senha do github*. Para trancar agora: *bloquear cofre*.',
-      "_Cadastro e edição de senhas só no painel: aqui a senha nunca é digitada, só consultada. A resposta some do chat em ~1 minuto._",
+      "Peça, por exemplo: *senha do github*. Eu peço o código de 4 dígitos e mostro a senha.",
+      "_Só as entradas marcadas como consultáveis pelo WhatsApp aparecem aqui. A resposta some do chat em ~1 minuto._",
     ].join("\n");
   }
 
-  private vaultLock(ws: string) {
-    return this.ownerId(ws).then((uid) => {
-      if (uid) this.vault?.lock(uid);
-      return "🔒 *Cofre bloqueado.*";
-    });
+  private vaultLock(_ws: string) {
+    return "🔒 Aqui não há o que trancar: o WhatsApp sempre pede o código. Para trancar o painel, use *Bloquear agora* lá.";
+  }
+
+  private async askPin(ws: string, then: { type: "query"; query: string } | { type: "reveal"; id: string }, note = "") {
+    await this.set(ws, "vault_pin_input", { then });
+    return [`🔢 *Digite seu código de 4 dígitos* para abrir o cofre.${note ? `\n${note}` : ""}`, "_Escreva os números (não mande áudio). Digite 0 para cancelar._"].join("\n");
   }
 
   private async vaultLookup(ws: string, query: string): Promise<string> {
     if (await this.isCar(ws)) return "🚗 Por segurança, não leio senhas em voz alta no modo carro. Desligue o modo carro para consultar.";
     const uid = await this.ownerId(ws);
     if (!this.vault || !uid) return "🔐 O cofre não está disponível agora.";
-    const r = await this.vault.lookup(uid, query);
+    const r = await this.vault.whatsappLookup(uid, query);
     if (r.state === "none") return "🔐 Você ainda não criou o cofre. Crie no painel, em *Cofre de senhas*.";
-    if (r.state === "locked") return "🔒 *O cofre está bloqueado.* No painel, em *Cofre de senhas*, digite a senha mestra e marque *Liberar consulta pelo WhatsApp*.";
-    if (r.state === "no_whatsapp") return "🔒 O cofre está aberto no painel, mas sem liberar o WhatsApp. Desbloqueie de novo marcando *Liberar consulta pelo WhatsApp*.";
-    if (!r.matches.length) return `🤔 Não achei nada parecido com *${short(query, 40)}* no cofre.`;
+    if (r.state === "no_pin") return "⚙️ Falta definir o *código de 4 dígitos*. No painel, em *Cofre de senhas*, defina-o e volte aqui.";
+    if (r.state === "locked") return "🔒 *WhatsApp bloqueado* por códigos errados. No painel, em *Cofre de senhas*, digite a senha mestra para reativar.";
+    if (r.state === "pin_required") return this.askPin(ws, { type: "query", query });
+    if (!r.matches.length) return `🤔 Não achei nada parecido com *${short(query, 40)}* entre as entradas liberadas para o WhatsApp.`;
     if (r.matches.length === 1) return this.vaultReveal(ws, r.matches[0].id);
     await this.set(ws, "vault", { items: r.matches.map((m) => ({ id: m.id })) });
     const rows = r.matches.map((m, i) => `${key(i + 1)} 🔑 *${short(m.title, 40)}*${m.username ? `\n     _${short(m.username, 40)}_` : ""}`);
@@ -959,12 +982,13 @@ export class MenuService {
     if (!this.vault || !uid) return "🔐 O cofre não está disponível agora.";
     let d;
     try {
-      d = await this.vault.revealForWhatsapp(uid, entryId);
+      d = await this.vault.whatsappReveal(uid, entryId);
     } catch (e: any) {
       this.logger.warn(`Cofre: não abriu a entrada: ${e.message}`);
-      return "😕 Não consegui abrir essa entrada. Use *Verificar integridade* no painel.";
+      return "😕 Não consegui abrir essa entrada. Tente pelo painel.";
     }
-    if (!d) return "🔒 O cofre foi bloqueado. Desbloqueie no painel marcando *Liberar consulta pelo WhatsApp*.";
+    if (d === "pin_required") return this.askPin(ws, { type: "reveal", id: entryId });
+    if (!d) return "🤔 Essa entrada não está disponível pelo WhatsApp.";
     await this.markSecret(ws);
     await this.setMain(ws);
     return [
@@ -974,6 +998,27 @@ export class MenuService {
       d.url ? `🔗 ${short(d.url, 80)}` : "",
       "⏱️ _Apago esta mensagem do chat em cerca de 1 minuto._",
     ].filter(Boolean).join("\n");
+  }
+
+  /** Recebe o código digitado, confere e segue com o que estava pendente (buscar ou mostrar). */
+  private async vaultPin(ws: string, d: any, text: string): Promise<string> {
+    const raw = text.trim();
+    if (!/^\d{4}$/.test(raw)) return "🔢 O código tem *4 números*. Digite de novo, ou 0 para cancelar.";
+    await this.markRedact(ws);
+    const uid = await this.ownerId(ws);
+    if (!this.vault || !uid) return "🔐 O cofre não está disponível agora.";
+    const r = await this.vault.whatsappOpen(uid, raw);
+    if (r.ok) return d.then.type === "reveal" ? this.vaultReveal(ws, d.then.id) : this.vaultLookup(ws, d.then.query);
+    if (r.reason === "locked") {
+      await this.setMain(ws);
+      return "🔒 *WhatsApp bloqueado* por códigos errados. No painel, em *Cofre de senhas*, digite a senha mestra para reativar.";
+    }
+    if (r.reason === "no_pin" || r.reason === "none") {
+      await this.setMain(ws);
+      return "⚙️ Defina o *código de 4 dígitos* no painel, em *Cofre de senhas*.";
+    }
+    const left = r.left ?? 0;
+    return `❌ *Código incorreto.* ${left === 1 ? "Resta 1 tentativa" : `Restam ${left} tentativas`} antes de bloquear.\nDigite de novo, ou 0 para cancelar.`;
   }
 
   // Configurações

@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { clearToken } from "@/lib/auth";
 import { hasService, isAdmin, useMe } from "@/hooks/useMe";
+import { Logo } from "@/components/brand/Logo";
 
 // service: serviço que precisa estar liberado para o item aparecer; admin: só ROOT/ADMIN
 const nav: { href: string; label: string; icon: React.ReactNode; service?: string; admin?: boolean }[] = [
@@ -108,7 +109,7 @@ export function Sidebar() {
     <aside className="w-[220px] flex-shrink-0 flex flex-col border-r border-gray-800 bg-gray-900">
       {/* Logo */}
       <div className="h-14 flex items-center px-5 border-b border-gray-800">
-        <span className="font-bold text-lg text-teal-400 tracking-tight">openclaw</span>
+        <Logo size={30} textClassName="font-bold text-lg tracking-tight text-white" />
       </div>
 
       {/* Workspace badge */}

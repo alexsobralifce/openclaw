@@ -73,7 +73,7 @@ export class WebhooksService implements OnModuleInit, OnModuleDestroy {
 
   async test(workspaceId: string, id: string) {
     const ep = await this.find(workspaceId, id);
-    await this.enqueue(ep.id, "webhook.test", { message: "Evento de teste do openclaw" });
+    await this.enqueue(ep.id, "webhook.test", { message: "Evento de teste do Assist.IA" });
     return { ok: true };
   }
 

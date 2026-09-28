@@ -68,3 +68,17 @@ describe("mídia e citação para a agenda", () => {
     expect(quotedText({ conversation: "sem citação" })).toBe("");
   });
 });
+
+import { redactText } from "../src/modules/channels/whatsapp/parse";
+
+describe("registro de entrada sem códigos", () => {
+  it("troca o texto da mensagem e não altera o original", () => {
+    const body = { event: "messages.upsert", data: { key: { id: "A" }, message: { conversation: "4827" } } };
+    const out = redactText(body);
+    expect(out.data.message.conversation).toBe("[código ocultado]");
+    expect(out.data.key.id).toBe("A");
+    expect(body.data.message.conversation).toBe("4827");
+    expect(redactText({ data: { message: { extendedTextMessage: { text: "4827" } } } }).data.message.extendedTextMessage.text).toBe("[código ocultado]");
+    expect(redactText(undefined)).toEqual({});
+  });
+});

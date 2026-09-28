@@ -376,6 +376,11 @@ model Vault {
   // Segundo cadeado da mesma chave, aberto pela chave de recuperação do dono (vazio se ainda não existir)
   recoverySalt    String @default("")
   recoveryWrapped String @default("")
+  // Consulta pelo WhatsApp com código de 4 dígitos: chave própria (waKey), guardada de dois jeitos — cifrada pelo código
+  // somado a um segredo do servidor (waKeyPin) e cifrada pela chave do cofre (waKeyMaster, para o painel criar cópias)
+  waSalt      String @default("")
+  waKeyPin    String @default("")
+  waKeyMaster String @default("")
   seq         Int      @default(0)
   headHash    String   @default("")
   createdAt   DateTime @default(now())
@@ -393,6 +398,8 @@ model VaultBlock {
   entryId     String
   payload     String   @default("")
   payloadHash String
+  // Cópia da entrada cifrada com a chave do WhatsApp (fora da cadeia: é derivada; vazia se a entrada não é consultável por lá)
+  waPayload   String   @default("")
   hash        String
   createdAt   DateTime @default(now())
 
