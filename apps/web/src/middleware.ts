@@ -1,18 +1,19 @@
 import { NextRequest, NextResponse } from "next/server";
 
-const PUBLIC = ["/auth/login", "/auth/register", "/"];
+// Só o login e o cadastro são abertos. (Antes a lista tinha "/", e como toda rota começa com "/", nada era protegido.)
+const isPublic = (pathname: string) => pathname === "/auth/login" || pathname === "/auth/register" || pathname.startsWith("/auth/");
 
 export function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl;
-  const isPublic = PUBLIC.some((p) => pathname.startsWith(p));
   const token = req.cookies.get("oc_token")?.value;
 
-  if (!isPublic && !token) {
+  if (!isPublic(pathname) && !token) {
     return NextResponse.redirect(new URL("/auth/login", req.url));
   }
   return NextResponse.next();
 }
 
+// Só o painel passa por aqui; a landing, o login e os arquivos públicos ficam de fora.
 export const config = {
   matcher: ["/dashboard/:path*"],
 };
