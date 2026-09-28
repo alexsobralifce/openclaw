@@ -1,3 +1,30 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+/* ── Celular ─────────────────────────────────────────────────────────────── */
+html {
+  -webkit-text-size-adjust: 100%;
+  -webkit-tap-highlight-color: transparent;
+}
+button, a, input, select, textarea, label {
+  touch-action: manipulation; /* sem espera de 300 ms nem zoom ao tocar duas vezes */
+}
+
+@media (max-width: 767px) {
+  /* iOS dá zoom ao focar campos com fonte menor que 16 px */
+  input, select, textarea {
+    font-size: 16px !important;
+  }
+}
+
+/* Dedo, não mouse: alvos de toque de pelo menos 44 px (botões pequenos ficam mais fáceis de acertar) */
+@media (pointer: coarse) and (max-width: 767px) {
+  button:not([role="tab"]), select, input:not([type="checkbox"]):not([type="radio"]), a[role="button"] {
+    min-height: 44px;
+  }
+  input[type="checkbox"], input[type="radio"] {
+    width: 20px;
+    height: 20px;
+  }
+}

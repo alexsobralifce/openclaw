@@ -11,9 +11,12 @@ const STATUS_LABEL: Record<string, string> = { OPEN: "Aberto", PENDING: "Pendent
 
 type Filter = "TODOS" | "OPEN" | "PENDING";
 
-interface Props { activeId?: string; }
+interface Props { activeId?: string;
+  /** No celular a lista e o chat são telas separadas: no chat, a lista some. */
+  hideOnMobile?: boolean;
+}
 
-export function ConversationList({ activeId }: Props) {
+export function ConversationList({ activeId, hideOnMobile = false }: Props) {
   const [conversations, setConversations] = useState<any[]>([]);
   const [filter, setFilter] = useState<Filter>("TODOS");
 
@@ -64,7 +67,7 @@ export function ConversationList({ activeId }: Props) {
     : conversations.filter((c) => c.status === filter);
 
   return (
-    <div className="w-[300px] flex-shrink-0 flex flex-col border-r border-gray-800 bg-gray-900">
+    <div className={`${hideOnMobile ? "hidden md:flex" : "flex"} w-full md:w-[300px] md:flex-shrink-0 flex-col border-r border-gray-800 bg-gray-900`}>
       <div className="h-14 flex items-center justify-between px-4 border-b border-gray-800">
         <h2 className="text-sm font-semibold text-gray-200">Conversas</h2>
         <button className="text-gray-500 hover:text-gray-300 transition-colors p-1 rounded">

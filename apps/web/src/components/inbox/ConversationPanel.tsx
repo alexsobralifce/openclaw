@@ -124,7 +124,7 @@ export function ConversationPanel({ conversationId }: Props) {
   return (
     <div className="flex flex-1 overflow-hidden">
       {/* Chat */}
-      <div className="flex flex-col flex-1 overflow-hidden">
+      <div className="flex flex-col flex-1 min-w-0 overflow-hidden">
         {confirmDelete && (
           <div className="flex-shrink-0 px-5 py-3 border-b border-red-500/30 bg-red-500/5 text-xs text-gray-300 space-y-2">
             <p>Excluir esta conversa e todas as mensagens? Isso não pode ser desfeito.</p>
@@ -153,8 +153,15 @@ export function ConversationPanel({ conversationId }: Props) {
         )}
 
         {/* Header */}
-        <div className="h-14 flex items-center justify-between px-5 border-b border-gray-800 bg-gray-900 flex-shrink-0">
-          <div className="flex items-center gap-3">
+        <div className="min-h-14 flex flex-wrap items-center justify-between gap-y-2 px-3 md:px-5 py-2 md:py-0 border-b border-gray-800 bg-gray-900 flex-shrink-0">
+          <div className="flex items-center gap-3 min-w-0">
+            <button
+              onClick={() => router.push("/dashboard/inbox")}
+              aria-label="Voltar para as conversas"
+              className="md:hidden -ml-1 p-2 rounded-lg text-gray-400 active:bg-gray-800"
+            >
+              <svg width="20" height="20" fill="none" viewBox="0 0 24 24"><path d="m15 18-6-6 6-6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" /></svg>
+            </button>
             <div className="w-8 h-8 rounded-full bg-indigo-600 flex items-center justify-center text-sm font-bold text-white">
               {contact.name?.[0] ?? "?"}
             </div>
@@ -166,7 +173,7 @@ export function ConversationPanel({ conversationId }: Props) {
               </p>
             </div>
           </div>
-          <div className="flex items-center gap-1">
+          <div className="flex flex-wrap items-center gap-1">
             <button
               onClick={() => { setConfirmDelete(true); setDeleteError(""); }}
               className="px-3 py-1.5 rounded-lg text-xs font-medium bg-red-500/10 text-red-400 hover:bg-red-500/20 transition-colors"
@@ -204,7 +211,7 @@ export function ConversationPanel({ conversationId }: Props) {
         </div>
 
         {/* Messages */}
-        <div className="flex-1 overflow-y-auto px-5 py-4 space-y-3 bg-gray-950">
+        <div className="flex-1 overflow-y-auto px-3 md:px-5 py-4 space-y-3 bg-gray-950">
           {messages.map((msg) => {
             const out = msg.direction === "OUTBOUND";
             const optimistic = msg.id?.startsWith("opt_");
@@ -212,7 +219,7 @@ export function ConversationPanel({ conversationId }: Props) {
               <div key={msg.id} className={`flex ${out ? "justify-end" : "justify-start"}`}>
                 <div>
                   <div
-                    className={`max-w-[70%] px-4 py-2.5 rounded-2xl text-sm leading-relaxed ${
+                    className={`max-w-[85%] md:max-w-[70%] px-4 py-2.5 rounded-2xl text-sm leading-relaxed ${
                       out
                         ? `bg-teal-600 text-white rounded-br-sm ${optimistic ? "opacity-70" : ""}`
                         : "bg-gray-800 text-gray-200 rounded-bl-sm"
@@ -274,7 +281,7 @@ export function ConversationPanel({ conversationId }: Props) {
       </div>
 
       {/* Contact panel */}
-      <div className="w-[240px] flex-shrink-0 border-l border-gray-800 bg-gray-900 overflow-y-auto">
+      <div className="hidden lg:block w-[240px] flex-shrink-0 border-l border-gray-800 bg-gray-900 overflow-y-auto">
         <div className="p-4 border-b border-gray-800">
           <div className="flex flex-col items-center text-center">
             <div className="w-14 h-14 rounded-full bg-indigo-600 flex items-center justify-center text-xl font-bold text-white mb-3">

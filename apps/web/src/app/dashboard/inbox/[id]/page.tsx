@@ -5,7 +5,7 @@ export default async function ConversationPage({ params }: { params: Promise<{ i
   const { id } = await params;
   return (
     <div className="flex h-full">
-      <ConversationList activeId={id} />
+      <ConversationList activeId={id} hideOnMobile />
       <ConversationPanel conversationId={id} />
     </div>
   );

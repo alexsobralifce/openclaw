@@ -7,7 +7,7 @@ import { hasService, isAdmin, useMe } from "@/hooks/useMe";
 import { Logo } from "@/components/brand/Logo";
 
 // service: serviço que precisa estar liberado para o item aparecer; admin: só ROOT/ADMIN
-const nav: { href: string; label: string; icon: React.ReactNode; service?: string; admin?: boolean }[] = [
+export const nav: { href: string; label: string; icon: React.ReactNode; service?: string; admin?: boolean }[] = [
   {
     href: "/dashboard/inbox",
     label: "Inbox",
@@ -94,11 +94,16 @@ const nav: { href: string; label: string; icon: React.ReactNode; service?: strin
   },
 ];
 
+/** Itens que o usuário pode ver (serviço liberado; "admin" só para ROOT/ADMIN). */
+export function visibleNav(me: ReturnType<typeof useMe>) {
+  return nav.filter((i) => (i.admin ? isAdmin(me) : !i.service || !me || hasService(me, i.service)));
+}
+
 export function Sidebar() {
   const pathname = usePathname();
   const router = useRouter();
   const me = useMe();
-  const visible = nav.filter((i) => (i.admin ? isAdmin(me) : !i.service || !me || hasService(me, i.service)));
+  const visible = visibleNav(me);
 
   function logout() {
     clearToken();
@@ -106,7 +111,7 @@ export function Sidebar() {
   }
 
   return (
-    <aside className="w-[220px] flex-shrink-0 flex flex-col border-r border-gray-800 bg-gray-900">
+    <aside className="hidden md:flex w-[220px] flex-shrink-0 flex-col border-r border-gray-800 bg-gray-900">
       {/* Logo */}
       <div className="h-14 flex items-center px-5 border-b border-gray-800">
         <Logo size={30} textClassName="font-bold text-lg tracking-tight text-white" />
