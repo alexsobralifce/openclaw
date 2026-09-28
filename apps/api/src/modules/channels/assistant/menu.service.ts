@@ -119,7 +119,9 @@ export class MenuService {
       // Colou compromissos, um link ou um post e pediu para pôr na agenda (na tela de novo evento, tudo já é lido como evento)
       const ingestText = quoted ? `${text}\n\n${quoted}` : text;
       const lines = text.split("\n").filter((l) => l.trim()).length;
-      if (!isInput && !pending && looksLikeAgendaIntent(flat) && (quoted || lines >= 2 || extractUrls(text).length) && (await this.services(workspaceId)).includes("calendar")) return await this.agendaIngest(workspaceId, { text: ingestText });
+      // Áudio transcrito vem numa linha só: fala longa pedindo agenda (sem convidados por e-mail) também é uma lista
+      const spokenList = flat.split(" ").length >= 14 && !text.includes("@");
+      if (!isInput && !pending && looksLikeAgendaIntent(flat) && (quoted || lines >= 2 || spokenList || extractUrls(text).length) && (await this.services(workspaceId)).includes("calendar")) return await this.agendaIngest(workspaceId, { text: ingestText });
       if (MENU_WORD.test(flat) || (!isInput && SALUTE.test(flat))) return await this.mainMenu(workspaceId, true);
       if (!st) return n !== null ? await this.mainMenu(workspaceId, false) : null;
       return await this.route(workspaceId, st, st.screen === "event_input" && quoted ? ingestText : text, n);

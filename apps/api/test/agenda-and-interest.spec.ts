@@ -146,6 +146,22 @@ describe("agenda: vários eventos, links e imagens", () => {
     expect(store.get("menu:w1").screen).toBe("event_confirm");
   });
 
+  it("áudio transcrito (uma linha longa) com vários compromissos também é lido em lote", async () => {
+    const { menu, store } = build();
+    vi.spyOn(menu as any, "ai").mockResolvedValue(reply([{ titulo: "Reunião", inicio: future(2, 10) }, { titulo: "Dentista", inicio: future(4, 9) }]));
+    const out = (await menu.respond("w1", "Adicione na agenda reunião com a equipe na terça às 10h e consulta no dentista na quinta às 9h da manhã")) as string;
+    expect(out).toContain("Confirmar 2 eventos");
+    expect(store.get("menu:w1").screen).toBe("event_confirm");
+  });
+
+  it("pedido curto ou com convidado continua no caminho da IA", async () => {
+    const { menu } = build();
+    const ai = vi.spyOn(menu as any, "ai");
+    expect(await menu.respond("w1", "marque na agenda dentista amanhã 9h")).toBeNull();
+    expect(await menu.respond("w1", "marque na agenda reunião com joao@empresa.com amanhã às 15h para falar do projeto novo de vendas")).toBeNull();
+    expect(ai).not.toHaveBeenCalled();
+  });
+
   it("pergunta sobre a agenda NÃO é sequestrada", async () => {
     const { menu } = build();
     const ai = vi.spyOn(menu as any, "ai");
