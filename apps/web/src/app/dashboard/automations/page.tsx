@@ -102,7 +102,7 @@ export default function AutomationsPage() {
   }
 
   return (
-    <div className="p-6 max-w-3xl space-y-6 h-full overflow-y-auto">
+    <div className="p-4 md:p-6 max-w-3xl space-y-6 h-full overflow-y-auto">
       <div>
         <h1 className="text-xl font-semibold text-gray-200">Automações</h1>
         <p className="text-sm text-gray-500 mt-0.5">Regras que agem sozinhas quando um cliente escreve no WhatsApp.</p>

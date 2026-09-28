@@ -37,22 +37,22 @@ export default function ChannelsPage() {
   }, []);
 
   return (
-    <div className="p-6 max-w-3xl">
-      <div className="flex items-center justify-between mb-6">
+    <div className="p-4 md:p-6 max-w-3xl h-full overflow-y-auto">
+      <div className="flex flex-wrap items-center justify-between gap-3 mb-6">
         <div>
           <h1 className="text-xl font-semibold text-gray-200">Canais</h1>
           <p className="text-sm text-gray-500 mt-0.5">Conecte seus canais de atendimento</p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex w-full sm:w-auto items-center gap-2">
         <button
           onClick={connectGoogle}
-          className="px-4 py-2 border border-gray-700 hover:bg-gray-800 text-gray-300 text-sm font-medium rounded-lg transition-colors"
+          className="flex-1 sm:flex-none px-4 py-2 border border-gray-700 hover:bg-gray-800 text-gray-300 text-sm font-medium rounded-lg transition-colors"
         >
           Conectar Google
         </button>
         <button
           onClick={() => setShowAdd(true)}
-          className="flex items-center gap-2 px-4 py-2 bg-teal-500 hover:bg-teal-400 text-white text-sm font-medium rounded-lg transition-colors"
+          className="flex-1 sm:flex-none flex items-center justify-center gap-2 px-4 py-2 bg-teal-500 hover:bg-teal-400 text-white text-sm font-medium rounded-lg transition-colors"
         >
           <span>+</span> Adicionar canal
         </button>
@@ -121,22 +121,25 @@ function ChannelCard({ channel, onDelete }: { channel: any; onDelete: () => void
 
   return (
     <div className="bg-gray-900 border border-gray-800 rounded-xl p-4">
-      <div className="flex items-center gap-4">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:gap-4">
+       <div className="flex flex-1 min-w-0 items-start sm:items-center gap-3 sm:gap-4">
         <div className="w-10 h-10 rounded-xl bg-green-500/15 border border-green-500/20 flex items-center justify-center text-xl flex-shrink-0">
           {channel.type === "WHATSAPP" ? "🟢" : channel.type === "INSTAGRAM" ? "🟣" : channel.type === "EMAIL" ? "📧" : "💬"}
         </div>
         <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-2">
-            <p className="text-sm font-semibold text-gray-200">{channel.name}</p>
+          {/* O nome quebra em várias linhas (e-mails longos) e o selo desce para junto do status */}
+          <p className="text-sm font-semibold text-gray-200 [overflow-wrap:anywhere]">{channel.name}</p>
+          <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1">
             <span className="text-[10px] font-medium bg-gray-800 text-gray-500 px-2 py-0.5 rounded-full border border-gray-700">
               {channel.type}
             </span>
+            <span className={`text-xs font-medium ${STATE_COLOR[status] ?? "text-gray-500"}`}>
+              {STATE_LABEL[status] ?? status}
+            </span>
           </div>
-          <p className={`text-xs font-medium mt-0.5 ${STATE_COLOR[status] ?? "text-gray-500"}`}>
-            {STATE_LABEL[status] ?? status}
-          </p>
         </div>
-        <div className="flex items-center gap-2">
+       </div>
+        <div className="flex items-center justify-end gap-2 sm:flex-shrink-0">
           {channel.type === "WHATSAPP" && status !== "open" && status !== "checking" && (
             <button
               onClick={() => setShowQr(true)}

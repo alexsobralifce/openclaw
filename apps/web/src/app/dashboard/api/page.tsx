@@ -25,7 +25,7 @@ const fmt = (d?: string) => (d ? new Date(d).toLocaleString("pt-BR") : "nunca");
 
 export default function ApiPage() {
   return (
-    <div className="p-6 max-w-3xl space-y-10">
+    <div className="p-4 md:p-6 max-w-3xl space-y-10 h-full overflow-y-auto">
       <div>
         <h1 className="text-xl font-semibold text-gray-200">API</h1>
         <p className="text-sm text-gray-500 mt-0.5">

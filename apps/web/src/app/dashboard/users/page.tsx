@@ -52,7 +52,7 @@ export default function UsersPage() {
   if (me && !isAdmin(me)) return <div className="p-6 text-sm text-gray-400">Apenas administradores da plataforma acessam esta página.</div>;
 
   return (
-    <div className="p-6 max-w-4xl space-y-6 h-full overflow-y-auto">
+    <div className="p-4 md:p-6 max-w-4xl space-y-6 h-full overflow-y-auto">
       <div className="flex items-start justify-between gap-4">
         <div>
           <h1 className="text-xl font-semibold text-gray-200">Usuários</h1>

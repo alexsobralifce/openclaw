@@ -69,7 +69,7 @@ export default function VaultPage() {
 
   if (recoveryKey) {
     return (
-      <div className="p-6 max-w-3xl space-y-5 h-full overflow-y-auto">
+      <div className="p-4 md:p-6 max-w-3xl space-y-5 h-full overflow-y-auto">
         <h1 className="text-xl font-semibold text-gray-200">Cofre de senhas</h1>
         <RecoveryKeyBox keyText={recoveryKey} onDone={() => { setRecoveryKey(null); setMsg({ ok: true, text: "Pronto. Agora desbloqueie o cofre com a senha mestra." }); void refresh(); }} />
       </div>
@@ -77,7 +77,7 @@ export default function VaultPage() {
   }
 
   return (
-    <div className="p-6 max-w-3xl space-y-5 h-full overflow-y-auto">
+    <div className="p-4 md:p-6 max-w-3xl space-y-5 h-full overflow-y-auto">
       <div>
         <h1 className="text-xl font-semibold text-gray-200">Cofre de senhas</h1>
         <p className="text-sm text-gray-500 mt-0.5">Senhas de e-mails e sites, cifradas com uma senha mestra que só você sabe.</p>
@@ -331,16 +331,20 @@ function Unlocked({ status, setMsg, fail, refresh, showKey }: { status: Status; 
 
   return (
     <>
-      <div className={`${card} flex flex-wrap items-center gap-3`}>
-        <span className="text-xs text-teal-300">🔓 Desbloqueado · fecha em {label}</span>
-        <span className={`text-[11px] px-2 py-0.5 rounded-md ${status.hasPin && !status.waLocked ? "bg-teal-500/10 text-teal-300" : "bg-gray-800 text-gray-400"}`}>
-          WhatsApp: {!status.hasPin ? "sem código" : status.waLocked ? "bloqueado" : "ativo"}
-        </span>
-        <div className="flex-1" />
-        <button onClick={verify} className={ghost}>Verificar integridade</button>
-        <button onClick={() => setChanging((c) => !c)} className={ghost}>Trocar senha mestra</button>
-        <button onClick={() => setNewKeyPw(newKeyPw === null ? "" : null)} className={ghost}>{status.hasRecovery ? "Nova chave de recuperação" : "Criar chave de recuperação"}</button>
-        <button onClick={lock} className={danger}>Bloquear agora</button>
+      <div className={`${card} space-y-3`}>
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5">
+          <span className="text-xs text-teal-300">🔓 Desbloqueado · fecha em {label}</span>
+          <span className={`text-[11px] px-2 py-0.5 rounded-md ${status.hasPin && !status.waLocked ? "bg-teal-500/10 text-teal-300" : "bg-gray-800 text-gray-400"}`}>
+            WhatsApp: {!status.hasPin ? "sem código" : status.waLocked ? "bloqueado" : "ativo"}
+          </span>
+        </div>
+        {/* No celular: 2 colunas de botões do mesmo tamanho; no computador, em linha */}
+        <div className="grid grid-cols-2 sm:flex sm:flex-wrap gap-2">
+          <button onClick={verify} className={`${ghost} py-2.5 sm:py-1.5`}>Verificar integridade</button>
+          <button onClick={() => setChanging((c) => !c)} className={`${ghost} py-2.5 sm:py-1.5`}>Trocar senha mestra</button>
+          <button onClick={() => setNewKeyPw(newKeyPw === null ? "" : null)} className={`${ghost} py-2.5 sm:py-1.5`}>{status.hasRecovery ? "Chave de recuperação" : "Criar chave de recuperação"}</button>
+          <button onClick={lock} className={`${danger} py-2.5 sm:py-1.5 sm:ml-auto`}>Bloquear agora</button>
+        </div>
       </div>
 
       <PinForm status={status} setMsg={setMsg} onDone={refresh} />
@@ -380,8 +384,8 @@ function Unlocked({ status, setMsg, fail, refresh, showKey }: { status: Status; 
       {changing && <ChangeMaster onDone={() => { setChanging(false); void refresh(); }} setMsg={setMsg} />}
 
       <div className="flex gap-2">
-        <input className={input} placeholder="Buscar por site, usuário ou e-mail" value={search} onChange={(e) => setSearch(e.target.value)} />
-        <button onClick={() => setEditing({ form: { ...empty, password: generatePassword() } })} className={`${primary} whitespace-nowrap`}>+ Nova entrada</button>
+        <input className={input} placeholder="Buscar" aria-label="Buscar por site, usuário ou e-mail" value={search} onChange={(e) => setSearch(e.target.value)} />
+        <button onClick={() => setEditing({ form: { ...empty, password: generatePassword() } })} className={`${primary} whitespace-nowrap`} aria-label="Nova entrada">+ Nova</button>
       </div>
 
       {editing && (
@@ -429,28 +433,41 @@ function Unlocked({ status, setMsg, fail, refresh, showKey }: { status: Status; 
         <div className="space-y-2">
           {filtered.map((e) => (
             <div key={e.id} className={`${card} ${e.corrupted ? "border-red-500/40" : ""}`}>
-              <div className="flex flex-wrap items-center gap-2">
-                <div className="min-w-0 flex-1">
-                  <p className="text-sm font-medium text-gray-200 truncate">{e.title}{e.whatsapp && <span className="ml-2 text-[10px] px-1.5 py-0.5 rounded bg-teal-500/10 text-teal-300 align-middle">WhatsApp</span>}</p>
-                  <p className="text-[11px] text-gray-500 truncate">{[e.username, e.url].filter(Boolean).join(" · ")}</p>
+              <div className="flex items-start gap-2">
+                {/* O nome usa todo o espaço que sobra e quebra em mais de uma linha, em vez de virar "E…" */}
+                <div className="min-w-0 flex-1 pt-1">
+                  <p className="text-sm font-medium text-gray-200 [overflow-wrap:anywhere]">
+                    {e.title}
+                    {e.whatsapp && <span className="ml-2 text-[10px] px-1.5 py-0.5 rounded bg-teal-500/10 text-teal-300 align-middle whitespace-nowrap">WhatsApp</span>}
+                  </p>
+                  <p className="text-[11px] text-gray-500 mt-0.5 [overflow-wrap:anywhere]">{[e.username, e.url].filter(Boolean).join(" · ")}</p>
                 </div>
                 {e.corrupted ? (
-                  <span className="text-[11px] text-red-300">registro alterado ou corrompido</span>
-                ) : confirmDel === e.id ? (
-                  <>
-                    <span className="text-[11px] text-gray-400">Excluir de vez?</span>
-                    <button onClick={() => remove(e.id)} className={danger}>Excluir</button>
-                    <button onClick={() => setConfirmDel(null)} className={ghost}>Não</button>
-                  </>
+                  <span className="text-[11px] text-red-300 pt-1">registro alterado ou corrompido</span>
                 ) : (
-                  <>
-                    <button onClick={() => (shown[e.id] ? setShown((s) => { const { [e.id]: _x, ...r } = s; return r; }) : reveal(e.id))} className={ghost}>{shown[e.id] ? "Ocultar" : "Ver senha"}</button>
-                    <button onClick={() => copy(e.id)} className={ghost}>Copiar</button>
-                    <button onClick={() => edit(e.id)} className={ghost}>Editar</button>
-                    <button onClick={() => setConfirmDel(e.id)} className={danger}>Excluir</button>
-                  </>
+                  <div className="flex items-center flex-shrink-0">
+                    <IconButton label={shown[e.id] ? "Ocultar senha" : "Ver senha"} onClick={() => (shown[e.id] ? setShown((s) => { const { [e.id]: _x, ...r } = s; return r; }) : reveal(e.id))}>
+                      {shown[e.id] ? <path d="M17.9 17.9A10.1 10.1 0 0 1 12 20c-7 0-11-8-11-8a18.5 18.5 0 0 1 5.1-5.9M9.9 4.2A9.1 9.1 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.2 3.2M14.1 14.1a3 3 0 1 1-4.2-4.2M1 1l22 22" /> : <><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8Z" /><circle cx="12" cy="12" r="3" /></>}
+                    </IconButton>
+                    <IconButton label="Copiar senha" onClick={() => copy(e.id)}>
+                      <rect x="9" y="9" width="13" height="13" rx="2" /><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
+                    </IconButton>
+                    <IconButton label="Editar entrada" onClick={() => edit(e.id)}>
+                      <path d="M12 20h9M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z" />
+                    </IconButton>
+                    <IconButton label="Excluir entrada" tone="danger" onClick={() => setConfirmDel(e.id)}>
+                      <path d="M3 6h18M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2m3 0-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6M10 11v6M14 11v6" />
+                    </IconButton>
+                  </div>
                 )}
               </div>
+              {confirmDel === e.id && (
+                <div className="mt-3 flex flex-wrap items-center gap-2 border-t border-gray-800 pt-3">
+                  <span className="text-xs text-gray-400 mr-auto">Excluir de vez? Não dá para desfazer.</span>
+                  <button onClick={() => remove(e.id)} className={danger}>Excluir</button>
+                  <button onClick={() => setConfirmDel(null)} className={ghost}>Cancelar</button>
+                </div>
+              )}
               {shown[e.id] !== undefined && <p className="mt-2 font-mono text-sm text-teal-300 break-all select-all">{shown[e.id] || "(sem senha)"}</p>}
             </div>
           ))}
@@ -542,5 +559,22 @@ function PinForm({ status, setMsg, onDone }: { status: Status; setMsg: (m: any) 
         {status.hasPin && <button type="button" onClick={() => setOpen(false)} className={ghost}>Cancelar</button>}
       </div>
     </form>
+  );
+}
+
+/** Botão só com ícone (40 px de toque), com nome para leitores de tela e dica ao passar o mouse. */
+function IconButton({ label, onClick, tone = "normal", children }: { label: string; onClick: () => void; tone?: "normal" | "danger"; children: React.ReactNode }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-label={label}
+      title={label}
+      className={`inline-flex h-10 w-10 items-center justify-center rounded-lg transition-colors ${tone === "danger" ? "text-red-300 hover:bg-red-500/15" : "text-gray-300 hover:bg-gray-800"}`}
+    >
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+        {children}
+      </svg>
+    </button>
   );
 }
