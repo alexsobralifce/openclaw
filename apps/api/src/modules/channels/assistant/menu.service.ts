@@ -4,6 +4,7 @@ import { EvolutionService } from "../evolution/evolution.service";
 import { GoogleService } from "../../integrations/google/google.service";
 import { MemoryService } from "./memory.service";
 import { GeminiService } from "./gemini.service";
+import { IntentService, acceptIntent, type IntentResult } from "./intent.service";
 import { WeatherService } from "./weather.service";
 import { VaultService } from "../../vault/vault.service";
 import { isVaultHome, isVaultLock, looksLikeSharedSecret, vaultQuery } from "./vault-command";
@@ -91,6 +92,7 @@ export class MenuService {
     private gemini?: GeminiService,
     private weather?: WeatherService,
     private vault?: VaultService,
+    private intents?: IntentService,
   ) {}
 
   setExecutor(fn: (ws: string, action: { name: string; args: any }) => Promise<any>) {
@@ -124,6 +126,14 @@ export class MenuService {
     // Escolhas faladas: "opção dois", "a segunda", "o último"
     else if (!isInput) n = parseChoice(text, st?.data?.items?.length ?? st?.data?.options?.length);
 
+    // O Jev só é consultado se as regras não acharam nada e a mensagem tem cara de pedido livre; uma chamada por mensagem.
+    let jev: Promise<IntentResult | null> | undefined;
+    const jevSays = async (wanted: "agenda_add" | "drive_file") => {
+      if (!this.intents?.enabled() || flat.split(" ").length < 3) return false;
+      jev ??= this.intents.classify(text);
+      return acceptIntent(await jev, wanted);
+    };
+
     try {
       // Em telas de digitação (rascunho de e-mail, evento...), o texto é conteúdo: comandos globais só valem como mensagem inteira
       const cmd = (src: string) => new RegExp(isInput ? `^(${src})$` : `(${src})`);
@@ -155,7 +165,7 @@ export class MenuService {
         if (isLocationQuery(flat)) return await this.locationView(workspaceId);
         if (/^(ver |mostrar |abrir )?(as )?(config|configuracoes|configuracao|ajustes)$/.test(flat)) return await this.configMenu(workspaceId);
         if (/^(ver |mostrar |abrir )?(a |minha )?rotina$/.test(flat)) return await this.routineList(workspaceId);
-        if (looksLikeDriveRequest(flat) && (await this.services(workspaceId)).includes("drive")) {
+        if ((await this.services(workspaceId)).includes("drive") && (looksLikeDriveRequest(flat) || (await jevSays("drive_file")))) {
           const q = driveQueryFrom(text);
           return q ? await this.driveSearch(workspaceId, q) : await this.driveEntry(workspaceId);
         }
@@ -165,7 +175,7 @@ export class MenuService {
       const lines = text.split("\n").filter((l) => l.trim()).length;
       // Áudio transcrito vem numa linha só: fala longa pedindo agenda (sem convidados por e-mail) também é uma lista
       const spokenList = flat.split(" ").length >= 14 && !text.includes("@");
-      if (!isInput && !pending && looksLikeAgendaIntent(flat) && (quoted || lines >= 2 || spokenList || extractUrls(text).length) && (await this.services(workspaceId)).includes("calendar")) return await this.agendaIngest(workspaceId, { text: ingestText });
+      if (!isInput && !pending && (quoted || lines >= 2 || spokenList || extractUrls(text).length) && (await this.services(workspaceId)).includes("calendar") && (looksLikeAgendaIntent(flat) || (await jevSays("agenda_add")))) return await this.agendaIngest(workspaceId, { text: ingestText });
       if (MENU_WORD.test(flat) || (!isInput && SALUTE.test(flat))) return await this.mainMenu(workspaceId, true);
       if (!st) return n !== null ? await this.mainMenu(workspaceId, false) : null;
       return await this.route(workspaceId, st, st.screen === "event_input" && quoted ? ingestText : text, n);

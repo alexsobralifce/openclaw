@@ -10,6 +10,7 @@ import { AssistantService } from "./assistant/assistant.service";
 import { MenuService } from "./assistant/menu.service";
 import { MemoryService } from "./assistant/memory.service";
 import { GeminiService } from "./assistant/gemini.service";
+import { IntentService } from "./assistant/intent.service";
 import { EmailWatcherService } from "./assistant/email-watcher.service";
 import { GoogleModule } from "../integrations/google/google.module";
 import { VaultModule } from "../vault/vault.module";
@@ -30,7 +31,7 @@ import { InstagramWorker } from "./workers/instagram.worker";
     }),
   ],
   controllers: [ChannelsController],
-  providers: [ChannelsService, WhatsappWorker, InstagramWorker, InstagramService, InboundService, AssistantService, MenuService, MemoryService, GeminiService, EmailWatcherService, WeatherService, AssistantSchedulerService],
+  providers: [ChannelsService, WhatsappWorker, InstagramWorker, InstagramService, InboundService, AssistantService, MenuService, MemoryService, GeminiService, IntentService, EmailWatcherService, WeatherService, AssistantSchedulerService],
   exports: [ChannelsService, EvolutionModule],
 })
 export class ChannelsModule {}
