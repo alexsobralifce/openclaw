@@ -43,7 +43,10 @@ export class IntentService {
     try {
       this.client ??= new TypeSafeClient({ timeout: TIMEOUT_MS, retry: { maxRetries: 0 } });
       const { answers } = await this.client.systemOne({ state: { mensagem: text.slice(0, 1_500) }, questions: { intent: QUESTION } });
-      return { intent: answers.intent.choice, confidence: answers.intent.confidence };
+      const { choice: intent, confidence } = answers.intent;
+      // Sem o texto da mensagem: só o suficiente para calibrar o limiar.
+      this.logger.log(`Jev: ${intent} (confiança ${confidence.toFixed(2)}, ${text.split(/\s+/).length} palavras)`);
+      return { intent, confidence };
     } catch (e: any) {
       this.logger.warn(`Jev indisponível, usando regras: ${e.message}`);
       return null;
