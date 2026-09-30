@@ -30,6 +30,8 @@ export class InboxGateway implements OnGatewayConnection, OnGatewayDisconnect {
       const token = client.handshake.auth?.token as string | undefined;
       if (!token) throw new Error("sem token");
       const payload: any = this.jwt.verify(token);
+      const user = await prisma.user.findUnique({ where: { id: payload.sub }, select: { status: true } });
+      if (!user || user.status !== "ACTIVE") throw new Error("conta inativa");
       const member = await prisma.workspaceMember.findFirst({ where: { userId: payload.sub } });
       if (!member) throw new Error("sem workspace");
       client.data.workspaceId = member.workspaceId;
