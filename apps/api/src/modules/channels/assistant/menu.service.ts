@@ -944,28 +944,38 @@ export class MenuService {
     const uid = await this.ownerId(ws);
     if (!this.vault || !uid) return "🔐 O cofre não está disponível agora.";
     const st = await this.vault.status(uid);
-    const state = !st.exists
-      ? "Você ainda não criou o cofre. Crie no painel, em *Cofre de senhas*."
-      : !st.hasPin
-        ? "⚙️ Falta definir o *código de 4 dígitos* no painel (Cofre de senhas). Com ele você consulta por aqui."
-        : st.waLocked
-          ? "🔒 *WhatsApp bloqueado* por códigos errados. No painel, digite a senha mestra para reativar."
-          : "✅ *Pronto para consulta.*";
     await this.setMain(ws);
-    return [
-      head("🔐", "Cofre de senhas"),
-      state,
-      DIV,
-      "Peça, por exemplo: *senha do github*. Eu peço o código de 4 dígitos e mostro a senha.",
-      "_Só as entradas marcadas como consultáveis pelo WhatsApp aparecem aqui. A resposta some do chat em ~1 minuto._",
-    ].join("\n");
+    if (!st.exists) return `${head("🔐", "Cofre de senhas")}\nVocê ainda não criou o cofre. Crie no painel, em *Cofre de senhas*.`;
+    if (!st.hasPin) return `${head("🔐", "Cofre de senhas")}\n⚙️ Falta definir o *código de 4 dígitos* no painel (Cofre de senhas). Com ele você consulta por aqui.`;
+    if (st.waLocked) return `${head("🔐", "Cofre de senhas")}\n🔒 *WhatsApp bloqueado* por códigos errados. No painel, digite a senha mestra para reativar.`;
+    const r = await this.vault.whatsappList(uid);
+    // Só entradas antigas, ainda sem título no índice: o código as indexa; depois a lista sai normalmente
+    if (!r.items.length && r.unindexed) return this.askPin(ws, { type: "list" });
+    return this.vaultList(ws, r.items, r.unindexed);
+  }
+
+  private async vaultListAfterPin(ws: string, uid: string) {
+    const r = await this.vault!.whatsappList(uid);
+    return this.vaultList(ws, r.items, r.unindexed);
+  }
+
+  /** Lista os nomes (sem senha) e espera o número; o código só é pedido ao escolher. */
+  private async vaultList(ws: string, items: { id: string; title: string }[], unindexed = 0) {
+    if (!items.length) return [head("🔐", "Cofre de senhas"), "Nenhuma senha está liberada para o WhatsApp. No painel, marque as entradas que quer consultar por aqui.", DIV, opts(BACK)].join("\n");
+    const size = await this.listSize(ws, 10);
+    const shown = items.slice(0, size);
+    await this.set(ws, "vault", { items: shown.map((m) => ({ id: m.id })) });
+    const rows = shown.map((m, i) => `${key(i + 1)} 🔑 *${short(m.title, 40)}*`);
+    const more = items.length > shown.length ? `\n➕ _Mais ${items.length - shown.length}: peça pelo nome, ex.: *senha do github*._` : "";
+    const note = unindexed ? `\n_${unindexed} entrada(s) antiga(s) aparecem depois que você digitar o código uma vez._` : "";
+    return [head("🔐", "Cofre de senhas", `${items.length} ${items.length === 1 ? "senha" : "senhas"}`), rows.join("\n") + more + note, foot("Responda com o número; eu peço o código de 4 dígitos e mostro a senha"), opts(BACK)].join("\n");
   }
 
   private vaultLock(_ws: string) {
     return "🔒 Aqui não há o que trancar: o WhatsApp sempre pede o código. Para trancar o painel, use *Bloquear agora* lá.";
   }
 
-  private async askPin(ws: string, then: { type: "query"; query: string } | { type: "reveal"; id: string }, note = "") {
+  private async askPin(ws: string, then: { type: "query"; query: string } | { type: "reveal"; id: string } | { type: "list" }, note = "") {
     await this.set(ws, "vault_pin_input", { then });
     return [`🔢 *Digite seu código de 4 dígitos* para abrir o cofre.${note ? `\n${note}` : ""}`, "_Escreva os números (não mande áudio). Digite 0 para cancelar._"].join("\n");
   }
@@ -1018,7 +1028,7 @@ export class MenuService {
     const uid = await this.ownerId(ws);
     if (!this.vault || !uid) return "🔐 O cofre não está disponível agora.";
     const r = await this.vault.whatsappOpen(uid, raw);
-    if (r.ok) return d.then.type === "reveal" ? this.vaultReveal(ws, d.then.id) : this.vaultLookup(ws, d.then.query);
+    if (r.ok) return d.then.type === "reveal" ? this.vaultReveal(ws, d.then.id) : d.then.type === "list" ? await this.vaultListAfterPin(ws, uid) : this.vaultLookup(ws, d.then.query);
     if (r.reason === "locked") {
       await this.setMain(ws);
       return "🔒 *WhatsApp bloqueado* por códigos errados. No painel, em *Cofre de senhas*, digite a senha mestra para reativar.";

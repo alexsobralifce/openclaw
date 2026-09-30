@@ -7,7 +7,7 @@ import {
   BlockOp, blockHash, checkEntry, deriveKek, EntryData, GENESIS, hashResetToken, KdfParams, LIMITS, liveEntries, maskEmail, masterPasswordProblem, newKdf,
   newRecoveryKey, newRecoverySalt, newResetToken, newVaultKey, openEntry, parseRecoveryKey, recoveryKek, resetTokenShape, sealEntry, sha256, subkeys,
   unwrapVaultKey, unwrapVaultKeyRecovery, VaultKeys, verifyChain, wipe, wrapVaultKey, wrapVaultKeyRecovery,
-  MAX_PIN_ATTEMPTS, newPinSalt, newWaKey, openEntryWa, pinKek, pinProblem, sealEntryWa, unwrapWaKeyMaster, unwrapWaKeyPin, wrapWaKeyMaster, wrapWaKeyPin,
+  MAX_PIN_ATTEMPTS, newPinSalt, newWaKey, openEntryWa, openLabel, pinKek, pinProblem, sealEntryWa, sealLabel, unwrapWaKeyMaster, unwrapWaKeyPin, wrapWaKeyMaster, wrapWaKeyPin,
 } from "./vault-crypto";
 
 const MAX_FAILS = 5;
@@ -287,10 +287,12 @@ export class VaultService {
       const hash = blockHash(s.keys.mac, { vaultId: s.vaultId, seq, prevHash, op, entryId, payloadHash });
       // Cópia para a consulta pelo WhatsApp (só se a entrada permite e já existe o código): cifrada com a chave do WhatsApp
       let waPayload = "";
+      let waLabel = "";
       if (op === "put" && data!.whatsapp && v.waKeyMaster) {
         const kw = unwrapWaKeyMaster(s.keys.enc, v.waKeyMaster, s.vaultId);
         try {
           waPayload = sealEntryWa(kw, s.vaultId, entryId, seq, data!);
+          waLabel = sealLabel(s.vaultId, entryId, seq, data!.title);
         } finally {
           wipe(kw);
         }
@@ -298,9 +300,9 @@ export class VaultService {
       // Se outra gravação entrou no meio, a numeração mudou: recusa em vez de bifurcar a cadeia
       const moved = await tx.vault.updateMany({ where: { id: s.vaultId, seq: v.seq }, data: { seq, headHash: hash } });
       if (moved.count !== 1) throw new ConflictException("O cofre foi alterado ao mesmo tempo. Tente de novo.");
-      await tx.vaultBlock.create({ data: { vaultId: s.vaultId, seq, prevHash, op, entryId, payload, payloadHash, waPayload, hash } });
+      await tx.vaultBlock.create({ data: { vaultId: s.vaultId, seq, prevHash, op, entryId, payload, payloadHash, waPayload, waLabel, hash } });
       // O conteúdo anterior da entrada deixa de existir; a cadeia mantém só o hash dele
-      await tx.vaultBlock.updateMany({ where: { vaultId: s.vaultId, entryId, seq: { lt: seq } }, data: { payload: "", waPayload: "" } });
+      await tx.vaultBlock.updateMany({ where: { vaultId: s.vaultId, entryId, seq: { lt: seq } }, data: { payload: "", waPayload: "", waLabel: "" } });
       return seq;
     });
   }
@@ -576,13 +578,18 @@ export class VaultService {
       await prisma.vault.update({ where: { id: vault.id }, data: { waSalt: salt, waKeyPin: wrapWaKeyPin(kek, kw, vault.id), waKeyMaster: wrapWaKeyMaster(keys.enc, kw, vault.id) } });
       for (const b of liveEntries(await this.blocksOf(vault.id))) {
         let waPayload = "";
+        let waLabel = "";
         try {
           const d = openEntry(keys.enc, vault.id, b.entryId, b.seq, b.payload);
-          if (d.whatsapp) waPayload = sealEntryWa(kw, vault.id, b.entryId, b.seq, d);
+          if (d.whatsapp) {
+            waPayload = sealEntryWa(kw, vault.id, b.entryId, b.seq, d);
+            waLabel = sealLabel(vault.id, b.entryId, b.seq, d.title);
+          }
         } catch {
           waPayload = "";
+          waLabel = "";
         }
-        await prisma.vaultBlock.updateMany({ where: { vaultId: vault.id, seq: b.seq }, data: { waPayload } });
+        await prisma.vaultBlock.updateMany({ where: { vaultId: vault.id, seq: b.seq }, data: { waPayload, waLabel } });
       }
     } finally {
       wipe(kek, kw, keys.enc, keys.mac);
@@ -632,8 +639,46 @@ export class VaultService {
     const timer = setTimeout(() => this.closeWa(userId), WA_WINDOW_MS);
     timer.unref?.();
     this.waSessions.set(userId, { kw, vaultId: vault.id, until: Date.now() + WA_WINDOW_MS, timer });
+    await this.indexLabels(vault.id, kw);
     this.logger.log(`[AUDIT] vault_whatsapp_open user=${userId}`);
     return { ok: true };
+  }
+
+  /** Entradas do WhatsApp criadas antes do índice de títulos ganham o rótulo na primeira vez que o código abre a janela. */
+  private async indexLabels(vaultId: string, kw: Buffer) {
+    try {
+      for (const b of liveEntries(await this.blocksOf(vaultId))) {
+        if (!b.waPayload || b.waLabel) continue;
+        const d = openEntryWa(kw, vaultId, b.entryId, b.seq, b.waPayload);
+        await prisma.vaultBlock.update({ where: { id: b.id }, data: { waLabel: sealLabel(vaultId, b.entryId, b.seq, d.title) } });
+      }
+    } catch (e: any) {
+      this.logger.warn(`Cofre: índice de títulos não atualizado: ${e.message}`);
+    }
+  }
+
+  /**
+   * Nomes das entradas liberadas para o WhatsApp, SEM pedir o código (o código só é pedido para mostrar a senha).
+   * `unindexed` = entradas antigas ainda sem título no índice: aparecem depois da primeira digitação do código.
+   */
+  async whatsappList(userId: string): Promise<{ state: "none" | "no_pin" | "locked" | "ok"; items: { id: string; title: string }[]; unindexed: number }> {
+    const vault = await this.vaultOf(userId);
+    if (!vault) return { state: "none", items: [], unindexed: 0 };
+    if (!vault.waKeyPin) return { state: "no_pin", items: [], unindexed: 0 };
+    if (await this.state.get(this.waLockKey(userId))) return { state: "locked", items: [], unindexed: 0 };
+    const items: { id: string; title: string }[] = [];
+    let unindexed = 0;
+    for (const b of liveEntries(await this.blocksOf(vault.id))) {
+      if (!b.waPayload) continue;
+      try {
+        if (!b.waLabel) throw new Error("sem título");
+        items.push({ id: b.entryId, title: openLabel(vault.id, b.entryId, b.seq, b.waLabel) });
+      } catch {
+        unindexed++;
+      }
+    }
+    items.sort((a, b) => a.title.localeCompare(b.title, "pt-BR"));
+    return { state: "ok", items, unindexed };
   }
 
   /** Cópias do WhatsApp abertas com a chave da janela atual. */

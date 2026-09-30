@@ -15,7 +15,7 @@ type Lookup = { state: string; matches: any[] };
  * `lookups` = respostas sucessivas de whatsappLookup; `opens` = respostas de whatsappOpen; `reveals` = de whatsappReveal.
  * O mock guarda a ordem das chamadas para conferir que o código é pedido ANTES de listar ou mostrar qualquer coisa.
  */
-function build(lookups: Lookup[], opts: { car?: boolean; opens?: any[]; reveals?: any[] } = {}) {
+function build(lookups: Lookup[], opts: { car?: boolean; opens?: any[]; reveals?: any[]; list?: any } = {}) {
   const store = new Map<string, any>();
   const state = { get: async (k: string) => store.get(k) ?? null, set: async (k: string, v: any) => void store.set(k, v), del: async (k: string) => void store.delete(k) };
   const calls: string[] = [];
@@ -28,6 +28,7 @@ function build(lookups: Lookup[], opts: { car?: boolean; opens?: any[]; reveals?
     whatsappOpen: vi.fn(async () => (calls.push("open"), next(op, op[0]))),
     whatsappReveal: vi.fn(async () => (calls.push("reveal"), next(rv, rv[0]))),
     status: vi.fn(async () => ({ exists: true, unlocked: false, hasPin: true, waLocked: false })),
+    whatsappList: vi.fn(async () => (calls.push("list"), opts.list ?? { state: "ok", items: [{ id: "e1", title: "GitHub" }, { id: "e2", title: "Instagram" }], unindexed: 0 })),
   };
   const menu = new MenuService({ listAccounts: async () => ["a@gmail.com"] } as any, {} as any, { promptBlock: async () => "", listRoutine: async () => [] } as any, state as any, undefined, undefined, vault as any);
   if (opts.car) store.set("mode:w1", "car");
@@ -150,10 +151,44 @@ describe("consulta de senha pelo WhatsApp", () => {
 });
 
 describe("cofre no menu", () => {
-  it("'cofre' mostra o estado; o menu principal tem o item", async () => {
-    const { menu } = build([one]);
-    expect(((await menu.respond("w1", "cofre")) as string)).toContain("Pronto para consulta");
+  it("'cofre' lista todas as senhas liberadas, sem pedir o código nem mostrar senha; o menu principal tem o item", async () => {
+    const { menu, vault, calls } = build([one]);
+    const out = (await menu.respond("w1", "cofre")) as string;
+    expect(out).toContain("GitHub");
+    expect(out).toContain("Instagram");
+    expect(out).not.toContain(SECRET.password);
+    expect(calls).toEqual(["list"]);
+    expect(vault.whatsappOpen).not.toHaveBeenCalled();
     expect(((await menu.respond("w1", "menu")) as string)).toContain("Cofre de senhas");
+  });
+
+  it("escolher o número pede o código; o código certo mostra a senha escolhida", async () => {
+    const { menu, calls } = build([needPin], { reveals: ["pin_required", SECRET] });
+    await menu.respond("w1", "cofre");
+    expect(((await menu.respond("w1", "1")) as string)).toContain("código de 4 dígitos");
+    const out = (await menu.respond("w1", "4826")) as string;
+    expect(out).toContain(SECRET.password);
+    expect(calls).toEqual(["list", "reveal", "open", "reveal"]);
+  });
+
+  it("sem senhas liberadas, avisa em vez de mostrar lista vazia", async () => {
+    const { menu } = build([one], { list: { state: "ok", items: [], unindexed: 0 } });
+    expect(((await menu.respond("w1", "cofre")) as string)).toContain("Nenhuma senha está liberada");
+  });
+
+  it("só entradas antigas (sem título no índice): pede o código uma vez e depois lista", async () => {
+    const { menu, vault } = build([one], { list: { state: "ok", items: [], unindexed: 2 } });
+    expect(((await menu.respond("w1", "cofre")) as string)).toContain("código de 4 dígitos");
+    vault.whatsappList.mockResolvedValue({ state: "ok", items: [{ id: "e1", title: "GitHub" }], unindexed: 0 });
+    expect(((await menu.respond("w1", "4826")) as string)).toContain("GitHub");
+  });
+
+  it("cofre trancado por códigos errados não lista nada", async () => {
+    const { menu, vault } = build([one]);
+    vault.status.mockResolvedValue({ exists: true, unlocked: false, hasPin: true, waLocked: true });
+    const out = (await menu.respond("w1", "cofre")) as string;
+    expect(out).toContain("bloqueado");
+    expect(vault.whatsappList).not.toHaveBeenCalled();
   });
 });
 

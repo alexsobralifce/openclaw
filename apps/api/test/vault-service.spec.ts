@@ -20,7 +20,8 @@ const { vaults, blocks, db } = vi.hoisted(() => {
     },
     vaultBlock: {
       findMany: async ({ where }: any) => blocks.filter((r) => match(r, where)).sort((a, b) => a.seq - b.seq),
-      create: async ({ data }: any) => void blocks.push({ createdAt: new Date(), ...data }),
+      create: async ({ data }: any) => void blocks.push({ id: `b${blocks.length}-${Math.random()}`, createdAt: new Date(), ...data }),
+      update: async ({ where, data }: any) => void Object.assign(blocks.find((r) => r.id === where.id), data),
       updateMany: async ({ where, data }: any) => {
         const rows = blocks.filter((r) => match(r, where));
         rows.forEach((r) => Object.assign(r, data));
@@ -329,10 +330,45 @@ describe("consulta pelo WhatsApp com código de 4 dígitos", () => {
     expect((await svc.whatsappLookup("u1", "spotify")).matches).toEqual([]);
   });
 
+  it("lista os nomes das entradas do WhatsApp sem pedir o código, e nunca as senhas", async () => {
+    await withPin();
+    const r = await svc.whatsappList("u1");
+    expect(r).toEqual({ state: "ok", items: [expect.objectContaining({ title: "GitHub" }), expect.objectContaining({ title: "Instagram" })], unindexed: 0 });
+    expect(JSON.stringify(r)).not.toMatch(/S3nh@|Insta#Pass|ana_insta|Banco/);
+    expect((await svc.status("u1")).unlocked).toBe(false); // nada foi aberto
+  });
+
+  it("a lista respeita o estado: sem cofre, sem código e bloqueado", async () => {
+    expect((await svc.whatsappList("u1")).state).toBe("none");
+    await svc.setup("u1", "w1", PW);
+    expect((await svc.whatsappList("u1")).state).toBe("no_pin");
+    await svc.unlock("u1", PW);
+    await svc.setPin("u1", PW, PIN);
+    for (let i = 0; i < 3; i++) await svc.whatsappOpen("u1", "9081");
+    expect((await svc.whatsappList("u1")).state).toBe("locked");
+  });
+
+  it("entradas antigas, sem título no índice, entram na lista depois do primeiro código", async () => {
+    await withPin();
+    blocks.forEach((b) => (b.waLabel = ""));
+    expect(await svc.whatsappList("u1")).toMatchObject({ items: [], unindexed: 2 });
+    await svc.whatsappOpen("u1", PIN);
+    expect((await svc.whatsappList("u1")).items.map((i) => i.title)).toEqual(["GitHub", "Instagram"]);
+  });
+
+  it("editar ou desmarcar tira o título antigo da lista; título alterado no banco é ignorado", async () => {
+    const id = await withPin();
+    await svc.unlock("u1", PW);
+    await svc.save("u1", id, { ...gh, whatsapp: false });
+    expect((await svc.whatsappList("u1")).items.map((i) => i.title)).toEqual(["Instagram"]);
+    blocks.filter((b) => b.waLabel).forEach((b) => (b.waLabel = "v1.AAAA.AAAA.AAAA")); // título adulterado
+    expect(await svc.whatsappList("u1")).toMatchObject({ items: [], unindexed: 1 });
+  });
+
   it("nada legível no banco, nem nas cópias do WhatsApp", async () => {
     await withPin();
     const dump = JSON.stringify([vaults, blocks]);
-    for (const secret of [gh.password, "Insta#Pass", "ana_insta", PIN]) expect(dump).not.toContain(secret);
+    for (const secret of [gh.password, "Insta#Pass", "ana_insta", PIN, "Instagram", "GitHub"]) expect(dump).not.toContain(secret);
   });
 
   it("código errado: conta, avisa quantas restam e no 3º bloqueia o WhatsApp", async () => {

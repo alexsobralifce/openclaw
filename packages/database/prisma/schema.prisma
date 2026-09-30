@@ -400,6 +400,8 @@ model VaultBlock {
   payloadHash String
   // Cópia da entrada cifrada com a chave do WhatsApp (fora da cadeia: é derivada; vazia se a entrada não é consultável por lá)
   waPayload   String   @default("")
+  // Só o título, cifrado com segredo do servidor (sem o código): permite listar as senhas do WhatsApp antes de pedir o código
+  waLabel     String   @default("")
   hash        String
   createdAt   DateTime @default(now())
 

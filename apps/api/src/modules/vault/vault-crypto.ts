@@ -309,3 +309,10 @@ export function openEntryWa(kw: Buffer, vaultId: string, entryId: string, seq: n
   const j = JSON.parse(open(kw, payload, waAad(vaultId, entryId, seq)).toString("utf8"));
   return { title: String(j.title ?? ""), url: String(j.url ?? ""), username: String(j.username ?? ""), password: String(j.password ?? ""), notes: "", whatsapp: true };
 }
+
+// Rótulo (título) da entrada do WhatsApp, cifrado só com o segredo do servidor: a lista de nomes aparece antes do código.
+// Quem tem só o banco não lê os títulos; quem tem o banco E o segredo do servidor lê os títulos, nunca as senhas.
+const labelKey = () => createHmac("sha256", pepper()).update("vault-wa-label").digest();
+const labelAad = (vaultId: string, entryId: string, seq: number) => `wa-label|${vaultId}|${entryId}|${seq}`;
+export const sealLabel = (vaultId: string, entryId: string, seq: number, title: string) => seal(labelKey(), title.slice(0, 120), labelAad(vaultId, entryId, seq));
+export const openLabel = (vaultId: string, entryId: string, seq: number, sealed: string) => open(labelKey(), sealed, labelAad(vaultId, entryId, seq)).toString("utf8");
