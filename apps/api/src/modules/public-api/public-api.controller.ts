@@ -1,11 +1,12 @@
-import { Body, Controller, Delete, Get, Headers, Param, Patch, Post, Put, Query, Req, Res, UseFilters, UseGuards } from "@nestjs/common";
+import { Body, Controller, Delete, Get, Headers, HttpCode, Param, Patch, Post, Put, Query, Req, Res, UseFilters, UseGuards } from "@nestjs/common";
 import { ApiKeyGuard } from "./api-key.guard";
 import { PublicApiService } from "./public-api.service";
 import { openApiSpec } from "./openapi";
 import { IdempotencyService } from "./idempotency.service";
 import { GooglePublicService } from "./google-public.service";
 import { WebhooksService } from "../webhooks/webhooks.service";
-import { CalendarListQuery, ContactDto, CreateEventDto, CreateWebhookDto, EmailAccountQuery, EmailListQuery, SendEmailDto, ListQuery, SendMessageDto, UpdateContactDto, UpdateConversationDto, UpsertContactDto } from "./dto";
+import { AssistantService } from "../channels/assistant/assistant.service";
+import { CalendarListQuery, VoiceCommandDto, ContactDto, CreateEventDto, CreateWebhookDto, EmailAccountQuery, EmailListQuery, SendEmailDto, ListQuery, SendMessageDto, UpdateContactDto, UpdateConversationDto, UpsertContactDto } from "./dto";
 import { RequireScopes } from "./scopes";
 import { PublicExceptionFilter } from "./public-exception.filter";
 
@@ -17,6 +18,7 @@ export class PublicApiController {
     private webhooks: WebhooksService,
     private google: GooglePublicService,
     private idem: IdempotencyService,
+    private assistant: AssistantService,
   ) {}
 
   /** Executa com suporte ao cabeçalho Idempotency-Key e sinaliza respostas repetidas. */
@@ -132,6 +134,15 @@ export class PublicApiController {
   @Get("calendar/events")
   listEvents(@Req() req: any, @Query() q: CalendarListQuery) {
     return this.google.listEvents(req.apiKey.id, req.apiKey.workspaceId, q);
+  }
+
+  // ─── Assistente (comando por voz: MacroDroid, atalhos) ────────
+
+  @UseGuards(ApiKeyGuard) @RequireScopes("assistant:command")
+  @Post("assistant/command")
+  @HttpCode(200)
+  assistantCommand(@Req() req: any, @Body() body: VoiceCommandDto) {
+    return this.assistant.voice(req.apiKey.workspaceId, body.text);
   }
 
   @UseGuards(ApiKeyGuard) @RequireScopes("calendar:write")

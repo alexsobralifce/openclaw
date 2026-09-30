@@ -1,0 +1,304 @@
+{
+  "_aviso": "Receita para recriar no MacroDroid (nomes de gatilhos/ações do app em inglês). NÃO é um .mdr importável: o formato de exportação é proprietário. Confira cada item na sua versão.",
+  "contato_assistente": {
+    "nome_na_agenda": "Copiloto",
+    "dica": "Um nome curto, sem parecido na agenda, e marcado como favorito. Reduz o 'qual contato?' do Gemini."
+  },
+  "macros": [
+    {
+      "nome": "Carro conectado: silenciar o resto",
+      "objetivo": "Ao conectar no carro, deixar só o necessário tocando para o Gemini falar menos e nada atrapalhar a leitura.",
+      "gatilhos": [
+        {
+          "tipo": "Bluetooth Device Connected",
+          "dispositivo": "<nome do Bluetooth do seu carro>"
+        },
+        {
+          "tipo": "Android Auto / Car Dock (se disponível na sua versão)",
+          "evento": "conectado"
+        }
+      ],
+      "acoes": [
+        {
+          "tipo": "Do Not Disturb",
+          "modo": "Priority only",
+          "permitir": [
+            "WhatsApp do Copiloto"
+          ]
+        },
+        {
+          "tipo": "Set Volume",
+          "fluxo": "Notification",
+          "nivel_percentual": 70
+        },
+        {
+          "tipo": "Clear Notifications (app)",
+          "apps": [
+            "WhatsApp"
+          ],
+          "observacao": "só se quiser limpar notificações antigas ao entrar no carro"
+        }
+      ]
+    },
+    {
+      "nome": "Carro desconectado: voltar ao normal",
+      "gatilhos": [
+        {
+          "tipo": "Bluetooth Device Disconnected",
+          "dispositivo": "<nome do Bluetooth do seu carro>"
+        }
+      ],
+      "acoes": [
+        {
+          "tipo": "Do Not Disturb",
+          "modo": "Off"
+        }
+      ]
+    },
+    {
+      "nome": "Falar: agenda de hoje",
+      "objetivo": "Consulta o assistente direto pela API e fala a resposta, sem WhatsApp nem Gemini (sem 'quer enviar?').",
+      "gatilhos": [
+        {
+          "tipo": "Media Button / botão flutuante / widget",
+          "observacao": "Escolha o que o seu carro repassa ao celular; não confirmei qual funciona no seu."
+        }
+      ],
+      "restricoes": [
+        {
+          "tipo": "Bluetooth Device Connected",
+          "dispositivo": "<nome do Bluetooth do seu carro>"
+        }
+      ],
+      "acoes": [
+        {
+          "tipo": "HTTP Request",
+          "metodo": "POST",
+          "url": "https://<sua-api>/api/public/v1/assistant/command",
+          "cabecalhos": {
+            "Authorization": "Bearer oc_live_<chave com escopo assistant:command>",
+            "Content-Type": "application/json"
+          },
+          "corpo": {
+            "text": "agenda de hoje"
+          },
+          "bloqueante": true,
+          "salvar_resposta_em": "variável local string: resposta"
+        },
+        {
+          "tipo": "JSON parse",
+          "origem": "resposta",
+          "destino": "variável dicionário: dados"
+        },
+        {
+          "tipo": "Speak Text",
+          "texto": "[lv=dados[fala]]",
+          "observacao": "Magic text do campo 'fala', como o vídeo faz com EUR/GBP. O nome da sintaxe varia por versão: use o seletor de magic text."
+        }
+      ],
+      "ativa_por_padrao": false,
+      "observacao": "Fica desativada; a macro 'Assistente aberto' a ativa e 'Assistente fechado' a desativa."
+    },
+    {
+      "nome": "Falar: e-mails",
+      "objetivo": "Mesma coisa para e-mails novos.",
+      "gatilhos": [
+        {
+          "tipo": "Media Button / botão flutuante / widget",
+          "observacao": "Escolha o que o seu carro repassa ao celular; não confirmei qual funciona no seu."
+        }
+      ],
+      "restricoes": [
+        {
+          "tipo": "Bluetooth Device Connected",
+          "dispositivo": "<nome do Bluetooth do seu carro>"
+        }
+      ],
+      "acoes": [
+        {
+          "tipo": "HTTP Request",
+          "metodo": "POST",
+          "url": "https://<sua-api>/api/public/v1/assistant/command",
+          "cabecalhos": {
+            "Authorization": "Bearer oc_live_<chave com escopo assistant:command>",
+            "Content-Type": "application/json"
+          },
+          "corpo": {
+            "text": "ler e-mails"
+          },
+          "bloqueante": true,
+          "salvar_resposta_em": "variável local string: resposta"
+        },
+        {
+          "tipo": "JSON parse",
+          "origem": "resposta",
+          "destino": "variável dicionário: dados"
+        },
+        {
+          "tipo": "Speak Text",
+          "texto": "[lv=dados[fala]]",
+          "observacao": "Magic text do campo 'fala', como o vídeo faz com EUR/GBP. O nome da sintaxe varia por versão: use o seletor de magic text."
+        }
+      ],
+      "ativa_por_padrao": false,
+      "observacao": "Fica desativada; a macro 'Assistente aberto' a ativa e 'Assistente fechado' a desativa."
+    },
+    {
+      "nome": "Falar: próximo",
+      "objetivo": "Continua a conversa (o menu guarda a tela atual): próximo e-mail, próxima opção.",
+      "gatilhos": [
+        {
+          "tipo": "Media Button / botão flutuante / widget",
+          "observacao": "Escolha o que o seu carro repassa ao celular; não confirmei qual funciona no seu."
+        }
+      ],
+      "restricoes": [
+        {
+          "tipo": "Bluetooth Device Connected",
+          "dispositivo": "<nome do Bluetooth do seu carro>"
+        }
+      ],
+      "acoes": [
+        {
+          "tipo": "HTTP Request",
+          "metodo": "POST",
+          "url": "https://<sua-api>/api/public/v1/assistant/command",
+          "cabecalhos": {
+            "Authorization": "Bearer oc_live_<chave com escopo assistant:command>",
+            "Content-Type": "application/json"
+          },
+          "corpo": {
+            "text": "próximo"
+          },
+          "bloqueante": true,
+          "salvar_resposta_em": "variável local string: resposta"
+        },
+        {
+          "tipo": "JSON parse",
+          "origem": "resposta",
+          "destino": "variável dicionário: dados"
+        },
+        {
+          "tipo": "Speak Text",
+          "texto": "[lv=dados[fala]]",
+          "observacao": "Magic text do campo 'fala', como o vídeo faz com EUR/GBP. O nome da sintaxe varia por versão: use o seletor de magic text."
+        }
+      ],
+      "ativa_por_padrao": false,
+      "observacao": "Fica desativada; a macro 'Assistente aberto' a ativa e 'Assistente fechado' a desativa."
+    },
+    {
+      "nome": "Falar: sim",
+      "objetivo": "Confirma a ação pendente no menu (ex.: apagar, enviar rascunho).",
+      "gatilhos": [
+        {
+          "tipo": "Media Button / botão flutuante / widget",
+          "observacao": "Escolha o que o seu carro repassa ao celular; não confirmei qual funciona no seu."
+        }
+      ],
+      "restricoes": [
+        {
+          "tipo": "Bluetooth Device Connected",
+          "dispositivo": "<nome do Bluetooth do seu carro>"
+        }
+      ],
+      "acoes": [
+        {
+          "tipo": "HTTP Request",
+          "metodo": "POST",
+          "url": "https://<sua-api>/api/public/v1/assistant/command",
+          "cabecalhos": {
+            "Authorization": "Bearer oc_live_<chave com escopo assistant:command>",
+            "Content-Type": "application/json"
+          },
+          "corpo": {
+            "text": "sim"
+          },
+          "bloqueante": true,
+          "salvar_resposta_em": "variável local string: resposta"
+        },
+        {
+          "tipo": "JSON parse",
+          "origem": "resposta",
+          "destino": "variável dicionário: dados"
+        },
+        {
+          "tipo": "Speak Text",
+          "texto": "[lv=dados[fala]]",
+          "observacao": "Magic text do campo 'fala', como o vídeo faz com EUR/GBP. O nome da sintaxe varia por versão: use o seletor de magic text."
+        }
+      ],
+      "ativa_por_padrao": false,
+      "observacao": "Fica desativada; a macro 'Assistente aberto' a ativa e 'Assistente fechado' a desativa."
+    },
+    {
+      "nome": "Assistente aberto: ligar as macros de voz",
+      "objetivo": "Você diz ao Gemini 'mande para Copiloto: abrir assistente'. O assistente responde 'Assistente aberto.' e esta macro liga as macros 'Falar: ...'.",
+      "gatilhos": [
+        {
+          "tipo": "Notification Received",
+          "app": "WhatsApp",
+          "titulo_contem": "Copiloto",
+          "texto_contem": "Assistente aberto"
+        }
+      ],
+      "acoes": [
+        {
+          "tipo": "Enable/Disable Macro",
+          "alvo": [
+            "Falar: agenda de hoje",
+            "Falar: e-mails",
+            "Falar: próximo",
+            "Falar: sim"
+          ],
+          "estado": "ativar"
+        },
+        {
+          "tipo": "Speak Text",
+          "texto": "Assistente aberto"
+        }
+      ],
+      "atencao": "Não reaja ao texto do seu próprio pedido: o gatilho deve olhar só a notificação que vem do Copiloto."
+    },
+    {
+      "nome": "Assistente fechado: desligar as macros de voz",
+      "objetivo": "Você diz 'mande para Copiloto: fechar assistente'. A resposta 'Assistente fechado.' desliga as macros.",
+      "gatilhos": [
+        {
+          "tipo": "Notification Received",
+          "app": "WhatsApp",
+          "titulo_contem": "Copiloto",
+          "texto_contem": "Assistente fechado"
+        }
+      ],
+      "acoes": [
+        {
+          "tipo": "Enable/Disable Macro",
+          "alvo": [
+            "Falar: agenda de hoje",
+            "Falar: e-mails",
+            "Falar: próximo",
+            "Falar: sim"
+          ],
+          "estado": "desativar"
+        },
+        {
+          "tipo": "Speak Text",
+          "texto": "Assistente fechado"
+        }
+      ]
+    }
+  ],
+  "limites_conhecidos": [
+    "Dizer um comando livre exigiria transcrição de voz no celular; as macros acima usam comandos fixos por botão.",
+    "A chave no celular pode confirmar ações do menu (apagar e-mail, enviar rascunho): use escopo dedicado e revogue se perder o aparelho.",
+    "Para o MacroDroid ler notificações é preciso dar a ele acesso a notificações e desativar a otimização de bateria."
+  ],
+  "como_usar": [
+    "1. No painel, crie uma chave de API só com o escopo assistant:command e cole em Authorization.",
+    "2. Cada macro manda um comando fixo e fala o campo 'fala' da resposta. Não precisa ditar nada ao Gemini.",
+    "3. O assistente liga o modo carro sozinho a cada chamada (e desliga após CAR_MODE_HOURS sem uso).",
+    "4. Por aqui só responde o menu (e-mail, agenda, Drive, clima). Pedido livre à IA e cofre de senhas não rodam por esta rota.",
+    "5. Abrir e fechar: diga ao Gemini 'mande para Copiloto: abrir assistente' (e 'fechar assistente' ao sair). As respostas 'Assistente aberto.' e 'Assistente fechado.' são fixas e ligam/desligam as macros 'Falar'."
+  ]
+}

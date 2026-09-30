@@ -1,4 +1,4 @@
-import { Injectable, Logger } from "@nestjs/common";
+import { ForbiddenException, Injectable, Logger } from "@nestjs/common";
 import { prisma } from "@openclaw/database";
 import { GoogleService } from "../../integrations/google/google.service";
 import { MenuService } from "./menu.service";
@@ -8,7 +8,7 @@ import { toSpeech } from "./speech";
 import { suspiciousReasons } from "./security";
 import { StateService } from "../../state/state.service";
 import { Service } from "../../auth/permissions";
-import { assistantInstance, Commander, ECHO_TTL_MS, echoKey, workspaceCommander } from "./commander";
+import { assistantInstance, can, Commander, ECHO_TTL_MS, echoKey, workspaceCommander } from "./commander";
 import { WeatherService } from "./weather.service";
 import { SECRET_WIPE_MS } from "./vault-command";
 import { addSent, CLEAN_GIVE_UP_MS, IDLE_MENU_MS, idleKey, SENT_TTL_MS, sentKey, SentMessage } from "./chat-clean";
@@ -387,6 +387,28 @@ export class AssistantService {
     if (opts.wipeAfterMs && res?.key?.id && res.key.remoteJid) {
       await this.state.set(`wipe:${res.key.id}`, { due: Date.now() + opts.wipeAfterMs, instance: instanceName, key: { id: res.key.id, remoteJid: res.key.remoteJid, fromMe: true } }, 15 * 60_000);
     }
+  }
+
+  /**
+   * Comando por voz vindo da API pública (MacroDroid, atalhos): roda o mesmo menu do WhatsApp, sempre em modo carro,
+   * e devolve o texto já no formato falado. Só o menu responde: pedido livre à IA não roda por aqui, porque ela
+   * pode agir (enviar mensagens) e a chave da API fica num celular.
+   */
+  async voice(workspaceId: string, text: string): Promise<{ fala: string }> {
+    const owner = await workspaceCommander(workspaceId);
+    if (!owner || !can(owner, "assistant")) throw new ForbiddenException("O assistente não está liberado para esta conta.");
+    await this.menu.enterCar(workspaceId);
+    let answer: string | null = null;
+    try {
+      answer = await this.menu.respond(workspaceId, text);
+    } catch (err: any) {
+      this.logger.error(`Comando de voz falhou: ${err.message}`);
+    }
+    // Nada daqui vai para o WhatsApp: limpa as marcas de "segredo" e "código digitado" para não vazarem no próximo envio
+    await this.menu.takeSecret(workspaceId);
+    await this.menu.takeRedact(workspaceId);
+    this.logger.log(`[AUDIT] ws=${workspaceId} voice_command chars=${text.length}`);
+    return { fala: toSpeech(answer ?? "Não entendi. Diga, por exemplo, agenda de hoje ou ler e-mails.") };
   }
 
   /** Baixa o áudio do WhatsApp e o envia ao modelo para virar texto (Gemini; Whisper como reserva). */

@@ -32,6 +32,6 @@ import { InstagramWorker } from "./workers/instagram.worker";
   ],
   controllers: [ChannelsController],
   providers: [ChannelsService, WhatsappWorker, InstagramWorker, InstagramService, InboundService, AssistantService, MenuService, MemoryService, GeminiService, IntentService, EmailWatcherService, WeatherService, AssistantSchedulerService],
-  exports: [ChannelsService, EvolutionModule],
+  exports: [ChannelsService, EvolutionModule, AssistantService],
 })
 export class ChannelsModule {}

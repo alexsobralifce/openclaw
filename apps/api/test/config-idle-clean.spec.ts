@@ -137,6 +137,21 @@ describe("volta ao menu principal", () => {
     expect(await menu.idleReturn("w1")).toBeNull();
   });
 
+  it("'abrir assistente' liga o modo carro e 'fechar assistente' desliga, com respostas fixas curtas", async () => {
+    const { menu } = menuFor();
+    expect(await menu.respond("w1", "Abrir assistente.")).toBe("Assistente aberto.");
+    expect(await menu.isCar("w1")).toBe(true);
+    expect(await menu.respond("w1", "fechar o assistente por favor")).toBe("Assistente fechado.");
+    expect(await menu.isCar("w1")).toBe(false);
+  });
+
+  it("'assistente' dentro de uma frase maior não liga nem desliga nada", async () => {
+    const { menu } = menuFor();
+    await menu.respond("w1", "modo carro");
+    await menu.respond("w1", "quero fechar assistente virtual do cliente");
+    expect(await menu.isCar("w1")).toBe(true);
+  });
+
   it("no modo carro reinicia a tela sem mandar nada", async () => {
     const { menu, store } = menuFor();
     await menu.respond("w1", "modo carro");

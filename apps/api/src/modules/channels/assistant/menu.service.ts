@@ -138,6 +138,10 @@ export class MenuService {
       // Em telas de digitação (rascunho de e-mail, evento...), o texto é conteúdo: comandos globais só valem como mensagem inteira
       const cmd = (src: string) => new RegExp(isInput ? `^(${src})$` : `(${src})`);
       // Modo carro e modo direção são um só: texto falável, que o Android Auto/CarPlay leem em voz alta
+      // "Abrir/fechar assistente": mesma coisa que o modo carro, com resposta curta e fixa. O MacroDroid reconhece estes textos
+      // ("Assistente aberto" / "Assistente fechado") para ligar e desligar as macros de voz: não mude as frases.
+      if (cmd("^(fechar|encerrar|desativar) (o )?assistente( por favor)?$").test(flat)) return await this.carSet(workspaceId, false, "Assistente fechado.");
+      if (cmd("^(abrir|iniciar|ativar) (o )?assistente( por favor)?$").test(flat)) return await this.carSet(workspaceId, true, "Assistente aberto.");
       if (cmd("sair do modo (direcao|carro)|desligar (o )?modo (direcao|carro)|desativar (o )?modo (direcao|carro)|parei de dirigir|^cheguei").test(flat)) return await this.carSet(workspaceId, false);
       if (cmd("modo carro|modo direcao|android auto|carplay|car play|estou no carro|to no carro|vou dirigir|estou dirigindo|to dirigindo").test(flat)) return await this.carSet(workspaceId, true);
       if (/^(ler |ver |abrir |checar )?(os |meus )?(novos )?e-?mails?( novos)?$/.test(flat)) return await this.emailsEntry(workspaceId);
@@ -1442,10 +1446,18 @@ export class MenuService {
     if (m) await this.state.set(`mode:${ws}`, m, MODE_TTL);
   }
 
-  private async carSet(ws: string, on: boolean) {
+  /** Liga o modo carro sem a mensagem de boas-vindas (comando de voz pela API); se já estava ligado, só renova o prazo. */
+  async enterCar(ws: string) {
+    if (await this.isCar(ws)) return this.touchMode(ws);
+    await this.state.set(`mode:${ws}`, "car", MODE_TTL);
+    await this.setMain(ws);
+  }
+
+  private async carSet(ws: string, on: boolean, short?: string) {
     if (on) await this.state.set(`mode:${ws}`, "car", MODE_TTL);
     else await this.state.del(`mode:${ws}`);
     await this.setMain(ws);
+    if (short) return short;
     if (!on) return "✅ *Modo carro desligado.*\nVoltei a responder no formato normal.";
     const hours = Math.round(MODE_TTL / 3600_000);
     return [

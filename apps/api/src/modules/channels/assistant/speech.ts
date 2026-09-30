@@ -1,5 +1,6 @@
 const NUM_WORDS = ["zero", "um", "dois", "três", "quatro", "cinco", "seis", "sete", "oito", "nove", "dez"];
-const MAX_LEN = 700;
+// Voz no carro: quanto mais curto, mais rápido o Gemini termina de ler e o motorista responde
+const MAX_LEN = Number(process.env.CAR_SPEECH_MAX_CHARS || 350);
 
 const strip = (line: string) =>
   line
@@ -44,14 +45,14 @@ export function toSpeech(text: string): string {
   let body = spoken.map((l) => l.replace(/[.:]+$/, "")).join(". ");
   let tail = "";
   const items = options.filter((o) => o.n !== 0);
-  const back = options.find((o) => o.n === 0);
   const isList = items.some((o) => o.details.length) || items.length > 5;
 
   if (isList) {
     const read = items.map((o) => `${NUM_WORDS[o.n] ?? o.n}, ${[o.label, ...o.details].map((x) => x.replace(/[.:]+$/, "")).join(", ")}`);
-    tail = `${read.join(". ")}. Diga o número ou o nome${back ? `, ou ${back.label.toLowerCase()}` : ""}.`;
-  } else if (options.length) {
-    const labels = options.map((o) => o.label.toLowerCase());
+    tail = `${read.join(". ")}. Diga o número.`;
+  } else if (items.length) {
+    // "Voltar" não precisa ser dito: quem quer sair já sabe
+    const labels = items.map((o) => o.label.toLowerCase());
     const list = labels.length > 1 ? `${labels.slice(0, -1).join(", ")} ou ${labels[labels.length - 1]}` : labels[0];
     tail = `Diga: ${list}.`;
   }
