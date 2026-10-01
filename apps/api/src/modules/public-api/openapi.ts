@@ -102,7 +102,8 @@ export function openApiSpec() {
           tags: ["Assistente"],
           ...op("Comando ao assistente, com a resposta pronta para ser falada (modo carro)", "assistant:command", {
             description: "Escopo necessário: `assistant:command`. Roda o mesmo menu do WhatsApp (e-mails, agenda, Drive, clima) e liga o modo carro. Não há IA livre nem cofre por aqui. Como o menu guarda a tela atual, respostas como \"dois\" ou \"sim\" continuam a conversa anterior.",
-            requestBody: { required: true, ...json(obj({ text: str({ maxLength: 500, description: "O que o usuário diria ao assistente, ex.: agenda de hoje" }) }, ["text"])) },
+            parameters: [{ name: "formato", in: "query", description: "`texto` devolve só a fala, em texto puro (sem JSON)", schema: str({ enum: ["texto"] }) }],
+            requestBody: { required: true, ...json(obj({ text: str({ maxLength: 500, description: "O que o usuário diria ao assistente, ex.: agenda de hoje. Vários comandos seguidos separados por ponto e vírgula (máx. 4), ex.: ler e-mails; Pessoal" }) }, ["text"])) },
             responses: { "200": ok(obj({ fala: str({ description: "Texto limpo, sem emoji nem markdown, para ler em voz alta" }) })) },
           }),
         },

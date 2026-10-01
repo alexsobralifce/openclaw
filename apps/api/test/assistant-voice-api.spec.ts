@@ -30,6 +30,26 @@ describe("comando de voz pela API pública", () => {
     expect(out.fala).toBe("Novo e-mail. De: Ana. Diga: ler ou apagar.");
   });
 
+  it("vários comandos separados por ponto e vírgula rodam em ordem e respondem o último", async () => {
+    const calls: string[] = [];
+    const { svc } = make(async () => null);
+    (svc as any).menu.respond = vi.fn(async (_ws: string, t: string) => {
+      calls.push(t);
+      return t === "Pessoal" ? "Seu e-mail pessoal" : "Qual conta?";
+    });
+    const out = await svc.voice("ws1", "ler e-mails; Pessoal");
+    expect(calls).toEqual(["ler e-mails", "Pessoal"]);
+    expect(out.fala).toBe("Seu e-mail pessoal");
+  });
+
+  it("limita a quatro comandos por chamada", async () => {
+    const calls: string[] = [];
+    const { svc } = make(async () => null);
+    (svc as any).menu.respond = vi.fn(async (_ws: string, t: string) => (calls.push(t), "ok"));
+    await svc.voice("ws1", "a;b;c;d;e;f");
+    expect(calls).toHaveLength(4);
+  });
+
   it("limpa as marcas de segredo e de código digitado (nada vai ao WhatsApp)", async () => {
     const { svc, menu } = make(async () => "ok");
     await svc.voice("ws1", "oi");

@@ -54,31 +54,41 @@ Resposta esperada: `{"fala":"..."}`. Erros comuns:
 | 429 | Limite de requisições excedido (veja `Retry-After`) |
 | `fala` = "Não entendi..." | O menu não reconheceu o texto; teste `ler e-mails` ou `agenda` |
 
-## 5. Montar a macro (modelo para todas)
+## 5. Montar a macro (só 2 ações)
 
-Crie uma macro por comando, todas com o mesmo formato. Este é o fluxo do vídeo "How to call Web APIs in MacroDroid", aplicado ao assistente.
+Cada macro tem **uma ação de requisição e uma de fala**. Não precisa de JSON Parse nem de variável de dicionário.
 
-1. **Gatilho:** escolha o que o seu carro repassa ao celular: botão de mídia do volante/fone (*Media Button*), botão flutuante ou widget. Teste qual funciona no seu carro.
-2. **Restrição:** *Bluetooth Device Connected* com o Bluetooth do carro, para a macro só rodar lá dentro.
-3. **Ação 1, HTTP Request:**
-   - Método `POST`, URL do passo 3.4.
-   - Cabeçalhos: `Authorization: Bearer oc_live_SUA_CHAVE` e `Content-Type: application/json`.
-   - Corpo: `{"text":"agenda de hoje"}`.
-   - Ative a opção **bloqueante**, para a próxima ação esperar a resposta.
-   - Salve a resposta numa variável local do tipo **string** (ex.: `resposta`).
-4. **Ação 2, JSON parse:** converta `resposta` numa variável **dicionário** (ex.: `dados`).
-5. **Ação 3, Speak Text:** use o *magic text* para o campo `fala` de `dados` (pelo seletor de variáveis, como o vídeo faz com `EUR` e `GBP`).
+**Ação 1: HTTP Request**
 
-### Macros sugeridas
+| Campo | Valor |
+|---|---|
+| Método | `POST` |
+| URL | `https://api-production-f2743.up.railway.app/api/public/v1/assistant/command?formato=texto` |
+| Cabeçalho 1 | `Authorization` = `Bearer SUA_CHAVE` |
+| Cabeçalho 2 | `Content-Type` = `application/json` |
+| Corpo | `{"text":"ler e-mails; Pessoal"}` |
+| Bloquear a próxima ação até terminar | **ligado** |
+| Salvar a resposta em | uma variável de texto, ex.: `resposta` |
 
-| Macro | Corpo (`text`) | Para quê |
-|---|---|---|
-| Falar: agenda de hoje | `agenda de hoje` | Compromissos do dia |
-| Falar: e-mails | `ler e-mails` | E-mails novos |
-| Falar: próximo | `próximo` | Próximo e-mail ou opção |
-| Falar: sim | `sim` | Confirmar a ação pendente |
+**Ação 2: Speak Text**: texto = a variável `resposta` (pelo seletor de variáveis do MacroDroid).
 
-Outros comandos que o menu entende (os mesmos do WhatsApp) também servem: `clima`, `agenda amanhã`, `sair do modo carro` etc. Teste no `curl` antes.
+Use **aspas retas** (`"`) no corpo. O `?formato=texto` no fim da URL faz o assistente devolver só a frase falada.
+
+### Vários comandos de uma vez
+
+Separe com `;` (até 4). O assistente roda em ordem e fala só a última resposta. Assim a macro não erra a tela:
+
+| Macro | Corpo (`text`) |
+|---|---|
+| E-mails Pessoal | `ler e-mails; Pessoal` |
+| E-mails IFCE | `ler e-mails; IFCE` |
+| Agenda de hoje | `agenda de hoje` |
+| Próximo | `próximo` |
+| Sim (confirmar) | `sim` |
+
+Dica: monte **uma** macro completa, teste, e duplique-a trocando só o corpo.
+
+Outros comandos que o menu entende (os mesmos do WhatsApp): `clima`, `agenda amanhã`, `sair do modo carro` etc. Teste no `curl` antes.
 
 ## 5.1 Abrir e fechar o assistente (sessão)
 

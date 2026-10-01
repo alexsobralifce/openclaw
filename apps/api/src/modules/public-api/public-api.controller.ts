@@ -141,8 +141,14 @@ export class PublicApiController {
   @UseGuards(ApiKeyGuard) @RequireScopes("assistant:command")
   @Post("assistant/command")
   @HttpCode(200)
-  assistantCommand(@Req() req: any, @Body() body: VoiceCommandDto) {
-    return this.assistant.voice(req.apiKey.workspaceId, body.text);
+  async assistantCommand(@Req() req: any, @Res({ passthrough: true }) res: any, @Body() body: VoiceCommandDto, @Query("formato") formato?: string) {
+    const out = await this.assistant.voice(req.apiKey.workspaceId, body.text);
+    // ?formato=texto devolve só a fala, em texto puro: no MacroDroid dispensa o JSON Parse
+    if (formato === "texto") {
+      res.type("text/plain; charset=utf-8");
+      return out.fala;
+    }
+    return out;
   }
 
   @UseGuards(ApiKeyGuard) @RequireScopes("calendar:write")

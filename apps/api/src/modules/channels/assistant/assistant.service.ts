@@ -252,6 +252,9 @@ export function toolAllowed(services: Service[], name: string) {
   return (Array.isArray(need) ? need : [need]).some((s) => services.includes(s));
 }
 
+// Quantos comandos separados por ";" uma chamada de voz aceita
+const MAX_VOICE_STEPS = 4;
+
 @Injectable()
 export class AssistantService {
   private readonly logger = new Logger(AssistantService.name);
@@ -398,9 +401,12 @@ export class AssistantService {
     const owner = await workspaceCommander(workspaceId);
     if (!owner || !can(owner, "assistant")) throw new ForbiddenException("O assistente não está liberado para esta conta.");
     await this.menu.enterCar(workspaceId);
+    // Vários comandos numa chamada só, separados por ";" (ex.: "ler e-mails; Pessoal"): o menu avança uma tela por comando
+    // e a resposta é a do último. Poupa ações na macro e evita errar a tela.
+    const steps = text.split(";").map((s) => s.trim()).filter(Boolean).slice(0, MAX_VOICE_STEPS);
     let answer: string | null = null;
     try {
-      answer = await this.menu.respond(workspaceId, text);
+      for (const step of steps.length ? steps : [text]) answer = await this.menu.respond(workspaceId, step);
     } catch (err: any) {
       this.logger.error(`Comando de voz falhou: ${err.message}`);
     }
