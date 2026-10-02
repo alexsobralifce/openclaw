@@ -3,7 +3,7 @@ import { describe, expect, it, vi } from "vitest";
 const h = vi.hoisted(() => ({ upsert: vi.fn(async (_a: any) => ({})) }));
 vi.mock("@openclaw/database", () => ({ prisma: { aiUsage: { upsert: (a: any) => h.upsert(a) } } }));
 
-import { geminiTokens, openaiTokens, recordUsage, rollup, runAs, SYSTEM_USER } from "../src/modules/channels/assistant/usage";
+import { costOf, geminiTokens, loadPrices, openaiTokens, recordUsage, rollup, runAs, SYSTEM_USER } from "../src/modules/channels/assistant/usage";
 
 const flush = () => new Promise((r) => setTimeout(r, 0));
 
@@ -52,5 +52,37 @@ describe("contador de tokens", () => {
     expect(r.users[1]).toMatchObject({ calls: 3, totalTokens: 670, lastDay: "2026-10-02", byProvider: { openai: { calls: 2, tokens: 120 }, gemini: { calls: 1, tokens: 550 } } });
     expect(r.total).toEqual({ calls: 12, inputTokens: 1600, outputTokens: 1070, totalTokens: 2670 });
     expect(r.byDay).toEqual([{ day: "2026-10-01", tokens: 120 }, { day: "2026-10-02", tokens: 2550 }]);
+  });
+
+  it("custo: preço por milhão de tokens, modelo datado usa o nome base, sem preço = null", () => {
+    const prices = loadPrices();
+    expect(costOf({ model: "gpt-4o-mini", inputTokens: 1_000_000, outputTokens: 1_000_000 }, prices)).toBeCloseTo(0.75, 6);
+    expect(costOf({ model: "gpt-4o-mini-2024-07-18", inputTokens: 2_000_000, outputTokens: 0 }, prices)).toBeCloseTo(0.3, 6);
+    expect(costOf({ model: "gemini-x", inputTokens: 10, outputTokens: 10 }, prices)).toBeNull();
+  });
+
+  it("AI_PRICES acrescenta modelos; JSON inválido ou preço negativo é ignorado", () => {
+    const p = loadPrices('{"gemini-x":{"in":0.1,"out":0.4},"ruim":{"in":-1,"out":1}}');
+    expect(p["gemini-x"]).toEqual({ in: 0.1, out: 0.4 });
+    expect(p["ruim"]).toBeUndefined();
+    expect(Object.keys(loadPrices("{lixo"))).toEqual(["gpt-4o-mini"]);
+  });
+
+  it("rollup: custo por usuário, tokens sem preço à parte e projeção de 30 dias pelo ritmo", () => {
+    const prices = loadPrices('{"g":{"in":1,"out":1}}');
+    const r = rollup(
+      [
+        { userId: "a", provider: "openai", model: "gpt-4o-mini", day: "2026-10-01", calls: 1, inputTokens: 1_000_000, outputTokens: 0 },
+        { userId: "a", provider: "gemini", model: "g", day: "2026-10-02", calls: 1, inputTokens: 1_000_000, outputTokens: 0 },
+        { userId: "a", provider: "gemini", model: "sem-preco", day: "2026-10-02", calls: 1, inputTokens: 500, outputTokens: 0 },
+      ],
+      prices,
+      "2026-10-02",
+    );
+    const a = r.users[0];
+    expect(a.costUsd).toBeCloseTo(1.15, 6);
+    expect(a.unpricedTokens).toBe(500);
+    // 2 dias de uso (01 e 02): 1,15 / 2 * 30
+    expect(a.monthlyUsd).toBeCloseTo(17.25, 6);
   });
 });

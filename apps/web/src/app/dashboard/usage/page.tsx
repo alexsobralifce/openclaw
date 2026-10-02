@@ -8,6 +8,7 @@ const card = "bg-gray-900 border border-gray-800 rounded-xl p-4";
 const btn = "px-3 py-1.5 rounded-lg text-xs font-medium transition-colors";
 const PERIODS = [7, 30, 90];
 const nf = new Intl.NumberFormat("pt-BR");
+const usd = (v: number) => `US$ ${v.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: v < 1 ? 4 : 2 })}`;
 const PROVIDERS: Record<string, string> = { openai: "OpenAI", gemini: "Gemini", whisper: "Whisper" };
 
 export default function UsagePage() {
@@ -59,6 +60,29 @@ export default function UsagePage() {
             ))}
           </div>
 
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            <div className={card}>
+              <div className="text-xs text-gray-500">Custo estimado no período</div>
+              <div className="text-lg font-semibold text-gray-200 tabular-nums">{usd(data.total.costUsd)}</div>
+              {data.usdBrl && <div className="text-xs text-gray-500">≈ R$ {(data.total.costUsd * data.usdBrl).toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>}
+            </div>
+            <div className={card}>
+              <div className="text-xs text-gray-500">Média por usuário ativo, por mês</div>
+              <div className="text-lg font-semibold text-gray-200 tabular-nums">{usd(data.avgMonthlyUsd)}</div>
+              <div className="text-xs text-gray-500">{data.activeUsers} {data.activeUsers === 1 ? "usuário ativo" : "usuários ativos"}{data.usdBrl ? ` · ≈ R$ ${(data.avgMonthlyUsd * data.usdBrl).toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : ""}</div>
+            </div>
+            <div className={card}>
+              <div className="text-xs text-gray-500">Tokens sem preço configurado</div>
+              <div className="text-lg font-semibold text-gray-200 tabular-nums">{nf.format(data.total.unpricedTokens)}</div>
+              <div className="text-xs text-gray-500">Com preço: {data.pricedModels.join(", ")}</div>
+            </div>
+          </div>
+          {data.total.unpricedTokens > 0 && (
+            <p className="text-xs text-amber-300/90">
+              O custo só soma modelos com preço conhecido. Para incluir os demais (ex.: Gemini), defina no servidor <code>AI_PRICES</code>, como {`{"nome-do-modelo":{"in":0.10,"out":0.40}}`}, em US$ por 1 milhão de tokens. Para ver em reais, defina <code>AI_USD_BRL</code>. A projeção usa o ritmo desde o primeiro uso de cada pessoa; com poucos dias de dados, é só uma ideia.
+            </p>
+          )}
+
           <div className={card}>
             <h2 className="text-sm font-medium text-gray-300 mb-3">Por dia</h2>
             {data.byDay.length === 0 ? (
@@ -82,6 +106,8 @@ export default function UsagePage() {
                   <th className="pb-2 pr-3 font-medium text-right">Entrada</th>
                   <th className="pb-2 pr-3 font-medium text-right">Saída</th>
                   <th className="pb-2 pr-3 font-medium text-right">Chamadas</th>
+                  <th className="pb-2 pr-3 font-medium text-right">Custo</th>
+                  <th className="pb-2 pr-3 font-medium text-right">Projeção/mês</th>
                   <th className="pb-2 font-medium">Provedores</th>
                 </tr>
               </thead>
@@ -90,19 +116,21 @@ export default function UsagePage() {
                   <tr key={u.userId} className="border-t border-gray-800 align-top">
                     <td className="py-2 pr-3">
                       <div className="text-gray-200">{u.name}</div>
-                      <div className="text-xs text-gray-500">{u.email ?? "—"} · último uso {u.lastDay}</div>
+                      <div className="text-xs text-gray-500">{u.email ?? "—"} · {u.lastDay ? `último uso ${u.lastDay}` : "ainda não usou"}</div>
                     </td>
                     <td className="py-2 pr-3 text-right tabular-nums font-medium">{nf.format(u.totalTokens)}</td>
                     <td className="py-2 pr-3 text-right tabular-nums">{nf.format(u.inputTokens)}</td>
                     <td className="py-2 pr-3 text-right tabular-nums">{nf.format(u.outputTokens)}</td>
                     <td className="py-2 pr-3 text-right tabular-nums">{nf.format(u.calls)}</td>
+                    <td className="py-2 pr-3 text-right tabular-nums">{usd(u.costUsd)}{u.unpricedTokens > 0 && <span title="Parte do consumo sem preço configurado"> *</span>}</td>
+                    <td className="py-2 pr-3 text-right tabular-nums">{usd(u.monthlyUsd)}</td>
                     <td className="py-2 text-xs text-gray-400">
                       {Object.entries(u.byProvider).map(([p, v]) => `${PROVIDERS[p] ?? p}: ${nf.format(v.tokens)}`).join(" · ")}
                     </td>
                   </tr>
                 ))}
                 {data.users.length === 0 && (
-                  <tr><td colSpan={6} className="py-4 text-gray-500">Nenhum consumo registrado ainda. O contador começa a valer a partir do deploy.</td></tr>
+                  <tr><td colSpan={8} className="py-4 text-gray-500">Nenhum consumo registrado ainda. O contador começa a valer a partir do deploy.</td></tr>
                 )}
               </tbody>
             </table>

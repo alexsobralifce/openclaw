@@ -51,6 +51,35 @@ export function recordUsage(provider: string, model: string, tokens: Tokens, fal
     .catch((e: any) => console.warn(`Contador de tokens falhou: ${String(e?.message ?? e).slice(0, 120)}`));
 }
 
+/** Preço em US$ por 1 milhão de tokens. */
+export interface Price {
+  in: number;
+  out: number;
+}
+
+/** Só o que está confirmado; os demais modelos entram pela variável AI_PRICES (JSON: {"modelo":{"in":0.1,"out":0.4}}). */
+const DEFAULT_PRICES: Record<string, Price> = { "gpt-4o-mini": { in: 0.15, out: 0.6 } };
+
+/** Tabela de preços: os padrões mais o que o dono definir em AI_PRICES (entradas inválidas são ignoradas). */
+export function loadPrices(raw = process.env.AI_PRICES): Record<string, Price> {
+  const out = { ...DEFAULT_PRICES };
+  try {
+    for (const [model, p] of Object.entries(JSON.parse(raw || "{}") as Record<string, any>)) {
+      if (Number.isFinite(p?.in) && Number.isFinite(p?.out) && p.in >= 0 && p.out >= 0) out[model] = { in: p.in, out: p.out };
+    }
+  } catch {
+    /* AI_PRICES inválida: fica só com os padrões */
+  }
+  return out;
+}
+
+/** Custo em US$ de uma linha, ou null quando o modelo não tem preço (não se inventa preço). Modelos datados (gpt-4o-mini-2024...) usam o preço do nome base. */
+export function costOf(r: { model: string; inputTokens: number; outputTokens: number }, prices: Record<string, Price>): number | null {
+  const key = Object.keys(prices).filter((k) => r.model === k || r.model.startsWith(`${k}-`)).sort((a, b) => b.length - a.length)[0];
+  const p = key && prices[key];
+  return p ? (r.inputTokens * p.in + r.outputTokens * p.out) / 1_000_000 : null;
+}
+
 export interface UsageRow {
   userId: string;
   provider: string;
@@ -69,14 +98,23 @@ export interface UserUsage {
   totalTokens: number;
   byProvider: Record<string, { calls: number; tokens: number }>;
   lastDay: string;
+  firstDay: string;
+  /** Custo estimado só do que tem preço conhecido; o resto fica em `unpricedTokens`. */
+  costUsd: number;
+  unpricedTokens: number;
+  /** Projeção para 30 dias, pelo ritmo desde o primeiro uso (mínimo de 1 dia). */
+  monthlyUsd: number;
 }
 
+const DAY_MS = 86_400_000;
+const daysBetween = (from: string, to: string) => Math.max(1, Math.round((Date.parse(`${to}T00:00:00Z`) - Date.parse(`${from}T00:00:00Z`)) / DAY_MS) + 1);
+
 /** Agrupa as linhas por usuário (mais consumo primeiro) e soma o total geral. */
-export function rollup(rows: UsageRow[]): { users: UserUsage[]; total: { calls: number; inputTokens: number; outputTokens: number; totalTokens: number }; byDay: { day: string; tokens: number }[] } {
+export function rollup(rows: UsageRow[], prices: Record<string, Price> = {}, today = ""): { users: UserUsage[]; total: { calls: number; inputTokens: number; outputTokens: number; totalTokens: number }; byDay: { day: string; tokens: number }[] } {
   const users = new Map<string, UserUsage>();
   const days = new Map<string, number>();
   for (const r of rows) {
-    const u = users.get(r.userId) ?? { userId: r.userId, calls: 0, inputTokens: 0, outputTokens: 0, totalTokens: 0, byProvider: {}, lastDay: "" };
+    const u = users.get(r.userId) ?? { userId: r.userId, calls: 0, inputTokens: 0, outputTokens: 0, totalTokens: 0, byProvider: {}, lastDay: "", firstDay: r.day, costUsd: 0, unpricedTokens: 0, monthlyUsd: 0 };
     const t = r.inputTokens + r.outputTokens;
     u.calls += r.calls;
     u.inputTokens += r.inputTokens;
@@ -86,9 +124,14 @@ export function rollup(rows: UsageRow[]): { users: UserUsage[]; total: { calls: 
     p.calls += r.calls;
     p.tokens += t;
     if (r.day > u.lastDay) u.lastDay = r.day;
+    if (r.day < u.firstDay) u.firstDay = r.day;
+    const c = costOf(r, prices);
+    if (c === null) u.unpricedTokens += t;
+    else u.costUsd += c;
     users.set(r.userId, u);
     days.set(r.day, (days.get(r.day) ?? 0) + t);
   }
+  for (const u of users.values()) u.monthlyUsd = (u.costUsd / daysBetween(u.firstDay, today || u.lastDay)) * 30;
   const list = [...users.values()].sort((a, b) => b.totalTokens - a.totalTokens);
   const total = list.reduce((s, u) => ({ calls: s.calls + u.calls, inputTokens: s.inputTokens + u.inputTokens, outputTokens: s.outputTokens + u.outputTokens, totalTokens: s.totalTokens + u.totalTokens }), { calls: 0, inputTokens: 0, outputTokens: 0, totalTokens: 0 });
   return { users: list, total, byDay: [...days].map(([day, tokens]) => ({ day, tokens })).sort((a, b) => a.day.localeCompare(b.day)) };

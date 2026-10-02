@@ -49,7 +49,11 @@ export interface NoteTopic {
 export interface UsageReport {
   days: number;
   since: string;
-  total: { calls: number; inputTokens: number; outputTokens: number; totalTokens: number };
+  total: { calls: number; inputTokens: number; outputTokens: number; totalTokens: number; costUsd: number; unpricedTokens: number };
+  avgMonthlyUsd: number;
+  activeUsers: number;
+  usdBrl: number | null;
+  pricedModels: string[];
   byDay: { day: string; tokens: number }[];
   users: {
     userId: string;
@@ -62,6 +66,10 @@ export interface UsageReport {
     totalTokens: number;
     byProvider: Record<string, { calls: number; tokens: number }>;
     lastDay: string;
+    costUsd: number;
+    unpricedTokens: number;
+    monthlyUsd: number;
+    status: string | null;
   }[];
 }
 
