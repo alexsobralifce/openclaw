@@ -3,15 +3,28 @@ import { prisma } from "@openclaw/database";
 import { isSealed, openToken, sealToken } from "../../webhooks/crypto";
 import { nextDay } from "../../channels/assistant/agenda-events";
 import { DriveKind, KIND_Q, wordVariants } from "../../channels/assistant/drive";
+import { appendEntry, dailyFileName, dayStamp, formatEntry, NOTES_FOLDER, snippets } from "../../channels/assistant/notes";
 
 const SCOPES = [
   "https://www.googleapis.com/auth/gmail.modify",
   "https://www.googleapis.com/auth/calendar",
-  // Só leitura: o assistente busca e baixa arquivos, nunca altera nem apaga nada no Drive
+  // Lê qualquer arquivo (buscar e baixar), mas só grava nos arquivos que ele mesmo criou (notas em Assist.IA/); nunca apaga
   "https://www.googleapis.com/auth/drive.readonly",
+  "https://www.googleapis.com/auth/drive.file",
   "openid",
   "email",
 ];
+
+/** Nota maior que isto não é lida inteira (busca) nem recebe mais linhas. */
+const NOTE_MAX_BYTES = 1024 * 1024;
+const FOLDER_MIME = "application/vnd.google-apps.folder";
+export interface NoteHit {
+  id: string;
+  nome: string;
+  modificado?: string;
+  link?: string;
+  trechos: string[];
+}
 
 /** Limite de envio pelo WhatsApp (o arquivo passa em base64 pela Evolution API). */
 export const DRIVE_MAX_BYTES = 15 * 1024 * 1024;
@@ -36,6 +49,10 @@ const GMAIL_HEADERS = ["From", "Subject", "Date", "List-Unsubscribe", "Precedenc
 @Injectable()
 export class GoogleService implements OnModuleInit {
   private readonly logger = new Logger(GoogleService.name);
+  /** Pasta de notas por conta (só acelera: se o processo reiniciar, é uma busca a mais). */
+  private noteFolders = new Map<string, string>();
+  /** Fila por conta: ler-acrescentar-gravar duas notas ao mesmo tempo perderia uma delas. */
+  private noteLocks = new Map<string, Promise<unknown>>();
 
   /** Cifra os refresh tokens que ainda estão em texto puro (contas conectadas antes da cifragem). */
   async onModuleInit() {
@@ -330,6 +347,130 @@ export class GoogleService implements OnModuleInit {
     const res = await fetch(url, { headers: { Authorization: `Bearer ${token}` }, signal: AbortSignal.timeout(60_000) });
     if (!res.ok) throw new Error(`Google API ${res.status}: ${(await res.text()).slice(0, 300)}`);
     return Buffer.from(await res.arrayBuffer());
+  }
+
+  // ─── Notas em Markdown no Drive ───────────────────────────────
+
+  private serial<T>(key: string, fn: () => Promise<T>): Promise<T> {
+    const run = (this.noteLocks.get(key) ?? Promise.resolve()).catch(() => {}).then(fn);
+    this.noteLocks.set(key, run);
+    run.then(
+      () => this.noteLocks.get(key) === run && this.noteLocks.delete(key),
+      () => this.noteLocks.get(key) === run && this.noteLocks.delete(key),
+    );
+    return run;
+  }
+
+  /** Erro de gravação em português claro: conta conectada antes do escopo de notas. */
+  private noteError(e: any): Error {
+    const m = String(e?.message ?? e);
+    if (/ACCESS_TOKEN_SCOPE_INSUFFICIENT|insufficientPermissions|insufficient authentication scopes/i.test(m)) {
+      return new Error("Esta conta ainda não liberou gravar notas no Drive. Reconecte o Google em Canais → Conectar Google.");
+    }
+    return this.driveError(e);
+  }
+
+  private async driveFirst(workspaceId: string, account: string | undefined, q: string): Promise<string | undefined> {
+    const p = new URLSearchParams({ q, pageSize: "1", fields: "files(id)", spaces: "drive" });
+    const r = await this.g<any>(workspaceId, account, `https://www.googleapis.com/drive/v3/files?${p}`);
+    return r.files?.[0]?.id;
+  }
+
+  /** Acha (ou cria) a pasta de notas da conta. */
+  private async noteFolder(workspaceId: string, account: string | undefined): Promise<string> {
+    const key = `${workspaceId}:${account ?? ""}`;
+    const cached = this.noteFolders.get(key);
+    if (cached) return cached;
+    let id = await this.driveFirst(workspaceId, account, `name='${NOTES_FOLDER}' and mimeType='${FOLDER_MIME}' and trashed=false`);
+    if (!id) {
+      const created = await this.g<any>(workspaceId, account, "https://www.googleapis.com/drive/v3/files?fields=id", {
+        method: "POST",
+        body: JSON.stringify({ name: NOTES_FOLDER, mimeType: FOLDER_MIME }),
+      });
+      id = created.id as string;
+    }
+    this.noteFolders.set(key, id);
+    return id;
+  }
+
+  private async driveUpload(workspaceId: string, account: string | undefined, method: "POST" | "PATCH", url: string, content: string, meta?: object): Promise<void> {
+    const token = await this.accessToken(workspaceId, account);
+    const boundary = `oc${Date.now().toString(36)}${Math.random().toString(36).slice(2)}`;
+    const body = meta
+      ? `--${boundary}\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n${JSON.stringify(meta)}\r\n--${boundary}\r\nContent-Type: text/markdown; charset=UTF-8\r\n\r\n${content}\r\n--${boundary}--`
+      : content;
+    const res = await fetch(url, {
+      method,
+      headers: { Authorization: `Bearer ${token}`, "Content-Type": meta ? `multipart/related; boundary=${boundary}` : "text/markdown; charset=UTF-8" },
+      body,
+      signal: AbortSignal.timeout(30_000),
+    });
+    if (!res.ok) throw new Error(`Google API ${res.status}: ${(await res.text()).slice(0, 300)}`);
+  }
+
+  /**
+   * Acrescenta uma linha à nota do dia (Assist.IA/AAAA-MM-DD.md), criando a pasta e o arquivo se preciso.
+   * Só mexe em arquivos que o próprio assistente criou (escopo drive.file).
+   */
+  noteAppend(workspaceId: string, text: string, timeZone: string, account?: string, at = new Date()): Promise<{ nome: string; dia: string }> {
+    return this.serial(`${workspaceId}:${account ?? ""}`, async () => {
+      try {
+        const folder = await this.noteFolder(workspaceId, account);
+        const dia = dayStamp(at, timeZone);
+        const nome = dailyFileName(at, timeZone);
+        const entry = formatEntry(at, text, timeZone);
+        const esc = nome.replace(/'/g, "\\'");
+        const id = await this.driveFirst(workspaceId, account, `name='${esc}' and '${folder}' in parents and trashed=false`);
+        if (!id) {
+          await this.driveUpload(workspaceId, account, "POST", "https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id", appendEntry("", entry, dia), {
+            name: nome,
+            parents: [folder],
+            mimeType: "text/markdown",
+          });
+          return { nome, dia };
+        }
+        const current = await this.gBytes(workspaceId, account, `https://www.googleapis.com/drive/v3/files/${id}?alt=media`);
+        if (current.length > NOTE_MAX_BYTES) throw new Error("a nota de hoje ficou grande demais; abra o arquivo no Drive");
+        await this.driveUpload(workspaceId, account, "PATCH", `https://www.googleapis.com/upload/drive/v3/files/${id}?uploadType=media`, appendEntry(current.toString("utf8"), entry, dia));
+        return { nome, dia };
+      } catch (e) {
+        // A pasta pode ter sido apagada no Drive: esquece o cache para achar ou recriar na próxima
+        this.noteFolders.delete(`${workspaceId}:${account ?? ""}`);
+        throw this.noteError(e);
+      }
+    });
+  }
+
+  /** Procura as palavras nos arquivos Markdown/texto do Drive e devolve os trechos que as citam (até `max` notas). */
+  async noteSearch(workspaceId: string, terms: string[], account?: string, max = 5): Promise<NoteHit[]> {
+    const esc = (w: string) => w.replace(/\\/g, "\\\\").replace(/'/g, "\\'");
+    const words = [...new Set(terms)].slice(0, 6);
+    if (!words.length) return [];
+    try {
+      const q = [`(${words.map((w) => `fullText contains '${esc(w)}'`).join(" or ")})`, "(mimeType='text/markdown' or mimeType='text/plain')", "trashed=false"].join(" and ");
+      const p = new URLSearchParams({
+        q,
+        pageSize: String(max),
+        orderBy: "modifiedTime desc",
+        fields: "files(id,name,size,modifiedTime,webViewLink)",
+        corpora: "allDrives",
+        includeItemsFromAllDrives: "true",
+        supportsAllDrives: "true",
+      });
+      const r = await this.g<any>(workspaceId, account, `https://www.googleapis.com/drive/v3/files?${p}`);
+      const hits = await Promise.all(
+        (r.files ?? []).map(async (f: any): Promise<NoteHit | null> => {
+          if (Number(f.size ?? 0) > NOTE_MAX_BYTES) return null;
+          const bytes = await this.gBytes(workspaceId, account, `https://www.googleapis.com/drive/v3/files/${f.id}?alt=media&supportsAllDrives=true`).catch(() => null);
+          if (!bytes) return null;
+          const trechos = snippets(bytes.toString("utf8"), words.map((w) => w.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase()));
+          return trechos.length ? { id: f.id, nome: String(f.name), modificado: f.modifiedTime, link: f.webViewLink, trechos } : null;
+        }),
+      );
+      return hits.filter((h): h is NoteHit => !!h);
+    } catch (e) {
+      throw this.driveError(e);
+    }
   }
 
   // ─── Calendar ─────────────────────────────────────────────────
