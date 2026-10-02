@@ -11,7 +11,7 @@ import { Service } from "../../auth/permissions";
 import { assistantInstance, can, Commander, ECHO_TTL_MS, echoKey, workspaceCommander } from "./commander";
 import { WeatherService } from "./weather.service";
 import { looksLikeSharedSecret, SECRET_WIPE_MS } from "./vault-command";
-import { noteTerms } from "./notes";
+import { noteTerms, storageAccount } from "./notes";
 import { addSent, CLEAN_GIVE_UP_MS, IDLE_MENU_MS, idleKey, SENT_TTL_MS, sentKey, SentMessage } from "./chat-clean";
 import { EvolutionError, EvolutionService } from "../evolution/evolution.service";
 import { loadLocation, validCoords } from "./location";
@@ -160,7 +160,7 @@ const TOOLS = [
     function: {
       name: "note_add",
       description: "Anota uma linha na nota do dia do dono (Markdown no Google Drive, pasta Assist.IA). Use SÓ quando o próprio dono pedir para anotar/guardar uma ideia, lembrete ou informação SEM data e hora marcadas (com data e hora é compromisso: use calendar_create_event). Nunca grave senhas.",
-      parameters: { type: "object", properties: { text: { type: "string", description: "O que anotar, curto, como o dono disse" }, account: { type: "string", description: "Conta Google (opcional; padrão: a primeira)" } }, required: ["text"] },
+      parameters: { type: "object", properties: { text: { type: "string", description: "O que anotar, curto, como o dono disse" } }, required: ["text"] },
     },
   },
   {
@@ -653,12 +653,9 @@ export class AssistantService {
     if (name === "contact_search") {
       const who = String(args.name ?? "").trim().slice(0, 60);
       if (who.length < 2) return { error: "informe o nome da pessoa" };
-      const accounts: string[] = await this.google.listAccounts(workspaceId);
-      if (!accounts.length) return { error: "Google não conectado. Peça ao dono para conectar em Canais > Conectar Google no painel." };
-      const settled = await Promise.allSettled(accounts.map((a) => this.google.contactsLookup(workspaceId, who, a)));
-      const lists = settled.flatMap((r) => (r.status === "fulfilled" && r.value ? [r.value] : []));
-      const erros = settled.flatMap((r) => (r.status === "rejected" ? [String(r.reason?.message ?? r.reason)] : []));
-      return { contatos: lists.flat().slice(0, 5), ...(lists.length ? {} : { naoImportado: true }), ...(erros.length ? { avisos: erros } : {}) };
+      if (!(await this.google.listAccounts(workspaceId)).length) return { error: "Google não conectado. Peça ao dono para conectar em Canais > Conectar Google no painel." };
+      const contatos = await this.google.contactsLookup(workspaceId, who);
+      return contatos === null ? { contatos: [], naoImportado: true } : { contatos };
     }
     if (name === "note_add") {
       const text = String(args.text ?? "").replace(/\s+/g, " ").trim().slice(0, 1_000);
@@ -666,8 +663,7 @@ export class AssistantService {
       if (looksLikeSharedSecret(text)) return { error: "não guardo senhas em notas; use o cofre de senhas no painel" };
       const accounts: string[] = await this.google.listAccounts(workspaceId);
       if (!accounts.length) return { error: "Google não conectado. Peça ao dono para conectar em Canais > Conectar Google no painel." };
-      const account = accounts.includes(args.account) ? args.account : accounts[0];
-      const r = await this.google.noteAppend(workspaceId, text, TZ, account);
+      const r = await this.google.noteAppend(workspaceId, text, TZ, storageAccount(accounts));
       return { ok: true, nota: r.nome };
     }
     if (name === "note_search") {

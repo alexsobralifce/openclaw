@@ -4,6 +4,14 @@
 import { normalize } from "./voice";
 
 export const NOTES_FOLDER = "Assist.IA";
+
+/**
+ * Conta Google cujo Drive guarda as notas e os contatos: a pessoal (@gmail.com); sem ela, a primeira conectada.
+ * Os contatos de todas as contas são lidos, mas gravados só neste Drive.
+ */
+export function storageAccount(accounts: string[]): string | undefined {
+  return accounts.find((a) => /@gmail\.com$/i.test(a)) ?? accounts[0];
+}
 const MAX_NOTE = 1_000;
 
 /** Palavra que deixa claro que é uma nota (e não um compromisso: "anota consulta dia 10" continua sendo agenda). */

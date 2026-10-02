@@ -130,7 +130,8 @@ openclaw/
 ### integrations/google e state
 
 - `google.service.ts`: contas Google são `Channel` de `type: EMAIL` com refresh token cifrado (`enc1:`); múltiplas contas por workspace; Gmail, Calendar, Drive.
-- Contatos: `contactsImport` lê a People API (`contacts.readonly`) e grava `Assist.IA/Contatos/<letra>.md` (um arquivo por letra, reescrito por inteiro; `Outros.md` para iniciais não-letra). Roda sozinho na **primeira** conexão da conta (`connect()` → `importContactsOnce`, marcador `contactsSyncedAt` em `Channel.config`) e sob demanda com "atualizar contatos". `contactsLookup` baixa os arquivos (cache de 5 min) e procura pelo nome.
+- **Conta de armazenamento** (`storageAccount` em `notes.ts`): notas e contatos são gravados sempre no Drive da conta `@gmail.com` (a pessoal); sem ela, a primeira conectada. Não há escolha de conta por frase.
+- Contatos: `contactsImport` lê a People API (`contacts.readonly`) de **todas** as contas, junta (sem duplicar) e grava `Assist.IA/Contatos/<letra>.md` só no Drive de armazenamento (um arquivo por letra, reescrito por inteiro; `Outros.md` para iniciais não-letra). Se uma conta falhar na leitura, nada é gravado. Roda sozinho na **primeira** conexão de uma conta (`connect()` → `importContactsOnce`, marcador `contactsSyncedAt` em `Channel.config`) e sob demanda com "atualizar contatos". `contactsLookup` baixa os arquivos do Drive de armazenamento (cache de 5 min) e procura pelo nome.
 - Notas no Drive: `noteAppend` (nota do dia `Assist.IA/AAAA-MM-DD.md`, lê-acrescenta-regrava sob fila por conta) e `noteSearch` (trechos em `.md`/texto de todo o Drive). Escopos `drive.readonly` + `drive.file`: lê tudo, só grava o que ele mesmo criou.
 - `state.service.ts`: KV com TTL sobre `KvEntry`; `incr` atômico por SQL cru. Módulo `@Global` (o `WebhooksModule` também).
 
@@ -228,7 +229,7 @@ Webhook → `InboundEvent` → worker → `InboxService.processIncoming` → `We
 **Contatos do Google** (`assistant/contacts.ts`, `google.service.ts`)
 29. A People API precisa estar **ativada no projeto do Google Cloud** e as contas precisam reconectar com o escopo `contacts.readonly`. Sem a API ativa o erro traz o endereço de ativação (`peopleError` extrai o link da resposta do Google).
 30. `connect()` preserva o `config` anterior do canal (era sobrescrito): é assim que `contactsSyncedAt` sobrevive a reconexões. A importação inicial é em segundo plano e falhar não atrapalha a conexão; o marcador só é gravado após sucesso.
-31. Os arquivos de contatos são **gerados**: edições são sobrescritas na reimportação; letras que ficaram sem contatos viram arquivo vazio (contato apagado no Google não sobra). Só nome, telefones, e-mails e empresa são gravados; nada vai para o log.
+31. Trocar a conta de armazenamento (ex.: conectar a pessoal depois do IFCE) não move o que já foi gravado: a próxima importação grava no novo Drive e a pasta antiga fica órfã (apagar à mão). Os arquivos de contatos são **gerados**: edições são sobrescritas na reimportação; letras que ficaram sem contatos viram arquivo vazio (contato apagado no Google não sobra). Só nome, telefones, e-mails e empresa são gravados; nada vai para o log.
 32. Consulta (`telefone do Marcos`, `contact_search`) usa o serviço `drive`, é conteúdo externo na IA livre e não sequestra `e-mails de hoje` (`NOT_A_NAME`). Cache de contatos só em memória (mesma limitação das notas).
 
 ## Guia de navegação

@@ -9,7 +9,7 @@ const call = (id: string, name: string, args: object) => ({ id, type: "function"
 function build() {
   const noteAppend = vi.fn(async () => ({ nome: "2026-10-01.md", dia: "2026-10-01" }));
   const noteSearch = vi.fn(async () => [{ id: "n1", nome: "reunioes.md", modificado: "2026-09-30T12:00:00Z", link: "x", trechos: ["- Contrato do Marcos assinado"] }]);
-  const contactsLookup = vi.fn(async (_ws: string, _q: string, acc: string) => (acc === "a@gmail.com" ? [{ nome: "Marcos Silva", telefones: ["(85) 99999-0000"], emails: ["marcos@x.com"] }] : null));
+  const contactsLookup = vi.fn(async (_ws: string, _q: string): Promise<any> => [{ nome: "Marcos Silva", telefones: ["(85) 99999-0000"], emails: ["marcos@x.com"] }]);
   const google = { listAccounts: async () => ["a@gmail.com", "b@ifce.edu.br"], noteAppend, noteSearch, contactsLookup };
   const menu = { setExecutor: vi.fn(), setFileSender: vi.fn(), setChatCleaner: vi.fn(), requestConfirm: vi.fn() };
   const memory = { promptBlock: async () => "" };
@@ -55,11 +55,11 @@ describe("ferramentas de notas na IA livre", () => {
     expect(lastToolResult(sent, "note_add")).toEqual({ ok: true, nota: "2026-10-01.md" });
   });
 
-  it("note_add aceita escolher uma conta que existe e ignora uma inventada", async () => {
+  it("note_add grava sempre no Drive pessoal, mesmo que a IA peça outra conta", async () => {
     const { svc, noteAppend } = build();
-    fakeOpenAI([{ role: "assistant", content: null, tool_calls: [call("1", "note_add", { text: "a", account: "b@ifce.edu.br" }), call("2", "note_add", { text: "b", account: "invasor@x.com" })] }, { role: "assistant", content: "ok" }]);
+    fakeOpenAI([{ role: "assistant", content: null, tool_calls: [call("1", "note_add", { text: "a", account: "b@ifce.edu.br" })] }, { role: "assistant", content: "ok" }]);
     await (svc as any).think(commander(["drive"]), "x");
-    expect(noteAppend.mock.calls.map((c: any[]) => c[3])).toEqual(["b@ifce.edu.br", "a@gmail.com"]);
+    expect(noteAppend.mock.calls.map((c: any[]) => c[3])).toEqual(["a@gmail.com"]);
   });
 
   it("note_add recusa senha e texto vazio", async () => {
@@ -117,7 +117,7 @@ describe("ferramentas de notas na IA livre", () => {
     const { svc, contactsLookup } = build();
     const sent = fakeOpenAI([{ role: "assistant", content: null, tool_calls: [call("1", "contact_search", { name: "Marcos" })] }, { role: "assistant", content: "Achei." }]);
     await (svc as any).think(commander(["drive"]), "qual o telefone do Marcos");
-    expect(contactsLookup).toHaveBeenCalledTimes(2);
+    expect(contactsLookup).toHaveBeenCalledWith("w1", "Marcos");
     const r = lastToolResult(sent, "contact_search");
     expect(r.AVISO).toMatch(/NÃO CONFIÁVEL/);
     expect(r.dados.contatos[0]).toMatchObject({ nome: "Marcos Silva", telefones: ["(85) 99999-0000"] });
@@ -126,7 +126,7 @@ describe("ferramentas de notas na IA livre", () => {
 
   it("contact_search avisa quando nenhuma conta importou contatos", async () => {
     const { svc, contactsLookup } = build();
-    contactsLookup.mockResolvedValue(null as any);
+    contactsLookup.mockResolvedValue(null);
     const sent = fakeOpenAI([{ role: "assistant", content: null, tool_calls: [call("1", "contact_search", { name: "Marcos" })] }, { role: "assistant", content: "ok" }]);
     await (svc as any).think(commander(["drive"]), "x");
     expect(lastToolResult(sent, "contact_search").dados).toMatchObject({ contatos: [], naoImportado: true });

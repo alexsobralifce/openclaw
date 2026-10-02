@@ -16,7 +16,7 @@ import { driveQueryFrom, fileIcon, fmtSize, looksLikeDriveRequest, parseDriveQue
 import { suspiciousReasons } from "./security";
 import { contactQuery, looksLikeContactsRefresh } from "./contacts";
 import { menuHiddenKey, MENU_ITEMS, sanitizeHidden } from "./menu-items";
-import { looksLikeNoteAdd, looksLikeNoteSearch, noteTerms, noteTextFrom, startsLikeNote } from "./notes";
+import { looksLikeNoteAdd, looksLikeNoteSearch, noteTerms, noteTextFrom, startsLikeNote, storageAccount } from "./notes";
 import { StateService } from "../../state/state.service";
 import { effectiveServices, Service } from "../../auth/permissions";
 import { normalize, parseChoice, pickByLabel } from "./voice";
@@ -152,7 +152,7 @@ export class MenuService {
       // "Anota ..." sem palavra explícita pode ser compromisso: o Jev decide (só com confiança alta); na dúvida segue o fluxo da agenda
       if (!isInput && !pending && (looksLikeNoteSearch(flat) || looksLikeNoteAdd(flat) || startsLikeNote(flat)) && (await this.services(workspaceId)).includes("drive")) {
         if (looksLikeNoteSearch(flat)) return await this.noteSearchView(workspaceId, text);
-        if (looksLikeNoteAdd(flat) || (await jevSays("note_add"))) return looksLikeSharedSecret(text) ? this.secretWarning() : await this.noteAdd(workspaceId, text, flat);
+        if (looksLikeNoteAdd(flat) || (await jevSays("note_add"))) return looksLikeSharedSecret(text) ? this.secretWarning() : await this.noteAdd(workspaceId, text);
       }
       // Em telas de digitação (rascunho de e-mail, evento...), o texto é conteúdo: comandos globais só valem como mensagem inteira
       const cmd = (src: string) => new RegExp(isInput ? `^(${src})$` : `(${src})`);
@@ -949,53 +949,49 @@ export class MenuService {
 
   // ─── Contatos do Google (Assist.IA/Contatos/<letra>.md no Drive) ───
 
-  /** "Qual o telefone do Marcos?": procura nos arquivos de contatos de todas as contas. */
+  /** "Qual o telefone do Marcos?": procura nos arquivos de contatos do Drive de armazenamento. */
   private async contactLookupView(ws: string, name: string): Promise<string> {
-    const accounts: string[] = await this.google.listAccounts(ws);
-    if (!accounts.length) return this.noGoogle();
-    const settled = await Promise.allSettled(accounts.map((a) => this.google.contactsLookup(ws, name, a)));
-    const lists = settled.flatMap((r) => (r.status === "fulfilled" && r.value ? [r.value] : []));
-    const found = lists.flat().slice(0, 5);
-    const failed = settled.find((r): r is PromiseRejectedResult => r.status === "rejected");
-    if (failed) this.logger.warn(`Buscar contato falhou: ${failed.reason?.message ?? failed.reason}`);
-    if (found.length) {
-      const rows = found.map((c) => [`👤 *${short(c.nome, 50)}*`, ...c.telefones.map((t) => `📞 ${t}`), ...c.emails.map((e) => `✉️ ${e}`), c.empresa ? `🏢 ${short(c.empresa, 50)}` : ""].filter(Boolean).join("\n"));
-      return [head("📇", found.length > 1 ? `${found.length} contatos` : "Contato", `"${short(name, 30)}"`), rows.join("\n\n"), warnLine(failed)].filter(Boolean).join("\n");
+    if (!(await this.google.listAccounts(ws)).length) return this.noGoogle();
+    let found: Awaited<ReturnType<GoogleService["contactsLookup"]>>;
+    try {
+      found = await this.google.contactsLookup(ws, name);
+    } catch (e: any) {
+      this.logger.warn(`Buscar contato falhou: ${e.message}`);
+      return `😕 Não consegui buscar nos contatos: ${short(String(e.message), 200)}`;
     }
-    if (!lists.length) {
-      return failed ? `😕 Não consegui buscar nos contatos: ${short(String(failed.reason?.message ?? failed.reason), 200)}` : "📇 Ainda não importei seus contatos. Diga *atualizar contatos* para trazê-los do Google.";
-    }
-    return `🤔 Não achei nenhum contato com *${short(name, 40)}*.${failed ? `\n${warnLine(failed)}` : ""}`;
+    if (found === null) return "📇 Ainda não importei seus contatos. Diga *atualizar contatos* para trazê-los do Google.";
+    if (!found.length) return `🤔 Não achei nenhum contato com *${short(name, 40)}*.`;
+    const rows = found.map((c) => [`👤 *${short(c.nome, 50)}*`, ...c.telefones.map((t) => `📞 ${t}`), ...c.emails.map((e) => `✉️ ${e}`), c.empresa ? `🏢 ${short(c.empresa, 50)}` : ""].filter(Boolean).join("\n"));
+    return [head("📇", found.length > 1 ? `${found.length} contatos` : "Contato", `"${short(name, 30)}"`), rows.join("\n\n")].join("\n");
   }
 
-  /** "Atualizar contatos": traz de novo os contatos do Google de todas as contas para os arquivos do Drive. */
+  /** "Atualizar contatos": traz de novo os contatos de todas as contas Google para os arquivos do Drive pessoal. */
   private async contactsRefresh(ws: string): Promise<string> {
-    const accounts: string[] = await this.google.listAccounts(ws);
-    if (!accounts.length) return this.noGoogle();
-    const settled = await Promise.allSettled(accounts.map((a) => this.google.contactsImport(ws, a)));
-    const lines = settled.map((r, i) => {
-      const label = accounts.length > 1 ? ` (${accountLabel(accounts[i])})` : "";
-      if (r.status === "fulfilled") return `📇 *${r.value.total} contato${r.value.total === 1 ? "" : "s"}* em ${r.value.arquivos} arquivo${r.value.arquivos === 1 ? "" : "s"}${label}.`;
-      this.logger.warn(`Atualizar contatos falhou: ${r.reason?.message ?? r.reason}`);
-      return `😕 Não consegui atualizar${label}: ${short(String(r.reason?.message ?? r.reason), 240)}`;
-    });
-    const ok = settled.some((r) => r.status === "fulfilled");
-    return [ok ? "✅ *Contatos atualizados* em Assist.IA/Contatos no seu Drive." : "", ...lines].filter(Boolean).join("\n");
+    if (!(await this.google.listAccounts(ws)).length) return this.noGoogle();
+    try {
+      const r = await this.google.contactsImport(ws);
+      return [
+        "✅ *Contatos atualizados*",
+        `📇 *${r.total} contato${r.total === 1 ? "" : "s"}* de ${r.contas} conta${r.contas === 1 ? "" : "s"} em ${r.arquivos} arquivo${r.arquivos === 1 ? "" : "s"}, em Assist.IA/Contatos no Drive ${accountLabel(r.destino)}.`,
+      ].join("\n");
+    } catch (e: any) {
+      this.logger.warn(`Atualizar contatos falhou: ${e.message}`);
+      return `😕 Não consegui atualizar os contatos: ${short(String(e.message), 300)}`;
+    }
   }
 
   // ─── Notas no Drive (Assist.IA/AAAA-MM-DD.md) ─────────────────
 
-  /** Guarda a anotação na nota do dia. Com várias contas Google, vale a primeira, ou a citada ("no obsidian do ifce: ..."). */
-  private async noteAdd(ws: string, text: string, flat: string): Promise<string> {
-    let content = noteTextFrom(text);
+  /** Guarda a anotação na nota do dia, no Drive da conta de armazenamento (a pessoal). */
+  private async noteAdd(ws: string, text: string): Promise<string> {
+    const content = noteTextFrom(text);
     const accounts: string[] = await this.google.listAccounts(ws);
-    if (!accounts.length) return this.noGoogle();
-    const named = accounts.length > 1 ? accounts.find((a) => new RegExp(`\\b(obsidian|diario|caderno|notas?) (do|da|no|na) ${normalize(accountLabel(a))}\\b`).test(flat)) : undefined;
-    if (named) content = content.replace(new RegExp(`^(?:d[oa]|n[oa])\\s+${accountLabel(named)}\\s*[:,\\-–]?\\s*`, "i"), "").trim();
+    const target = storageAccount(accounts);
+    if (!target) return this.noGoogle();
     if (!content) return "🤔 O que devo anotar? Diga, por exemplo: *anota no obsidian: ligar pro Marcos*.";
     try {
-      const r = await this.google.noteAppend(ws, content, TZ, named ?? accounts[0]);
-      return `📝 *Anotado!* _(${r.nome}${accounts.length > 1 ? ` · ${accountLabel(named ?? accounts[0])}` : ""})_`;
+      const r = await this.google.noteAppend(ws, content, TZ, target);
+      return `📝 *Anotado!* _(${r.nome}${accounts.length > 1 ? ` · ${accountLabel(target)}` : ""})_`;
     } catch (e: any) {
       this.logger.warn(`Anotar no Drive falhou: ${e.message}`);
       return `😕 Não consegui anotar: ${short(e.message, 200)}`;

@@ -85,14 +85,18 @@ describe("menu: anotar no Drive", () => {
     expect(out).toMatch(/Google/);
   });
 
-  it("com várias contas, usa a primeira ou a citada", async () => {
-    const { menu, noteAppend } = build({ accounts: ["pessoal@gmail.com", "ana@ifce.edu.br"] });
+  it("com várias contas, grava sempre no Drive pessoal (@gmail.com), qualquer que seja a ordem", async () => {
+    const { menu, noteAppend } = build({ accounts: ["ana@ifce.edu.br", "pessoal@gmail.com"] });
+    const out = (await menu.respond("w1", "anota no obsidian: comprar café")) as string;
+    await menu.respond("w1", "anota no obsidian do ifce: reunião de colegiado");
+    expect(noteAppend.mock.calls.map((c) => c[3])).toEqual(["pessoal@gmail.com", "pessoal@gmail.com"]);
+    expect(out).toContain("Pessoal");
+  });
+
+  it("sem conta @gmail.com, usa a primeira conectada", async () => {
+    const { menu, noteAppend } = build({ accounts: ["ana@ifce.edu.br", "ana@outro.com"] });
     await menu.respond("w1", "anota no obsidian: comprar café");
-    const out = (await menu.respond("w1", "anota no obsidian do ifce: reunião de colegiado")) as string;
-    expect(noteAppend.mock.calls[0][3]).toBe("pessoal@gmail.com");
-    expect(noteAppend.mock.calls[1][1]).toBe("reunião de colegiado");
-    expect(noteAppend.mock.calls[1][3]).toBe("ana@ifce.edu.br");
-    expect(out).toContain("IFCE");
+    expect(noteAppend.mock.calls[0][3]).toBe("ana@ifce.edu.br");
   });
 
   it("falha do Drive vira mensagem clara, sem derrubar", async () => {
