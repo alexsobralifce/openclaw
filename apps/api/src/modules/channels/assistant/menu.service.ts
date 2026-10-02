@@ -15,6 +15,8 @@ import { AssistantConfig, configKey, fmtInterval, IDLE_MENU_MS, intervalProblem,
 import { driveQueryFrom, fileIcon, fmtSize, looksLikeDriveRequest, parseDriveQuery, rankFiles, sanitizeAlternates } from "./drive";
 import { suspiciousReasons } from "./security";
 import { contactQuery, looksLikeContactsRefresh } from "./contacts";
+import { EmailSearchSpec, emailSearchSpec } from "./email-search";
+import { looksLikeEmailBookRefresh } from "./email-book";
 import { menuHiddenKey, MENU_ITEMS, sanitizeHidden } from "./menu-items";
 import { looksLikeNoteAdd, looksLikeNoteSearch, noteTerms, noteTextFrom, startsLikeNote, storageAccount } from "./notes";
 import { StateService } from "../../state/state.service";
@@ -146,10 +148,15 @@ export class MenuService {
       if (!isInput && !pending) {
         const person = contactQuery(flat);
         const open = /^(ver |abrir |mostrar )?(os |meus )?contatos$/.test(flat);
-        if ((person || open || looksLikeContactsRefresh(flat)) && (await this.services(workspaceId)).includes("drive")) {
+        const book = looksLikeEmailBookRefresh(flat);
+        if ((person || open || book || looksLikeContactsRefresh(flat)) && (await this.services(workspaceId)).includes("drive")) {
           if (open) return await this.contactsEntry(workspaceId);
+          if (book) return await this.emailBookRefresh(workspaceId);
           return person ? await this.contactLookupView(workspaceId, person) : await this.contactsRefresh(workspaceId);
         }
+        // Buscar e-mails no Gmail: "buscar e-mails do Marcos", "e-mails sobre contrato"
+        const search = emailSearchSpec(flat);
+        if (search && (await this.services(workspaceId)).includes("email")) return await this.emailSearchView(workspaceId, search);
       }
       // "Anota ..." sem palavra explícita pode ser compromisso: o Jev decide (só com confiança alta); na dúvida segue o fluxo da agenda
       if (!isInput && !pending && (looksLikeNoteSearch(flat) || looksLikeNoteAdd(flat) || startsLikeNote(flat)) && (await this.services(workspaceId)).includes("drive")) {
@@ -341,7 +348,7 @@ export class MenuService {
         if (n === 0) return this.mainMenu(ws, false);
         const flat = normalize(text);
         // A tela continua aberta: dá para pedir vários nomes em seguida
-        const out = looksLikeContactsRefresh(flat) ? await this.contactsRefresh(ws) : await this.contactLookupView(ws, contactQuery(flat) ?? text.trim().slice(0, 60));
+        const out = looksLikeEmailBookRefresh(flat) ? await this.emailBookRefresh(ws) : looksLikeContactsRefresh(flat) ? await this.contactsRefresh(ws) : await this.contactLookupView(ws, contactQuery(flat) ?? text.trim().slice(0, 60));
         return `${out}\n${DIV}\n💡 _Diga outro nome, ou 0 para voltar._`;
       }
       case "drive_input": {
@@ -878,7 +885,7 @@ export class MenuService {
       head("📇", "Contatos", "telefone e e-mail dos seus contatos do Google"),
       "Diga o *nome* da pessoa e eu busco o telefone e o e-mail.",
       '_Ex.: "Marcos" ou "telefone da Maria"_',
-      "_Contatos novos ou primeira vez? Diga *atualizar contatos*._",
+      "_Acho também quem já te escreveu por e-mail. Contatos novos? Diga *atualizar contatos* ou *atualizar banco de e-mails*._",
       DIV,
       opts(BACK),
     ].join("\n");
@@ -970,6 +977,46 @@ export class MenuService {
     } catch (e: any) {
       this.logger.warn(`Enviar arquivo do Drive falhou: ${e.message}`);
       return `😕 ${short(e.message, 200)}`;
+    }
+  }
+
+  /** Busca no Gmail de todas as contas e mostra a lista na tela de e-mails (dá para abrir, apagar ou marcar como lido em lote). */
+  private async emailSearchView(ws: string, spec: EmailSearchSpec): Promise<string> {
+    const accounts: string[] = await this.google.listAccounts(ws);
+    if (!accounts.length) return this.noGoogle();
+    const size = await this.listSize(ws, 8);
+    const settled = await Promise.allSettled(accounts.map((a) => this.google.gmailSearch(ws, spec.gmail, a, size)));
+    const failed = settled.find((r): r is PromiseRejectedResult => r.status === "rejected");
+    if (failed) this.logger.warn(`Buscar e-mails falhou: ${failed.reason?.message ?? failed.reason}`);
+    const found = settled
+      .flatMap((r, i) => (r.status === "fulfilled" ? r.value.map((m: any) => ({ ...m, account: accounts[i] })) : []))
+      .sort((a: any, b: any) => (b.internalDate ?? 0) - (a.internalDate ?? 0))
+      .slice(0, size)
+      .map((m: any) => ({ ...m, kind: classifyEmail(m).kind === "person" ? "person" : "auto" }));
+    if (!found.length) {
+      return failed && !settled.some((r) => r.status === "fulfilled")
+        ? `😕 Não consegui buscar no Gmail: ${short(String(failed.reason?.message ?? failed.reason), 200)}`
+        : [`🤔 Não achei e-mails ${spec.label}.`, warnLine(failed)].filter(Boolean).join("\n");
+    }
+    await this.set(ws, "emails", { account: accounts[0], items: found, hidden: [], search: spec });
+    return [
+      head("🔎", "E-mails encontrados", `${spec.label} · do mais novo ao mais antigo`),
+      this.emailGroups(found, accounts.length > 1),
+      warnLine(failed),
+      foot("Responda com o número para abrir"),
+      opts(BACK),
+    ].filter(Boolean).join("\n");
+  }
+
+  /** "Atualizar banco de e-mails": remonta o catálogo de endereços a partir do Gmail. */
+  private async emailBookRefresh(ws: string): Promise<string> {
+    if (!(await this.google.listAccounts(ws)).length) return this.noGoogle();
+    try {
+      const r = await this.google.emailBookImport(ws);
+      return `✅ *Banco de e-mails atualizado*\n📇 *${r.total} endereço${r.total === 1 ? "" : "s"}* de ${r.contas} conta${r.contas === 1 ? "" : "s"} em ${r.arquivos} arquivo${r.arquivos === 1 ? "" : "s"}, em Assist.IA/Emails no Drive ${accountLabel(r.destino)}.`;
+    } catch (e: any) {
+      this.logger.warn(`Atualizar banco de e-mails falhou: ${e.message}`);
+      return `😕 Não consegui atualizar o banco de e-mails: ${short(String(e.message), 300)}`;
     }
   }
 
@@ -1486,7 +1533,7 @@ export class MenuService {
       failed.length ? `⚠️ Não consegui marcar: ${failed.map((n) => `e-mail ${n}`).join(", ")}.` : "",
       outOfRange.length ? `⚠️ _Não achei o(s) e-mail(s) ${outOfRange.join(", ")} na lista atual; ignorei._` : "",
     ].filter(Boolean).join("\n");
-    return `${msg}\n\n${d.q ? await this.queueShow(ws) : await this.emailList(ws, d.account)}`;
+    return `${msg}\n\n${d.search ? await this.emailSearchView(ws, d.search) : d.q ? await this.queueShow(ws) : await this.emailList(ws, d.account)}`;
   }
 
   /** Mostra o que será apagado e pede confirmação antes de mexer em qualquer e-mail. */
@@ -1528,7 +1575,7 @@ export class MenuService {
       failed.length ? `⚠️ Não consegui apagar: ${failed.map((n) => `e-mail ${n}`).join(", ")}.` : "",
       (await this.learnDismiss(ws, trashed, false)).trim(),
     ].filter(Boolean).join("\n");
-    const refreshed = d.origin === "emails_hidden" || !d.list.q ? await this.emailList(ws, d.list.account) : await this.queueShow(ws);
+    const refreshed = d.list.search ? await this.emailSearchView(ws, d.list.search) : d.origin === "emails_hidden" || !d.list.q ? await this.emailList(ws, d.list.account) : await this.queueShow(ws);
     return `${msg}\n\n${refreshed}`;
   }
 

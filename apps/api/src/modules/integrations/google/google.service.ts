@@ -3,7 +3,8 @@ import { prisma } from "@openclaw/database";
 import { isSealed, openToken, sealToken } from "../../webhooks/crypto";
 import { nextDay } from "../../channels/assistant/agenda-events";
 import { DriveKind, KIND_Q, wordVariants } from "../../channels/assistant/drive";
-import { CONTACTS_FOLDER, Contact, fileOfLetter, findContacts, fromPerson, groupByLetter, parseLetterFile, renderLetterFile } from "../../channels/assistant/contacts";
+import { buildBook, parseAddresses, SeenAddress } from "../../channels/assistant/email-book";
+import { CONTACTS_FOLDER, Contact, EMAIL_BOOK_FOLDER, fileOfLetter, findContacts, fromPerson, groupByLetter, parseLetterFile, renderLetterFile } from "../../channels/assistant/contacts";
 import { appendEntry, dailyFileName, dayStamp, formatEntry, NOTES_FOLDER, snippets, storageAccount } from "../../channels/assistant/notes";
 
 const SCOPES = [
@@ -60,7 +61,7 @@ export class GoogleService implements OnModuleInit {
   /** Fila por conta: ler-acrescentar-gravar duas notas ao mesmo tempo perderia uma delas. */
   private noteLocks = new Map<string, Promise<unknown>>();
   /** Contatos lidos do Drive por conta (consulta rápida). */
-  private contactCache = new Map<string, { at: number; contacts: Contact[] }>();
+  private contactCache = new Map<string, { at: number; contacts: Contact[] | null }>();
 
   /** Cifra os refresh tokens que ainda estão em texto puro (contas conectadas antes da cifragem). */
   async onModuleInit() {
@@ -556,26 +557,100 @@ export class GoogleService implements OnModuleInit {
         const target = storageAccount(accounts);
         if (!target) throw new Error("Google não conectado");
         const lists = await Promise.all(accounts.map((a) => this.contactsFetch(workspaceId, a).catch((e) => { throw this.peopleError(e, a); })));
-        const grouped = groupByLetter(lists.flat());
-        const root = await this.noteFolder(workspaceId, target);
-        const folder = await this.driveEnsureFolder(workspaceId, target, CONTACTS_FOLDER, root);
-        const existing = await this.driveFilesIn(workspaceId, target, folder);
-        const day = dayStamp(at, CONTACTS_TZ);
-        const jobs: { name: string; content: string }[] = [...grouped].map(([letter, cs]) => ({ name: fileOfLetter(letter), content: renderLetterFile(letter, cs, day) }));
-        const written = new Set(jobs.map((j) => j.name));
-        for (const name of existing.keys()) {
-          const letter = name === fileOfLetter("#") ? "#" : name.match(/^([A-Z])\.md$/)?.[1];
-          if (letter && !written.has(name)) jobs.push({ name, content: renderLetterFile(letter, [], day) });
-        }
-        // Poucos de cada vez, para não estourar o limite de requisições do Drive
-        for (let i = 0; i < jobs.length; i += 4) {
-          await Promise.all(jobs.slice(i, i + 4).map((j) => this.driveWrite(workspaceId, target, folder, j.name, j.content, existing.get(j.name))));
-        }
-        this.contactCache.delete(`${workspaceId}:${target}`);
+        const { grouped } = await this.writeBook(workspaceId, target, CONTACTS_FOLDER, lists.flat(), at, "Contatos");
         for (const a of accounts) await this.markContactsSynced(workspaceId, a, at);
         return { total: [...grouped.values()].reduce((n, cs) => n + cs.length, 0), arquivos: grouped.size, contas: accounts.length, destino: target };
       } catch (e) {
         throw this.peopleError(e);
+      }
+    });
+  }
+
+  /** Grava os contatos em Assist.IA/<pasta>/<letra>.md, um arquivo por letra, reescrito por inteiro (letra sem ninguém vira arquivo vazio). */
+  private async writeBook(workspaceId: string, target: string, folderName: string, contacts: Contact[], at: Date, title: string) {
+    const grouped = groupByLetter(contacts);
+    const root = await this.noteFolder(workspaceId, target);
+    const folder = await this.driveEnsureFolder(workspaceId, target, folderName, root);
+    const existing = await this.driveFilesIn(workspaceId, target, folder);
+    const day = dayStamp(at, CONTACTS_TZ);
+    const jobs: { name: string; content: string }[] = [...grouped].map(([letter, cs]) => ({ name: fileOfLetter(letter), content: renderLetterFile(letter, cs, day, title) }));
+    const written = new Set(jobs.map((j) => j.name));
+    for (const name of existing.keys()) {
+      const letter = name === fileOfLetter("#") ? "#" : name.match(/^([A-Z])\.md$/)?.[1];
+      if (letter && !written.has(name)) jobs.push({ name, content: renderLetterFile(letter, [], day, title) });
+    }
+    // Poucos de cada vez, para não estourar o limite de requisições do Drive
+    for (let i = 0; i < jobs.length; i += 4) {
+      await Promise.all(jobs.slice(i, i + 4).map((j) => this.driveWrite(workspaceId, target, folder, j.name, j.content, existing.get(j.name))));
+    }
+    this.contactCache.delete(`${workspaceId}:${target}:${folderName}`);
+    return { grouped };
+  }
+
+  /** Lê os arquivos por letra de uma pasta (cache de 5 min). null = a pasta ainda não existe. */
+  private async loadBook(workspaceId: string, account: string, folderName: string): Promise<Contact[] | null> {
+    const key = `${workspaceId}:${account}:${folderName}`;
+    const hit = this.contactCache.get(key);
+    if (hit && Date.now() - hit.at < CONTACTS_CACHE_MS) return hit.contacts;
+    const root = await this.driveFirst(workspaceId, account, `name='${NOTES_FOLDER}' and mimeType='${FOLDER_MIME}' and trashed=false`);
+    const folder = root && (await this.driveFirst(workspaceId, account, `name='${folderName}' and mimeType='${FOLDER_MIME}' and '${root}' in parents and trashed=false`));
+    if (!folder) {
+      // Guarda também a ausência: sem a pasta, cada consulta repetiria as buscas no Drive
+      this.contactCache.set(key, { at: Date.now(), contacts: null });
+      return null;
+    }
+    const files = [...(await this.driveFilesIn(workspaceId, account, folder))].filter(([n]) => /^([A-Z]|Outros)\.md$/.test(n));
+    const contacts: Contact[] = [];
+    for (let i = 0; i < files.length; i += 6) {
+      const parts = await Promise.all(
+        files.slice(i, i + 6).map(async ([, id]) => parseLetterFile((await this.gBytes(workspaceId, account, `https://www.googleapis.com/drive/v3/files/${id}?alt=media`)).toString("utf8"))),
+      );
+      parts.forEach((p) => contacts.push(...p));
+    }
+    this.contactCache.set(key, { at: Date.now(), contacts });
+    return contacts;
+  }
+
+  /** Cabeçalhos From/To/Cc dos e-mails mais recentes que casam com a consulta (poucas requisições por vez). */
+  private async gmailHeaders(workspaceId: string, account: string, query: string, max: number): Promise<{ from?: string; to?: string; cc?: string }[]> {
+    const list = await this.g<any>(workspaceId, account, `https://gmail.googleapis.com/gmail/v1/users/me/messages?maxResults=${Math.min(max, 500)}&q=${encodeURIComponent(query)}`);
+    const ids: string[] = (list.messages ?? []).map((m: any) => m.id);
+    const out: { from?: string; to?: string; cc?: string }[] = [];
+    for (let i = 0; i < ids.length; i += 8) {
+      const batch = await Promise.all(
+        ids.slice(i, i + 8).map(async (id) => {
+          const m = await this.g<any>(workspaceId, account, `https://gmail.googleapis.com/gmail/v1/users/me/messages/${id}?format=metadata&metadataHeaders=From&metadataHeaders=To&metadataHeaders=Cc`).catch(() => null);
+          const h = (n: string) => m?.payload?.headers?.find((x: any) => x.name === n)?.value as string | undefined;
+          return m ? { from: h("From"), to: h("To"), cc: h("Cc") } : null;
+        }),
+      );
+      out.push(...batch.filter((x): x is NonNullable<typeof x> => !!x));
+    }
+    return out;
+  }
+
+  /**
+   * Monta o catálogo de endereços a partir do Gmail de todas as contas (recebidos: quem escreveu; enviados: para quem você escreveu)
+   * e grava em Assist.IA/Emails/<letra>.md no Drive de armazenamento. Fica de fora quem já está nos contatos, endereços seus e automáticos.
+   */
+  emailBookImport(workspaceId: string, at = new Date(), perBox = 300): Promise<{ total: number; arquivos: number; contas: number; destino: string }> {
+    return this.serial(`emailbook:${workspaceId}`, async () => {
+      try {
+        const accounts = await this.listAccounts(workspaceId);
+        const target = storageAccount(accounts);
+        if (!target) throw new Error("Google não conectado");
+        const seen: SeenAddress[] = [];
+        for (const a of accounts) {
+          const [inbox, sent] = await Promise.all([this.gmailHeaders(workspaceId, a, "in:inbox", perBox), this.gmailHeaders(workspaceId, a, "in:sent", perBox)]);
+          for (const m of inbox) for (const x of parseAddresses(m.from)) seen.push({ ...x, sent: false });
+          for (const m of sent) for (const x of [...parseAddresses(m.to), ...parseAddresses(m.cc)]) seen.push({ ...x, sent: true });
+        }
+        const known = new Set((await this.loadBook(workspaceId, target, CONTACTS_FOLDER).catch(() => null))?.flatMap((c) => c.emails) ?? []);
+        const book = buildBook(seen, { own: accounts, known });
+        const { grouped } = await this.writeBook(workspaceId, target, EMAIL_BOOK_FOLDER, book, at, "Endereços de e-mail");
+        return { total: book.length, arquivos: grouped.size, contas: accounts.length, destino: target };
+      } catch (e) {
+        throw this.noteError(e);
       }
     });
   }
@@ -595,29 +670,27 @@ export class GoogleService implements OnModuleInit {
     } catch (e: any) {
       this.logger.warn(`Importar contatos na conexão falhou: ${e.message}`);
     }
+    // O catálogo de endereços é independente: falhar nele (ou nos contatos) não impede o outro
+    try {
+      const b = await this.emailBookImport(workspaceId);
+      this.logger.log(`Catálogo de e-mails gravado no Drive: ${b.total} endereço(s) em ${b.arquivos} arquivo(s)`);
+    } catch (e: any) {
+      this.logger.warn(`Montar o catálogo de e-mails na conexão falhou: ${e.message}`);
+    }
   }
 
-  /** Contatos que casam com o nome, lidos dos arquivos do Drive de armazenamento. Devolve null se ainda não foram importados. */
+  /**
+   * Contatos que casam com o nome: primeiro os do Google, depois os endereços do catálogo do Gmail (Drive de armazenamento).
+   * Devolve null se nenhum dos dois foi importado ainda.
+   */
   async contactsLookup(workspaceId: string, query: string, max = 5): Promise<Contact[] | null> {
     const account = storageAccount(await this.listAccounts(workspaceId));
     if (!account) return null;
-    const key = `${workspaceId}:${account}`;
-    const hit = this.contactCache.get(key);
-    if (hit && Date.now() - hit.at < CONTACTS_CACHE_MS) return findContacts(hit.contacts, query, max);
     try {
-      const root = await this.driveFirst(workspaceId, account, `name='${NOTES_FOLDER}' and mimeType='${FOLDER_MIME}' and trashed=false`);
-      const folder = root && (await this.driveFirst(workspaceId, account, `name='${CONTACTS_FOLDER}' and mimeType='${FOLDER_MIME}' and '${root}' in parents and trashed=false`));
-      if (!folder) return null;
-      const files = [...(await this.driveFilesIn(workspaceId, account, folder))].filter(([n]) => /^([A-Z]|Outros)\.md$/.test(n));
-      const contacts: Contact[] = [];
-      for (let i = 0; i < files.length; i += 6) {
-        const parts = await Promise.all(
-          files.slice(i, i + 6).map(async ([, id]) => parseLetterFile((await this.gBytes(workspaceId, account, `https://www.googleapis.com/drive/v3/files/${id}?alt=media`)).toString("utf8"))),
-        );
-        parts.forEach((p) => contacts.push(...p));
-      }
-      this.contactCache.set(key, { at: Date.now(), contacts });
-      return findContacts(contacts, query, max);
+      const [people, book] = await Promise.all([this.loadBook(workspaceId, account, CONTACTS_FOLDER), this.loadBook(workspaceId, account, EMAIL_BOOK_FOLDER)]);
+      if (people === null && book === null) return null;
+      // Os contatos do Google (com telefone) vêm antes dos endereços do catálogo
+      return [...findContacts(people ?? [], query, max), ...findContacts(book ?? [], query, max)].slice(0, max);
     } catch (e) {
       throw this.driveError(e);
     }

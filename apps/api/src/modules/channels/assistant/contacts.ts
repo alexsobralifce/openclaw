@@ -4,6 +4,8 @@
 import { normalize } from "./voice";
 
 export const CONTACTS_FOLDER = "Contatos";
+/** Catálogo de endereços montado a partir do Gmail (quem escreveu ou recebeu e-mail seu), fora dos contatos do Google. */
+export const EMAIL_BOOK_FOLDER = "Emails";
 export const OTHER_FILE = "Outros.md";
 const MAX_EACH = 5;
 
@@ -15,7 +17,7 @@ export interface Contact {
 }
 
 /** Texto de uma linha só, sem marcação que quebre o Markdown (nada de título, comentário ou quebra de linha). */
-const oneLine = (s: unknown, max = 120) =>
+export const oneLine = (s: unknown, max = 120) =>
   String(s ?? "")
     .replace(/<!--|-->/g, " ")
     .replace(/[\r\n\t]+/g, " ")
@@ -70,8 +72,8 @@ export function groupByLetter(contacts: Contact[]): Map<string, Contact[]> {
   return out;
 }
 
-export function renderLetterFile(letter: string, contacts: Contact[], day: string): string {
-  const head = `# Contatos — ${letter}\n\n<!-- Gerado automaticamente pelo Assist.IA em ${day}. Edições neste arquivo são sobrescritas na próxima atualização; para anotar algo, use uma nota normal. -->\n`;
+export function renderLetterFile(letter: string, contacts: Contact[], day: string, title = "Contatos"): string {
+  const head = `# ${title} — ${letter}\n\n<!-- Gerado automaticamente pelo Assist.IA em ${day}. Edições neste arquivo são sobrescritas na próxima atualização; para anotar algo, use uma nota normal. -->\n`;
   if (!contacts.length) return `${head}\n_Nenhum contato com esta inicial._\n`;
   const blocks = contacts.map((c) =>
     [`## ${c.nome}`, ...c.telefones.map((t) => `- 📞 ${t}`), ...c.emails.map((e) => `- ✉️ ${e}`), ...(c.empresa ? [`- 🏢 ${c.empresa}`] : [])].join("\n"),
@@ -114,7 +116,7 @@ export function findContacts(contacts: Contact[], query: string, max = 5): Conta
 
 const KIND = "(?:telefone|numero|celular|whatsapp|zap|e-?mail|email|contato)";
 /** Nomes que não são de pessoa: "e-mails de hoje" continua sendo o comando de e-mails. */
-const NOT_A_NAME = /^(hoje|ontem|amanha|agora|novos?|nao lidos?|ocultos?|spam|silenciados|interesse)$/;
+export const NOT_A_NAME = /^(hoje|ontem|amanha|agora|novos?|nao lidos?|ocultos?|spam|silenciados|interesse)$/;
 
 /** "qual o telefone do Marcos", "email da Maria", "contato do João Silva". Devolve o nome pedido, ou null. */
 export function contactQuery(flat: string): string | null {

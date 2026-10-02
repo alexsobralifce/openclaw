@@ -93,7 +93,7 @@ openclaw/
 | `assistant/intent.service.ts` | Jev (TypeSafe): `agenda_add` / `drive_file` / `note_add` / `other`, `MIN_CONFIDENCE = 0.8`, timeout 2,5 s |
 | `assistant/commander.ts` | Identifica o usuário que comanda pelo WhatsApp e checa serviços |
 | `assistant/gemini.service.ts`, `memory.service.ts`, `weather.service.ts` | Gemini (transcrição/extração/TTS), memórias e rotina, clima Open-Meteo |
-| `assistant/email-*.ts`, `drive.ts`, `notes.ts`, `contacts.ts`, `menu-items.ts`, `agenda-events.ts`, `voice.ts`, `speech.ts`, `security.ts`, `vault-command.ts`, `routine.ts`, `location.ts`, `chat-clean.ts` | Lógica pura (testável sem mocks) |
+| `assistant/email-*.ts`, `drive.ts`, `notes.ts`, `contacts.ts`, `email-search.ts`, `email-book.ts`, `menu-items.ts`, `agenda-events.ts`, `voice.ts`, `speech.ts`, `security.ts`, `vault-command.ts`, `routine.ts`, `location.ts`, `chat-clean.ts` | Lógica pura (testável sem mocks) |
 | `assistant/assistant-settings.controller.ts` | `GET/PUT /assistant/menu` (`@Access("assistant")`): itens do menu principal que o dono esconde pelo painel; guardado em `KvEntry` `menuhide:<ws>` |
 | `assistant/assistant-scheduler.service.ts` | Tick de 20 s: apaga mensagens com senha, volta ao menu por inatividade, limpeza do chat |
 | `assistant/email-watcher.service.ts` | Poll do Gmail (60 s) e aviso por WhatsApp |
@@ -132,6 +132,7 @@ openclaw/
 - `google.service.ts`: contas Google são `Channel` de `type: EMAIL` com refresh token cifrado (`enc1:`); múltiplas contas por workspace; Gmail, Calendar, Drive.
 - **Conta de armazenamento** (`storageAccount` em `notes.ts`): notas e contatos são gravados sempre no Drive da conta `@gmail.com` (a pessoal); sem ela, a primeira conectada. Não há escolha de conta por frase.
 - Contatos: `contactsImport` lê a People API (`contacts.readonly`) de **todas** as contas, junta (sem duplicar) e grava `Assist.IA/Contatos/<letra>.md` só no Drive de armazenamento (um arquivo por letra, reescrito por inteiro; `Outros.md` para iniciais não-letra). Se uma conta falhar na leitura, nada é gravado. Roda sozinho na **primeira** conexão de uma conta (`connect()` → `importContactsOnce`, marcador `contactsSyncedAt` em `Channel.config`) e sob demanda com "atualizar contatos". `contactsLookup` baixa os arquivos do Drive de armazenamento (cache de 5 min) e procura pelo nome.
+- Catálogo de endereços: `emailBookImport` varre até 300 e-mails da caixa de entrada e 300 dos enviados por conta (só cabeçalhos From/To/Cc), `buildBook` guarda quem você escreveu ou quem escreveu 2+ vezes (sem automáticos, sem endereços seus, sem quem já está nos contatos) e grava `Assist.IA/Emails/<letra>.md` no Drive de armazenamento. Roda na primeira conexão (depois dos contatos, independente) e com "atualizar banco de e-mails". `contactsLookup` consulta contatos do Google e catálogo (Google primeiro). Usa o escopo `gmail.modify` que já existia: não pede reconexão.
 - Notas no Drive: `noteAppend` (nota do dia `Assist.IA/AAAA-MM-DD.md`, lê-acrescenta-regrava sob fila por conta) e `noteSearch` (trechos em `.md`/texto de todo o Drive). Escopos `drive.readonly` + `drive.file`: lê tudo, só grava o que ele mesmo criou.
 - `state.service.ts`: KV com TTL sobre `KvEntry`; `incr` atômico por SQL cru. Módulo `@Global` (o `WebhooksModule` também).
 
@@ -232,6 +233,10 @@ Webhook → `InboundEvent` → worker → `InboxService.processIncoming` → `We
 31. Trocar a conta de armazenamento (ex.: conectar a pessoal depois do IFCE) não move o que já foi gravado: a próxima importação grava no novo Drive e a pasta antiga fica órfã (apagar à mão). Os arquivos de contatos são **gerados**: edições são sobrescritas na reimportação; letras que ficaram sem contatos viram arquivo vazio (contato apagado no Google não sobra). Só nome, telefones, e-mails e empresa são gravados; nada vai para o log.
 32. Consulta (`telefone do Marcos`, `contact_search`) usa o serviço `drive`, é conteúdo externo na IA livre e não sequestra `e-mails de hoje` (`NOT_A_NAME`). Cache de contatos só em memória (mesma limitação das notas).
 
+**Busca no Gmail e catálogo de endereços** (`assistant/email-search.ts`, `email-book.ts`)
+33. "Buscar e-mails do Marcos" / "e-mails sobre contrato" (`emailSearchSpec`) usa a tela `emails` com `search` no estado: abrir, apagar e marcar como lido em lote funcionam, e o refresh pós-ação refaz a busca (não a lista de não lidos). Abrir um e-mail e voltar mostra os não lidos. A consulta do Gmail é montada só com letras, números e `@._-` (sem operadores do usuário). "email do Marcos" (singular) é contato, não busca; "e-mails de hoje" continua sendo o comando de ler e-mails.
+34. O catálogo é gerado (edições são sobrescritas), grava só nome e endereço, e nunca guarda endereços automáticos (`isAutomatic`). Se o Gmail de uma conta falhar, nada é gravado. A cache de pastas inexistentes (`loadBook`) também vale 5 min: logo após importar, `writeBook` invalida a pasta certa.
+
 ## Guia de navegação
 
 | Tarefa | Arquivos |
@@ -239,6 +244,7 @@ Webhook → `InboundEvent` → worker → `InboxService.processIncoming` → `We
 | Novo comando/tela do assistente | `channels/assistant/menu.service.ts` (`respond`, `route`, `ALIASES`), helper puro novo ao lado, spec em `apps/api/test/` |
 | Novo item no menu principal | `menu-items.ts` (`MENU_ITEMS`, para poder ser escondido), `MenuService.mainOptions` (com `id`) e `menuItems`; o painel lê pela rota `/assistant/menu`; item escondido só sai da lista, o comando digitado continua valendo |
 | Mudar contatos (importar/consultar) | `assistant/contacts.ts` (puro), `google.service.ts` (`contactsImport`/`contactsLookup`/`importContactsOnce`), bloco "Contatos" em `MenuService.respond`, tool `contact_search`; specs `contacts*.spec.ts`, `google-contacts.spec.ts`; ver gotchas 29 a 32 |
+| Mudar busca de e-mails / catálogo de endereços | `assistant/email-search.ts` e `email-book.ts` (puros), `google.service.ts` (`emailBookImport`, `gmailHeaders`, `loadBook`), `MenuService.emailSearchView` / `emailBookRefresh`; specs `email-search*.spec.ts`, `google-contacts.spec.ts`; ver gotchas 33 e 34 |
 | Mudar notas (anotar/buscar) | `assistant/notes.ts` (puro), `google.service.ts` (`noteAppend`/`noteSearch`), bloco "Notas" em `MenuService.respond`, tools `note_*` em `assistant.service.ts`; specs `notes*.spec.ts`; ver gotchas 25 a 28 |
 | Nova intenção do Jev | `assistant/intent.service.ts` (tipo `Intent`), gatilho em `MenuService.respond`, `test/intent.spec.ts` |
 | Nova tool da IA livre | `assistant/assistant.service.ts` (`TOOLS`, `runTool`, `toolAllowed`); se sensível, entra em `SENSITIVE` |

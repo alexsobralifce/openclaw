@@ -28,7 +28,8 @@ interface F { id: string; owner: string; name: string; mimeType: string; parents
 const FOLDER = "application/vnd.google-apps.folder";
 
 /** People API + Drive em memória; cada conta tem os próprios contatos e o próprio Drive (o dono vem do token). */
-function fake(opts: { people?: Record<string, any[][]>; peopleError?: Record<string, { status: number; body: string }> } = {}) {
+interface Msg { from?: string; to?: string; cc?: string }
+function fake(opts: { people?: Record<string, any[][]>; peopleError?: Record<string, { status: number; body: string }>; gmail?: Record<string, { inbox?: Msg[]; sent?: Msg[] }>; gmailError?: Record<string, number> } = {}) {
   const files: F[] = [];
   const calls: string[] = [];
   let seq = 0;
@@ -38,6 +39,19 @@ function fake(opts: { people?: Record<string, any[][]>; peopleError?: Record<str
     const method = init?.method ?? "GET";
     const owner = String((init?.headers as any)?.Authorization ?? "").replace("Bearer tok-", "");
     calls.push(`${method} ${owner} ${url.host}${url.pathname}`);
+
+    if (url.host === "gmail.googleapis.com") {
+      if (opts.gmailError?.[owner]) return new Response("erro", { status: opts.gmailError[owner] });
+      const boxes = opts.gmail?.[owner] ?? {};
+      const list = url.pathname.endsWith("/messages");
+      if (list) {
+        const box = (url.searchParams.get("q") ?? "").includes("in:sent") ? "sent" : "inbox";
+        return json({ messages: (boxes[box as "inbox" | "sent"] ?? []).map((_, i) => ({ id: `${box}-${i}` })) });
+      }
+      const [box, i] = url.pathname.split("/").pop()!.split("-");
+      const m = (boxes[box as "inbox" | "sent"] ?? [])[Number(i)] ?? {};
+      return json({ payload: { headers: [["From", m.from], ["To", m.to], ["Cc", m.cc]].filter(([, v]) => v).map(([name, value]) => ({ name, value })) } });
+    }
 
     if (url.host === "people.googleapis.com") {
       const err = opts.peopleError?.[owner];
@@ -232,6 +246,81 @@ describe("contatos do Google no Drive pessoal", () => {
     vi.stubGlobal("fetch", vi.fn(d2.handler));
     await svc.contactsImport("w1", at);
     expect(await svc.contactsLookup("w1", "marcos")).toEqual([]);
+  });
+
+  describe("banco de endereços do Gmail", () => {
+    const gmail = {
+      [PESSOAL]: {
+        inbox: [
+          { from: '"Marcos Silva" <marcos@x.com>' }, { from: "Marcos Silva <marcos@x.com>" }, { from: "noreply@loja.com" },
+          { from: "Desconhecido <uma-vez@x.com>" }, { from: "Ana <ja@tem.com>" }, { from: "Ana <ja@tem.com>" }, { from: "Eu <pessoal@gmail.com>" },
+        ],
+        sent: [{ to: '"Maria Souza" <maria@y.com>', cc: "pedro@z.com" }, { to: "marcos@x.com" }],
+      },
+      [IFCE]: { inbox: [{ from: "Chefe <chefe@ifce.edu.br>" }, { from: "Chefe <chefe@ifce.edu.br>" }], sent: [] },
+    };
+
+    it("junta o Gmail das duas contas e grava só no Drive pessoal, em Assist.IA/Emails", async () => {
+      const d = fake({ gmail });
+      vi.stubGlobal("fetch", vi.fn(d.handler));
+      const r = await svc.emailBookImport("w1", at);
+      expect(r).toMatchObject({ total: 5, contas: 2, destino: PESSOAL }); // marcos, ja@tem, maria, pedro, chefe
+      expect(d.of(IFCE)).toEqual([]);
+      const mine = d.of(PESSOAL);
+      expect(mine.find((f) => f.name === "Emails")!.parents).toEqual([mine.find((f) => f.name === "Assist.IA")!.id]);
+      const all = mine.filter((f) => f.name.endsWith(".md")).map((f) => f.content).join("\n");
+      expect(all).toContain("## Maria Souza\n- ✉️ maria@y.com"); // você escreveu
+      expect(all).toContain("## Marcos Silva"); // escreveu 2 vezes + você respondeu
+      expect(all).toContain("chefe@ifce.edu.br"); // veio da conta do IFCE
+      expect(all).toContain("Pedro"); // Cc do enviado, nome vindo do endereço
+      expect(all).toContain("# Endereços de e-mail — M");
+    });
+
+    it("não guarda automáticos, endereços seus, quem escreveu uma vez só, nem quem já está nos contatos", async () => {
+      const d = fake({ gmail, people: { [PESSOAL]: [[person("Ana Souza", "85900001111", "ja@tem.com")]] } });
+      vi.stubGlobal("fetch", vi.fn(d.handler));
+      await svc.contactsImport("w1", at); // já traz a Ana para os contatos
+      await svc.emailBookImport("w1", at);
+      const book = d.of(PESSOAL).filter((f) => f.parents.length && d.of(PESSOAL).find((p) => p.id === f.parents[0])?.name === "Emails").map((f) => f.content).join("\n");
+      expect(book).not.toContain("noreply@loja.com");
+      expect(book).not.toContain("pessoal@gmail.com");
+      expect(book).not.toContain("uma-vez@x.com");
+      expect(book).not.toContain("ja@tem.com");
+    });
+
+    it("consulta junta contatos do Google e catálogo, contatos primeiro", async () => {
+      const d = fake({ gmail, people: { [PESSOAL]: [[person("Marcos Telefone", "85911112222", "outro@x.com")]] } });
+      vi.stubGlobal("fetch", vi.fn(d.handler));
+      expect(await svc.contactsLookup("w1", "marcos")).toBeNull();
+      await svc.contactsImport("w1", at);
+      await svc.emailBookImport("w1", at);
+      const r = (await svc.contactsLookup("w1", "marcos"))!;
+      expect(r.map((c) => c.nome)).toEqual(["Marcos Telefone", "Marcos Silva"]); // Google primeiro, mesmo que o outro venha antes no alfabeto
+      expect(r[0].telefones).toEqual(["85911112222"]);
+      expect((await svc.contactsLookup("w1", "chefe"))![0].emails).toEqual(["chefe@ifce.edu.br"]);
+    });
+
+    it("só o catálogo importado já basta para a consulta (não é 'não importado')", async () => {
+      const d = fake({ gmail });
+      vi.stubGlobal("fetch", vi.fn(d.handler));
+      await svc.emailBookImport("w1", at);
+      expect((await svc.contactsLookup("w1", "maria"))![0].emails).toEqual(["maria@y.com"]);
+    });
+
+    it("falha no Gmail de uma conta: erro claro, nada gravado", async () => {
+      const d = fake({ gmail, gmailError: { [IFCE]: 500 } });
+      vi.stubGlobal("fetch", vi.fn(d.handler));
+      await expect(svc.emailBookImport("w1", at)).rejects.toThrow();
+      expect(d.files).toEqual([]);
+    });
+
+    it("na primeira conexão monta contatos e catálogo; um falhar não impede o outro", async () => {
+      const d = fake({ gmail, peopleError: { [PESSOAL]: { status: 500, body: "erro" }, [IFCE]: { status: 500, body: "erro" } } });
+      vi.stubGlobal("fetch", vi.fn(d.handler));
+      await svc.importContactsOnce("w1", PESSOAL);
+      expect(d.of(PESSOAL).some((f) => f.name === "Emails")).toBe(true); // catálogo gravado mesmo com a People API fora do ar
+      expect(d.of(PESSOAL).some((f) => f.name === "Contatos")).toBe(false);
+    });
   });
 
   /** OAuth de mentira por cima do Drive/People falsos. */
