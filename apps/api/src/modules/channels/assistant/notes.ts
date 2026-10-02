@@ -8,7 +8,10 @@ const MAX_NOTE = 1_000;
 
 /** Palavra que deixa claro que é uma nota (e não um compromisso: "anota consulta dia 10" continua sendo agenda). */
 const PLACE = "obsidian|di[aá]rio|caderno|notas?";
-const VERB = "anot\\w*|salv\\w*|guard\\w*|registr\\w*|escrev\\w*|adicion\\w*|poe|pon\\w*|coloc\\w*";
+const VERB = "anot\\w*|salv\\w*|guard\\w*|registr\\w*|escrev\\w*|adicion\\w*|poe|pon\\w*|coloc\\w*|cri\\w*|faz\\w*";
+/** Enfeites antes do verbo ("quero anotar", "pode anotar", "ei, anota", "por favor"): no texto normalizado e no original. */
+const LEAD_FLAT = "(?:(?:por favor|pfv|ei|oi|ola|pode|poderia|podia|quero|queria|gostaria de|voce|tu|que|me|vamos|ja)\\s+)*";
+const LEAD_RAW = "(?:(?:por favor|pfv|ei|oi|ol[aá]|pode|poderia|podia|quero|queria|gostaria de|voc[eê]|tu|que|me|vamos|j[aá])[,\\s]+)*";
 
 /**
  * O texto pede para guardar uma nota? Só vale com palavra explícita ("anota no obsidian: ...", "salva no diário ...", "nota: ...").
@@ -17,8 +20,8 @@ const VERB = "anot\\w*|salv\\w*|guard\\w*|registr\\w*|escrev\\w*|adicion\\w*|poe
  */
 export function looksLikeNoteAdd(flat: string): boolean {
   if (looksLikeNoteSearch(flat)) return false;
-  if (/^nota\s+\S/.test(flat)) return true;
-  return new RegExp(`^(por favor )?(${VERB})\\b.*\\b(no|na|em|pro|para o|para a)\\s+(meu |minha )?(${PLACE})\\b`).test(flat);
+  if (/^nota\s+\S/.test(flat) || /^obsidian\s+\S/.test(flat)) return true;
+  return new RegExp(`^${LEAD_FLAT}(${VERB})\\b.*\\b(no|na|em|pro|para o|para a)\\s+(meu |minha )?(${PLACE})\\b`).test(flat);
 }
 
 /**
@@ -26,25 +29,25 @@ export function looksLikeNoteAdd(flat: string): boolean {
  * Só serve para decidir se vale perguntar ao Jev (nota ou compromisso de agenda?); sozinho não grava nada.
  */
 export function startsLikeNote(flat: string): boolean {
-  return /^(por favor )?(anot\w*|salv\w*|guard\w*|registr\w*)\b/.test(flat);
+  return new RegExp(`^${LEAD_FLAT}(anot\\w*|salv\\w*|guard\\w*|registr\\w*)\\b`).test(flat);
 }
 
 /** O texto pergunta o que foi anotado? ("o que anotei sobre o contrato", "buscar nas minhas notas ...", "procura no obsidian ..."). */
 export function looksLikeNoteSearch(flat: string): boolean {
   if (/\b(o que|oque|quais|qual|tem algo|tenho algo)\b.*\b(anotei|anotado|salvei|guardei|escrevi|registrei)\b/.test(flat)) return true;
-  return new RegExp(`^(por favor )?(busc\\w*|procur\\w*|ach\\w*|ver|mostr\\w*|le|ler|consult\\w*)\\b.*\\b(no|na|nas|nos|em)\\s+(meu |minha |meus |minhas )?(${PLACE})\\b`).test(flat);
+  return new RegExp(`^${LEAD_FLAT}(busc\\w*|procur\\w*|ach\\w*|ver|mostr\\w*|le|ler|consult\\w*)\\b.*\\b(no|na|nas|nos|em)\\s+(meu |minha |meus |minhas )?(${PLACE})\\b`).test(flat);
 }
 
-/** Tira o pedido ("anota no obsidian:") e deixa só o conteúdo da nota, como foi ditado. */
+/** Tira o pedido ("anota no obsidian:", "quero anotar no obsidian que ...") e deixa só o conteúdo da nota, como foi ditado. */
 export function noteTextFrom(text: string): string {
-  let t = text.trim();
-  t = t.replace(/^(por favor|pfv)[,\s]+/i, "");
-  // "nota: ideia de tela" / "nota ideia de tela"
-  const bare = t.match(/^nota\s*[:,\-–]?\s*(.+)$/is);
+  let t = text.trim().replace(new RegExp(`^${LEAD_RAW}`, "i"), "");
+  // "nota: ideia de tela" / "nota ideia de tela" / "obsidian: ideia de tela"
+  const bare = t.match(/^(?:nota|obsidian)\s*[:,\-–]?\s*(.+)$/is);
   if (bare) t = bare[1];
   else {
+    const place = `(?:(?:n[oa]|em|pro|para\\s+o|para\\s+a)\\s+)?(?:(?:meu|minha)\\s+)?(?:${PLACE})`;
     t = t.replace(
-      new RegExp(`^(?:${VERB.replace(/\\w\*/g, "[a-zà-ú]*")})\\s+(?:isso\\s+|aí\\s+|ai\\s+)?(?:(?:n[oa]|em|pro|para\\s+o|para\\s+a)\\s+)?(?:(?:meu|minha)\\s+)?(?:${PLACE})\\s*[:,\\-–]?\\s*(?:que\\s+)?`, "i"),
+      new RegExp(`^(?:${VERB.replace(/\\w\*/g, "[a-zà-ú]*")})\\s+(?:isso\\s+|aí\\s+|ai\\s+)?(?:uma?\\s+)?${place}(?:\\s+${place})?\\s*[:,\\-–]?\\s*(?:que\\s+)?`, "i"),
       "",
     );
     // "anota isso: ..." sem lugar, quando o lugar vem no fim ("... no obsidian")

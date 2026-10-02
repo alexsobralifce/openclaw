@@ -24,6 +24,15 @@ describe("pedido de guardar nota", () => {
     expect(add("nota: ideia de tela de relatório #projeto")).toBe(true);
     expect(add("por favor anota no obsidian comprar café")).toBe(true);
   });
+  it("aceita enfeites antes do verbo e outras formas de pedir", () => {
+    expect(add("quero anotar no obsidian a reunião de amanhã")).toBe(true);
+    expect(add("pode anotar no obsidian a reunião de amanhã")).toBe(true);
+    expect(add("Ei, anota no obsidian a reunião do colegiado dia 10 às 14h")).toBe(true);
+    expect(add("quero que você anote no obsidian: revisar o contrato")).toBe(true);
+    expect(add("criar nota no obsidian: teste")).toBe(true);
+    expect(add("faz uma nota no obsidian: teste")).toBe(true);
+    expect(add("obsidian: teste")).toBe(true);
+  });
   it("'anota' solto fica de fora (pode ser compromisso de agenda)", () => {
     expect(add("anota consulta dia 10 às 14h")).toBe(false);
     expect(add("anota ligar pro Marcos")).toBe(false);
@@ -56,6 +65,14 @@ describe("noteTextFrom", () => {
     expect(noteTextFrom("guarda isso no meu caderno: ideia de tela #projeto")).toBe("ideia de tela #projeto");
     expect(noteTextFrom("nota: ideia de tela de relatório")).toBe("ideia de tela de relatório");
     expect(noteTextFrom("por favor anota no obsidian comprar café")).toBe("comprar café");
+  });
+  it("tira os enfeites e as outras formas de pedir", () => {
+    expect(noteTextFrom("quero anotar no obsidian a reunião de amanhã")).toBe("a reunião de amanhã");
+    expect(noteTextFrom("Ei, anota no obsidian: reunião do colegiado dia 10 às 14h")).toBe("reunião do colegiado dia 10 às 14h");
+    expect(noteTextFrom("quero que você anote no obsidian que preciso revisar o contrato")).toBe("preciso revisar o contrato");
+    expect(noteTextFrom("criar nota no obsidian: teste")).toBe("teste");
+    expect(noteTextFrom("faz uma nota no obsidian: teste")).toBe("teste");
+    expect(noteTextFrom("obsidian: teste")).toBe("teste");
   });
   it("tira o lugar quando vem no fim", () => {
     expect(noteTextFrom("anota ligar pro Marcos no obsidian")).toBe("ligar pro Marcos");
@@ -119,6 +136,10 @@ describe("startsLikeNote (só decide se vale perguntar ao Jev)", () => {
     expect(st("anota ligar pro Marcos")).toBe(true);
     expect(st("Registra aí a ideia da tela")).toBe(true);
     expect(st("por favor guarda isso: comprar café")).toBe(true);
+  });
+  it("também com enfeites antes do verbo", () => {
+    expect(st("quero anotar ligar pro Marcos")).toBe(true);
+    expect(st("pode guardar isso: comprar café")).toBe(true);
   });
   it("outras mensagens não gastam uma chamada ao Jev", () => {
     expect(st("preciso ligar pro Marcos")).toBe(false);

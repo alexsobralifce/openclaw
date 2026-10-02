@@ -51,6 +51,12 @@ describe("menu: anotar no Drive", () => {
     expect(store.get("mode:w1")).toBeUndefined();
   });
 
+  it("frase longa e natural, com data e hora, é nota quando diz 'no obsidian'", async () => {
+    const { menu, noteAppend } = build({ jev: { intent: "agenda_add", confidence: 1 } });
+    await menu.respond("w1", "quero anotar no obsidian que a reunião do colegiado foi remarcada para o dia 10 às 14h na sala de reuniões do bloco principal");
+    expect(noteAppend).toHaveBeenCalledWith("w1", "que a reunião do colegiado foi remarcada para o dia 10 às 14h na sala de reuniões do bloco principal".replace(/^que /, ""), expect.any(String), "pessoal@gmail.com");
+  });
+
   it("'anota' solto (compromisso de agenda) não vira nota", async () => {
     const { menu, noteAppend } = build();
     await menu.respond("w1", "anota consulta dia 10 às 14h");
