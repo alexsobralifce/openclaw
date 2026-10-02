@@ -408,3 +408,23 @@ model VaultBlock {
   @@index([vaultId, seq])
   @@index([vaultId, entryId])
 }
+
+// ─── CONSUMO DE IA ────────────────────────────────────────────────
+// Um contador por usuário, dia, provedor e modelo (incrementado de forma atômica). Tabela nova: a chave composta é o @@id,
+// então não depende de @unique em coluna nova. userId "sistema" = chamadas sem usuário (rotinas automáticas).
+
+model AiUsage {
+  userId       String
+  workspaceId  String
+  day          String // AAAA-MM-DD no fuso do assistente
+  provider     String // openai | gemini | whisper
+  model        String
+  calls        Int      @default(0)
+  inputTokens  Int      @default(0)
+  outputTokens Int      @default(0)
+  updatedAt    DateTime @updatedAt
+
+  @@id([userId, day, provider, model])
+  @@index([day])
+  @@index([workspaceId, day])
+}

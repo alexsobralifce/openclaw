@@ -1,3 +1,4 @@
+import { openaiTokens, recordUsage, trackUser } from "./usage";
 import { ForbiddenException, Injectable, Logger } from "@nestjs/common";
 import { prisma } from "@openclaw/database";
 import { GoogleService } from "../../integrations/google/google.service";
@@ -428,6 +429,7 @@ export class AssistantService {
   async voice(workspaceId: string, text: string): Promise<{ fala: string }> {
     const owner = await workspaceCommander(workspaceId);
     if (!owner || !can(owner, "assistant")) throw new ForbiddenException("O assistente não está liberado para esta conta.");
+    trackUser({ userId: owner.userId, workspaceId });
     await this.menu.enterCar(workspaceId);
     // Vários comandos numa chamada só, separados por ";" (ex.: "ler e-mails; Pessoal"): o menu avança uma tela por comando
     // e a resposta é a do último. Poupa ações na macro e evita errar a tela.
@@ -473,6 +475,7 @@ export class AssistantService {
       body: form,
     });
     if (!res.ok) throw new Error(`Transcrição ${res.status}: ${(await res.text()).slice(0, 200)}`);
+    recordUsage("whisper", process.env.OPENAI_TRANSCRIBE_MODEL || "whisper-1", { input: 0, output: 0 });
     return ((await res.json()) as any).text?.trim() ?? "";
   }
 
@@ -490,6 +493,7 @@ export class AssistantService {
   /** Devolve `redact: true` quando a mensagem tinha um código do cofre: o registro de entrada deve escondê-la. */
   async handle(c: Commander, instanceName: string, text: string, opts: { heard?: boolean; quoted?: string } = {}): Promise<{ redact: boolean }> {
     const workspaceId = c.workspaceId;
+    trackUser({ userId: c.userId, workspaceId });
     let answer: string;
     try {
       answer = (await this.menu.respond(workspaceId, text, opts.quoted || undefined)) ?? (await this.think(c, text));
@@ -511,6 +515,7 @@ export class AssistantService {
    */
   async handleAgendaMedia(c: Commander, instanceName: string, key: object, media: { mime: string; caption: string }) {
     const workspaceId = c.workspaceId;
+    trackUser({ userId: c.userId, workspaceId });
     const mode = await this.menu.agendaMediaIntent(workspaceId, media.caption);
     if (mode === "no") return;
     let answer: string;
@@ -567,6 +572,7 @@ export class AssistantService {
       });
       if (!res.ok) throw new Error(`OpenAI ${res.status}: ${await res.text()}`);
       const data: any = await res.json();
+      recordUsage("openai", String(data.model ?? process.env.OPENAI_MODEL ?? "gpt-4o-mini"), openaiTokens(data), workspaceId);
       const msg = data.choices[0].message;
       messages.push(msg);
       if (!msg.tool_calls?.length) {

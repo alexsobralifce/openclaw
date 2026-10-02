@@ -46,6 +46,25 @@ export interface NoteTopic {
   notes: { id: string; name: string; modified?: string }[];
 }
 
+export interface UsageReport {
+  days: number;
+  since: string;
+  total: { calls: number; inputTokens: number; outputTokens: number; totalTokens: number };
+  byDay: { day: string; tokens: number }[];
+  users: {
+    userId: string;
+    name: string;
+    email: string | null;
+    role: string | null;
+    calls: number;
+    inputTokens: number;
+    outputTokens: number;
+    totalTokens: number;
+    byProvider: Record<string, { calls: number; tokens: number }>;
+    lastDay: string;
+  }[];
+}
+
 export const api = {
   auth: {
     login: (email: string, password: string) =>
@@ -62,6 +81,9 @@ export const api = {
     services: () => request<Record<string, string>>("/auth/services"),
     updateMe: (data: { name?: string; phone?: string }) =>
       request<any>("/auth/me", { method: "PATCH", body: JSON.stringify(data) }),
+  },
+  usage: {
+    report: (days: number) => request<UsageReport>(`/usage?days=${days}`),
   },
   assistant: {
     menu: () => request<{ items: MenuItem[] }>("/assistant/menu"),

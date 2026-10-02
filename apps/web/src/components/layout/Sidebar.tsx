@@ -7,7 +7,7 @@ import { hasService, isAdmin, useMe } from "@/hooks/useMe";
 import { Logo } from "@/components/brand/Logo";
 
 // service: serviço que precisa estar liberado para o item aparecer; admin: só ROOT/ADMIN
-export const nav: { href: string; label: string; icon: React.ReactNode; service?: string; admin?: boolean }[] = [
+export const nav: { href: string; label: string; icon: React.ReactNode; service?: string; admin?: boolean; root?: boolean }[] = [
   {
     href: "/dashboard/inbox",
     label: "Inbox",
@@ -94,6 +94,16 @@ export const nav: { href: string; label: string; icon: React.ReactNode; service?
     ),
   },
   {
+    href: "/dashboard/usage",
+    label: "Consumo",
+    root: true,
+    icon: (
+      <svg width="20" height="20" fill="none" viewBox="0 0 24 24">
+        <path d="M18 20V10M12 20V4M6 20v-6" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
+      </svg>
+    ),
+  },
+  {
     href: "/dashboard/settings",
     label: "Config.",
     icon: (
@@ -107,7 +117,7 @@ export const nav: { href: string; label: string; icon: React.ReactNode; service?
 
 /** Itens que o usuário pode ver (serviço liberado; "admin" só para ROOT/ADMIN). */
 export function visibleNav(me: ReturnType<typeof useMe>) {
-  return nav.filter((i) => (i.admin ? isAdmin(me) : !i.service || !me || hasService(me, i.service)));
+  return nav.filter((i) => (i.root ? me?.platformRole === "ROOT" : i.admin ? isAdmin(me) : !i.service || !me || hasService(me, i.service)));
 }
 
 export function Sidebar() {

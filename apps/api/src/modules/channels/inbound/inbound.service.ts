@@ -1,3 +1,4 @@
+import { trackUser } from "../assistant/usage";
 import { Injectable, Logger, OnModuleDestroy, OnModuleInit } from "@nestjs/common";
 import { prisma, Prisma } from "@openclaw/database";
 import { AssistantService } from "../assistant/assistant.service";
@@ -158,6 +159,7 @@ export class InboundService implements OnModuleInit, OnModuleDestroy {
       // Modo "mensagem para si mesmo": as mensagens do dono também são do número conectado e podem ser apagadas na limpeza
       if (data.key.fromMe) await this.assistant.trackMessage(commander.workspaceId, instance, data.key);
 
+      trackUser({ userId: commander.userId, workspaceId: commander.workspaceId });
       let text = commandText(data.message);
       let heard = false;
       if (!text && isVoiceOrAudio(data.message)) {

@@ -20,6 +20,7 @@ import { looksLikeEmailBookRefresh } from "./email-book";
 import { cleanSubject, ComposeSeed, composeSeed, extractAddresses, MAX_BODY, verbatimBody } from "./email-compose";
 import { menuHiddenKey, MENU_ITEMS, sanitizeHidden } from "./menu-items";
 import { cleanTitle, looksLikeNoteAdd, looksLikeNoteCaption, looksLikeNoteSearch, looksLikeNotesHome, noteTerms, noteTextFrom, noteWithTopic, parseNotePlan, pickTopic, startsLikeNote, storageAccount, topicRequest } from "./notes";
+import { openaiTokens, recordUsage } from "./usage";
 import { StateService } from "../../state/state.service";
 import { effectiveServices, Service } from "../../auth/permissions";
 import { normalize, parseChoice, pickByLabel } from "./voice";
@@ -2201,6 +2202,7 @@ export class MenuService {
     });
     if (!res.ok) throw new Error(`OpenAI ${res.status}`);
     const data: any = await res.json();
+    recordUsage("openai", String(data.model ?? process.env.OPENAI_MODEL ?? "gpt-4o-mini"), openaiTokens(data), ws);
     return (data.choices[0].message.content ?? "").trim();
   }
 }

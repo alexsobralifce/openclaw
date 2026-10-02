@@ -1,4 +1,5 @@
 import { Injectable } from "@nestjs/common";
+import { geminiTokens, recordUsage } from "./usage";
 
 const BASE = "https://generativelanguage.googleapis.com/v1beta/models";
 
@@ -37,7 +38,11 @@ export class GeminiService {
         body: JSON.stringify(body),
         signal: AbortSignal.timeout(timeoutMs),
       });
-      if (res.ok) return res.json();
+      if (res.ok) {
+        const data = await res.json();
+        recordUsage("gemini", model, geminiTokens(data));
+        return data;
+      }
       lastErr = `Gemini ${res.status}: ${(await res.text()).slice(0, 200)}`;
       // 503/429: alta demanda, tenta de novo
       if (res.status !== 503 && res.status !== 429) break;
