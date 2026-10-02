@@ -175,7 +175,20 @@ const toNum = (w: string) => (/^\d/.test(w) ? Number(w) : NUM_WORD[w]);
  */
 export function looksLikeBulkDelete(flat: string): boolean {
   const verb = /\b(apag\w*|exclu\w*|delet\w*|remov\w*|jog\w+\s+(no|pro|para o)\s+lixo|mand\w+\s+(pro|para o)\s+lixo)\b/.test(flat);
-  if (!verb) return false;
+  return verb && hasSelector(flat);
+}
+
+/**
+ * O texto pede para marcar vários e-mails da lista como lidos? ("marque como lidos 1, 2, 3 e 4", "marcar todos como lidos").
+ * Não apaga nada, então não pede confirmação.
+ */
+export function looksLikeBulkRead(flat: string): boolean {
+  const verb = /\b(marc\w*|marq\w*|mark\w*|deix\w*|pon\w*|poe|coloc\w*)\b/.test(flat);
+  return verb && /\blid[oa]s?\b/.test(flat) && hasSelector(flat);
+}
+
+/** O texto cita quais e-mails da lista: números, intervalo, "todos" ou "os N primeiros". */
+function hasSelector(flat: string): boolean {
   return /\d/.test(flat) || /\b(todos|todas|tudo)\b/.test(flat) || new RegExp(`\\b(${NUM})\\s+(a|ate|ao)\\s+(${NUM})\\b|\\bprimeir\\w+`).test(flat);
 }
 
@@ -202,6 +215,11 @@ function scanNumbers(seg: string, count: number): number[] {
  * ("todos menos o 3"). Valida contra `count` e aplica um teto de itens.
  */
 export function parseBulkDelete(text: string, count: number, max = 10): BulkDeletePlan {
+  return parseBulkSelection(text, count, max);
+}
+
+/** Mesma leitura de números para qualquer ação em lote (apagar, marcar como lido). */
+export function parseBulkSelection(text: string, count: number, max = 10): BulkDeletePlan {
   const flat = normalize(text).replace(/(\d)\s*-\s*(\d)/g, "$1 a $2");
   const cut = flat.search(EXCEPT);
   const head = cut < 0 ? flat : flat.slice(0, cut);

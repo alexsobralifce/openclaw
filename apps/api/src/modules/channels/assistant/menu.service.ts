@@ -20,7 +20,7 @@ import { normalize, parseChoice, pickByLabel } from "./voice";
 import { fmtWhen, mergeQueue, QUEUE_TTL_MS, QueuedEmail, removeFromQueue } from "./email-queue";
 import { addMute, loadMute, MutePrefs, recordDismiss, removeMute, saveMute, senderAddress } from "./email-mute";
 import { AgendaEvent, EventsPlan, extractJson, extractUrls, looksLikeAgendaIntent, parseEventsPlan } from "./agenda-events";
-import { classifyEmail, groupOrder, isHidden, looksLikeBatchReply, looksLikeBulkDelete, parseBatchPlan, parseBulkDelete } from "./email-filter";
+import { classifyEmail, groupOrder, isHidden, looksLikeBatchReply, looksLikeBulkDelete, looksLikeBulkRead, parseBulkSelection, parseBatchPlan, parseBulkDelete } from "./email-filter";
 
 const TZ = process.env.ASSISTANT_TZ || "America/Fortaleza";
 const TTL = 30 * 60_000;
@@ -237,6 +237,7 @@ export class MenuService {
       case "emails": {
         if (n === 0) return this.mainMenu(ws, false);
         if (n === null && /^(ver |mostrar |abrir )?(os )?(e-?mails? )?(ocultos|spam|promocoes|lixo)$/.test(normalize(text))) return this.emailHidden(ws, d);
+        if (n === null && looksLikeBulkRead(normalize(text))) return this.bulkMarkRead(ws, d, text);
         // Apagar vários de uma vez: "apagar emails 1,2,3,4,5,6" — checar antes do pickByLabel/batchReply para não haver ambiguidade
         if (n === null && looksLikeBulkDelete(normalize(text))) {
           const { ns, outOfRange } = parseBulkDelete(text, d.items.length);
@@ -251,6 +252,7 @@ export class MenuService {
       }
       case "emails_hidden": {
         if (n === 0) return d.q ? this.queueShow(ws) : this.emailList(ws, d.account);
+        if (n === null && looksLikeBulkRead(normalize(text))) return this.bulkMarkRead(ws, d, text);
         if (n === null && looksLikeBulkDelete(normalize(text))) {
           const { ns, outOfRange } = parseBulkDelete(text, d.items.length);
           if (!ns.length) return `🤔 Não encontrei esse(s) número(s) na lista atual (1 a ${d.items.length}). Diga os números certos, ou *menu*.`;
@@ -1182,7 +1184,7 @@ export class MenuService {
       hiddenLine,
       foot("Responda com o número para abrir") + hint,
       items.length > 1 ? "🎙️ _Vários de uma vez? Mande 1 áudio dizendo o que responder em cada e-mail._" : "",
-      items.length > 2 ? "🗑️ _Para limpar: *apague de 1 a 4*, *apague todos* ou *apague todos menos o 3*._" : "",
+      items.length > 2 ? "🗑️ _Para limpar: *apague de 1 a 4*, *apague todos* ou *apague todos menos o 3*. Para só tirar da lista: *marque 1, 2 e 3 como lidos*._" : "",
       opts(BACK),
     ].filter(Boolean).join("\n");
   }
@@ -1320,6 +1322,31 @@ export class MenuService {
     if (showList) return `${msg}\n\n${await this.emailList(ws, account)}`;
     await this.setMain(ws);
     return `${msg}\n\n💡 _Digite *menu* quando quiser ver mais._`;
+  }
+
+  /** Marca como lidos os e-mails citados. Não apaga nada e dá para desfazer no Gmail, então não pede confirmação. */
+  private async bulkMarkRead(ws: string, d: any, text: string): Promise<string> {
+    const { ns, outOfRange } = parseBulkSelection(text, d.items.length);
+    if (!ns.length) return `🤔 Não encontrei esse(s) número(s) na lista atual (1 a ${d.items.length}). Diga os números certos, ou *menu*.`;
+    const ok: number[] = [];
+    const failed: number[] = [];
+    for (const n of ns) {
+      const it = d.items[n - 1];
+      try {
+        await this.google.gmailMarkRead(ws, it.id, it.account ?? d.account);
+        await this.queueRemove(ws, it.id, it.account ?? d.account);
+        ok.push(n);
+      } catch (e: any) {
+        this.logger.warn(`Marcar e-mail ${n} como lido falhou: ${e.message}`);
+        failed.push(n);
+      }
+    }
+    const msg = [
+      ok.length ? `✅ *${ok.length} e-mail${ok.length > 1 ? "s marcados" : " marcado"} como lido${ok.length > 1 ? "s" : ""}* (${ok.join(", ")}).` : "",
+      failed.length ? `⚠️ Não consegui marcar: ${failed.map((n) => `e-mail ${n}`).join(", ")}.` : "",
+      outOfRange.length ? `⚠️ _Não achei o(s) e-mail(s) ${outOfRange.join(", ")} na lista atual; ignorei._` : "",
+    ].filter(Boolean).join("\n");
+    return `${msg}\n\n${d.q ? await this.queueShow(ws) : await this.emailList(ws, d.account)}`;
   }
 
   /** Mostra o que será apagado e pede confirmação antes de mexer em qualquer e-mail. */

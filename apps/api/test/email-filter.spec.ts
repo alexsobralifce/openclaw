@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { classifyEmail, groupOrder, isHidden, looksLikeBatchReply, looksLikeBulkDelete, parseBatchPlan, parseBulkDelete } from "../src/modules/channels/assistant/email-filter";
+import { classifyEmail, groupOrder, isHidden, looksLikeBatchReply, looksLikeBulkDelete, looksLikeBulkRead, parseBatchPlan, parseBulkDelete, parseBulkSelection } from "../src/modules/channels/assistant/email-filter";
 
 const c = (m: Parameters<typeof classifyEmail>[0]) => classifyEmail(m).kind;
 
@@ -156,5 +156,27 @@ describe("parseBulkDelete", () => {
   });
   it("exceção sem nada para apagar não escolhe nada", () => {
     expect(parseBulkDelete("menos o 3", 6).ns).toEqual([]);
+  });
+});
+
+describe("marcar vários como lidos", () => {
+  const f = (t: string) => looksLikeBulkRead(t.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/[.,!?]/g, ""));
+  it("reconhece variantes com números, intervalo e todos", () => {
+    expect(f("marque como lidos os emails 1, 2, 3 e 4")).toBe(true);
+    expect(f("marcar 1 a 4 como lido")).toBe(true);
+    expect(f("marca todos como lidos")).toBe(true);
+    expect(f("deixa o 2 e o 3 como lidos")).toBe(true);
+  });
+  it("não confunde com apagar nem com marcar sem número", () => {
+    expect(f("apague os emails 1, 2 e 3")).toBe(false);
+    expect(f("marcar como lido")).toBe(false);
+    expect(f("marcar o 2 como spam")).toBe(false);
+  });
+  it("não é tratado como pedido de apagar", () => {
+    expect(looksLikeBulkDelete("marque como lidos 1 2 3 e 4")).toBe(false);
+  });
+  it("usa o mesmo leitor de números", () => {
+    expect(parseBulkSelection("marque 1, 2, 3 e 4 como lidos", 6).ns).toEqual([1, 2, 3, 4]);
+    expect(parseBulkSelection("marque todos menos o 2 como lidos", 4).ns).toEqual([1, 3, 4]);
   });
 });
