@@ -93,7 +93,7 @@ openclaw/
 | `assistant/intent.service.ts` | Jev (TypeSafe): `agenda_add` / `drive_file` / `note_add` / `other`, `MIN_CONFIDENCE = 0.8`, timeout 2,5 s |
 | `assistant/commander.ts` | Identifica o usuário que comanda pelo WhatsApp e checa serviços |
 | `assistant/gemini.service.ts`, `memory.service.ts`, `weather.service.ts` | Gemini (transcrição/extração/TTS), memórias e rotina, clima Open-Meteo |
-| `assistant/email-*.ts`, `drive.ts`, `notes.ts`, `contacts.ts`, `email-search.ts`, `email-book.ts`, `menu-items.ts`, `agenda-events.ts`, `voice.ts`, `speech.ts`, `security.ts`, `vault-command.ts`, `routine.ts`, `location.ts`, `chat-clean.ts` | Lógica pura (testável sem mocks) |
+| `assistant/email-*.ts`, `drive.ts`, `notes.ts`, `contacts.ts`, `email-search.ts`, `email-book.ts`, `email-compose.ts`, `menu-items.ts`, `agenda-events.ts`, `voice.ts`, `speech.ts`, `security.ts`, `vault-command.ts`, `routine.ts`, `location.ts`, `chat-clean.ts` | Lógica pura (testável sem mocks) |
 | `assistant/assistant-settings.controller.ts` | `GET/PUT /assistant/menu` (`@Access("assistant")`): itens do menu principal que o dono esconde pelo painel; guardado em `KvEntry` `menuhide:<ws>` |
 | `assistant/assistant-scheduler.service.ts` | Tick de 20 s: apaga mensagens com senha, volta ao menu por inatividade, limpeza do chat |
 | `assistant/email-watcher.service.ts` | Poll do Gmail (60 s) e aviso por WhatsApp |
@@ -237,6 +237,10 @@ Webhook → `InboundEvent` → worker → `InboxService.processIncoming` → `We
 33. "Buscar e-mails do Marcos" / "e-mails sobre contrato" (`emailSearchSpec`) usa a tela `emails` com `search` no estado: abrir, apagar e marcar como lido em lote funcionam, e o refresh pós-ação refaz a busca (não a lista de não lidos). Abrir um e-mail e voltar mostra os não lidos. A consulta do Gmail é montada só com letras, números e `@._-` (sem operadores do usuário). "email do Marcos" (singular) é contato, não busca; "e-mails de hoje" continua sendo o comando de ler e-mails.
 34. O catálogo é gerado (edições são sobrescritas), grava só nome e endereço, e nunca guarda endereços automáticos (`isAutomatic`). Se o Gmail de uma conta falhar, nada é gravado. A cache de pastas inexistentes (`loadBook`) também vale 5 min: logo após importar, `writeBook` invalida a pasta certa.
 
+**Escrever e-mail novo** (`assistant/email-compose.ts`, telas `compose_*` em `menu.service.ts`)
+35. "Enviar e-mail" abre um passo a passo (conta → para → assunto → texto → rascunho → 1 Enviar). Nada sai antes da tela de confirmação. O destinatário aceita endereços ou o nome de um contato (usa `contactsLookup`, exige o serviço `drive`). `composeSeed` só captura o comando sozinho ou com `para <endereço>` / `assunto:`; qualquer texto a mais ("mandar e-mail pro Marcos dizendo...") é pedido livre e vai para a IA (`gmail_send`, também com confirmação). O corpo é redigido pela IA a partir da instrução, ou enviado como está com `texto:`.
+36. As telas `compose_*` seguem a convenção de sufixos do `pending` (`_input`, `_account`, `_confirm`, `_draft`) para os comandos globais não dispararem no meio; `email_account` trata o comando por conta própria porque já conta como pendente. O assunto vai codificado em base64 no cabeçalho e o `Para` só recebe endereços validados por regex (sem quebra de linha), então não há injeção de `Bcc:`.
+
 ## Guia de navegação
 
 | Tarefa | Arquivos |
@@ -244,6 +248,7 @@ Webhook → `InboundEvent` → worker → `InboxService.processIncoming` → `We
 | Novo comando/tela do assistente | `channels/assistant/menu.service.ts` (`respond`, `route`, `ALIASES`), helper puro novo ao lado, spec em `apps/api/test/` |
 | Novo item no menu principal | `menu-items.ts` (`MENU_ITEMS`, para poder ser escondido), `MenuService.mainOptions` (com `id`) e `menuItems`; o painel lê pela rota `/assistant/menu`; item escondido só sai da lista, o comando digitado continua valendo |
 | Mudar contatos (importar/consultar) | `assistant/contacts.ts` (puro), `google.service.ts` (`contactsImport`/`contactsLookup`/`importContactsOnce`), bloco "Contatos" em `MenuService.respond`, tool `contact_search`; specs `contacts*.spec.ts`, `google-contacts.spec.ts`; ver gotchas 29 a 32 |
+| Mudar o passo a passo de enviar e-mail | `assistant/email-compose.ts` (puro) e as telas `compose_*` / `compose*` em `MenuService`; spec `email-compose*.spec.ts`; ver gotchas 35 e 36 |
 | Mudar busca de e-mails / catálogo de endereços | `assistant/email-search.ts` e `email-book.ts` (puros), `google.service.ts` (`emailBookImport`, `gmailHeaders`, `loadBook`), `MenuService.emailSearchView` / `emailBookRefresh`; specs `email-search*.spec.ts`, `google-contacts.spec.ts`; ver gotchas 33 e 34 |
 | Mudar notas (anotar/buscar) | `assistant/notes.ts` (puro), `google.service.ts` (`noteAppend`/`noteSearch`), bloco "Notas" em `MenuService.respond`, tools `note_*` em `assistant.service.ts`; specs `notes*.spec.ts`; ver gotchas 25 a 28 |
 | Nova intenção do Jev | `assistant/intent.service.ts` (tipo `Intent`), gatilho em `MenuService.respond`, `test/intent.spec.ts` |
