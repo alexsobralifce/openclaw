@@ -42,4 +42,16 @@ describe("intenção com o Jev", () => {
     expect(acceptIntent({ intent: "other", confidence: 0.99 }, "agenda_add")).toBe(false);
     expect(acceptIntent(null, "agenda_add")).toBe(false);
   });
+
+  it("note_add é uma intenção própria, separada da agenda", async () => {
+    systemOne.mockResolvedValue({ answers: { intent: { choice: "note_add", confidence: 0.9 } } });
+    const r = await new IntentService().classify("anota ligar pro Marcos sobre o contrato");
+    expect(r).toEqual({ intent: "note_add", confidence: 0.9 });
+    expect(acceptIntent(r, "note_add")).toBe(true);
+    expect(acceptIntent(r, "agenda_add")).toBe(false);
+    const criteria = systemOne.mock.calls[0][0].questions.intent.criteria;
+    expect(Object.keys(criteria)).toEqual(expect.arrayContaining(["agenda_add", "drive_file", "note_add", "other"]));
+    // "anotar" não pode puxar para a agenda
+    expect(criteria.agenda_add).not.toMatch(/anotar/);
+  });
 });

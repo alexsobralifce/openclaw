@@ -5,7 +5,7 @@ vi.mock("@openclaw/database", () => ({ prisma: { workspaceMember: { findFirst: a
 
 import { MenuService } from "../src/modules/channels/assistant/menu.service";
 
-function build(opts: { accounts?: string[]; hits?: any[]; appendError?: string; searchError?: string } = {}) {
+function build(opts: { accounts?: string[]; hits?: any[]; appendError?: string; searchError?: string; jev?: { intent: string; confidence: number } | null } = {}) {
   h.role = "ROOT";
   h.services = [];
   const store = new Map<string, any>();
@@ -21,9 +21,10 @@ function build(opts: { accounts?: string[]; hits?: any[]; appendError?: string; 
   });
   const google = { listAccounts: async () => accounts, noteAppend, noteSearch, driveSearch: vi.fn(async () => []) };
   const memory = { promptBlock: async () => "", listRoutine: async () => [], removeRoutine: vi.fn(async () => true) };
-  const menu = new MenuService(google as any, {} as any, memory as any, state as any);
+  const intents = { enabled: () => true, classify: vi.fn(async () => opts.jev ?? null) };
+  const menu = new MenuService(google as any, {} as any, memory as any, state as any, undefined, undefined, undefined, intents as any);
   vi.spyOn(menu as any, "ai").mockRejectedValue(new Error("IA indisponível"));
-  return { menu, store, noteAppend, noteSearch };
+  return { menu, store, noteAppend, noteSearch, intents };
 }
 
 describe("menu: anotar no Drive", () => {
@@ -149,5 +150,49 @@ describe("menu: buscar nas notas", () => {
     const out = (await menu.respond("w1", "o que anotei sobre contrato")) as string;
     expect(out.indexOf("nova.md")).toBeGreaterThan(-1);
     expect(out.indexOf("nova.md")).toBeLessThan(out.indexOf("velha.md"));
+  });
+});
+
+describe("menu: 'anota ...' sem palavra explícita (Jev decide)", () => {
+  it("Jev seguro de que é nota: grava", async () => {
+    const { menu, noteAppend } = build({ jev: { intent: "note_add", confidence: 0.92 } });
+    const out = (await menu.respond("w1", "anota ligar pro Marcos sobre o contrato")) as string;
+    expect(noteAppend).toHaveBeenCalledWith("w1", "ligar pro Marcos sobre o contrato", expect.any(String), "pessoal@gmail.com");
+    expect(out).toContain("Anotado");
+  });
+
+  it("Jev diz que é agenda: não vira nota", async () => {
+    const { menu, noteAppend } = build({ jev: { intent: "agenda_add", confidence: 0.95 } });
+    await menu.respond("w1", "anota consulta com o dentista dia 10 às 14h");
+    expect(noteAppend).not.toHaveBeenCalled();
+  });
+
+  it("Jev inseguro (abaixo de 0,8) ou fora do ar: não grava", async () => {
+    const unsure = build({ jev: { intent: "note_add", confidence: 0.7 } });
+    await unsure.menu.respond("w1", "anota ligar pro Marcos sobre o contrato");
+    expect(unsure.noteAppend).not.toHaveBeenCalled();
+    const down = build({ jev: null });
+    await down.menu.respond("w1", "anota ligar pro Marcos sobre o contrato");
+    expect(down.noteAppend).not.toHaveBeenCalled();
+  });
+
+  it("mensagem que não começa como pedido de anotar nunca vira nota, mesmo que o Jev diga note_add", async () => {
+    const { menu, noteAppend } = build({ jev: { intent: "note_add", confidence: 0.99 } });
+    await menu.respond("w1", "preciso ligar pro Marcos sobre o contrato");
+    expect(noteAppend).not.toHaveBeenCalled();
+  });
+
+  it("palavra explícita dispensa o Jev", async () => {
+    const { menu, noteAppend, intents } = build({ jev: { intent: "agenda_add", confidence: 0.99 } });
+    await menu.respond("w1", "anota no obsidian: reunião de colegiado dia 10");
+    expect(noteAppend).toHaveBeenCalled();
+    expect(intents.classify).not.toHaveBeenCalled();
+  });
+
+  it("senha com Jev também é barrada", async () => {
+    const { menu, noteAppend } = build({ jev: { intent: "note_add", confidence: 0.95 } });
+    const out = (await menu.respond("w1", "anota a senha do banco: Abc12345!")) as string;
+    expect(noteAppend).not.toHaveBeenCalled();
+    expect(out).toContain("Não envie senhas");
   });
 });

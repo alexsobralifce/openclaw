@@ -35,3 +35,12 @@ describe("permissões", () => {
     expect(toolAllowed([], "reply_to_conversation")).toBe(false);
   });
 });
+
+describe("ferramentas de notas", () => {
+  it("note_add e note_search dependem do serviço drive", () => {
+    expect(toolAllowed(["drive"], "note_add")).toBe(true);
+    expect(toolAllowed(["drive"], "note_search")).toBe(true);
+    expect(toolAllowed(["inbox", "email"], "note_add")).toBe(false);
+    expect(toolAllowed(["inbox", "email"], "note_search")).toBe(false);
+  });
+});

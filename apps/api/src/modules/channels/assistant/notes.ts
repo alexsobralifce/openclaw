@@ -21,6 +21,14 @@ export function looksLikeNoteAdd(flat: string): boolean {
   return new RegExp(`^(por favor )?(${VERB})\\b.*\\b(no|na|em|pro|para o|para a)\\s+(meu |minha )?(${PLACE})\\b`).test(flat);
 }
 
+/**
+ * A mensagem começa como um pedido de anotar ("anota ligar pro Marcos"), mas sem palavra que prove que é nota.
+ * Só serve para decidir se vale perguntar ao Jev (nota ou compromisso de agenda?); sozinho não grava nada.
+ */
+export function startsLikeNote(flat: string): boolean {
+  return /^(por favor )?(anot\w*|salv\w*|guard\w*|registr\w*)\b/.test(flat);
+}
+
 /** O texto pergunta o que foi anotado? ("o que anotei sobre o contrato", "buscar nas minhas notas ...", "procura no obsidian ..."). */
 export function looksLikeNoteSearch(flat: string): boolean {
   if (/\b(o que|oque|quais|qual|tem algo|tenho algo)\b.*\b(anotei|anotado|salvei|guardei|escrevi|registrei)\b/.test(flat)) return true;

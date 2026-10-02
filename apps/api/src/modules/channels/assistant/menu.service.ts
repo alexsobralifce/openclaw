@@ -14,7 +14,7 @@ import { todayItems, when as routineWhen } from "./routine";
 import { AssistantConfig, configKey, fmtInterval, IDLE_MENU_MS, intervalProblem, parseInterval, PRESETS } from "./chat-clean";
 import { driveQueryFrom, fileIcon, fmtSize, looksLikeDriveRequest, parseDriveQuery, rankFiles, sanitizeAlternates } from "./drive";
 import { suspiciousReasons } from "./security";
-import { looksLikeNoteAdd, looksLikeNoteSearch, noteTerms, noteTextFrom } from "./notes";
+import { looksLikeNoteAdd, looksLikeNoteSearch, noteTerms, noteTextFrom, startsLikeNote } from "./notes";
 import { StateService } from "../../state/state.service";
 import { effectiveServices, Service } from "../../auth/permissions";
 import { normalize, parseChoice, pickByLabel } from "./voice";
@@ -130,7 +130,7 @@ export class MenuService {
 
     // O Jev só é consultado se as regras não acharam nada e a mensagem tem cara de pedido livre; uma chamada por mensagem.
     let jev: Promise<IntentResult | null> | undefined;
-    const jevSays = async (wanted: "agenda_add" | "drive_file") => {
+    const jevSays = async (wanted: "agenda_add" | "drive_file" | "note_add") => {
       if (!this.intents?.enabled() || flat.split(" ").length < 3) return false;
       jev ??= this.intents.classify(text);
       return acceptIntent(await jev, wanted);
@@ -140,9 +140,10 @@ export class MenuService {
       // Algo a confirmar ou digitar: comandos soltos não valem
       const pending = !!st && /(_input|_draft|_confirm|_account)$|^confirm_ai$/.test(st.screen);
       // Notas: antes dos comandos abaixo, para o conteúdo ditado ("vou dirigir amanhã") não acionar o modo carro nem outro comando
-      if (!isInput && !pending && (looksLikeNoteSearch(flat) || looksLikeNoteAdd(flat)) && (await this.services(workspaceId)).includes("drive")) {
+      // "Anota ..." sem palavra explícita pode ser compromisso: o Jev decide (só com confiança alta); na dúvida segue o fluxo da agenda
+      if (!isInput && !pending && (looksLikeNoteSearch(flat) || looksLikeNoteAdd(flat) || startsLikeNote(flat)) && (await this.services(workspaceId)).includes("drive")) {
         if (looksLikeNoteSearch(flat)) return await this.noteSearchView(workspaceId, text);
-        return looksLikeSharedSecret(text) ? this.secretWarning() : await this.noteAdd(workspaceId, text, flat);
+        if (looksLikeNoteAdd(flat) || (await jevSays("note_add"))) return looksLikeSharedSecret(text) ? this.secretWarning() : await this.noteAdd(workspaceId, text, flat);
       }
       // Em telas de digitação (rascunho de e-mail, evento...), o texto é conteúdo: comandos globais só valem como mensagem inteira
       const cmd = (src: string) => new RegExp(isInput ? `^(${src})$` : `(${src})`);

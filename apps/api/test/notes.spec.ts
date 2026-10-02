@@ -10,6 +10,7 @@ import {
   noteTerms,
   noteTextFrom,
   snippets,
+  startsLikeNote,
 } from "../src/modules/channels/assistant/notes";
 
 const add = (t: string) => looksLikeNoteAdd(normalize(t));
@@ -109,5 +110,19 @@ describe("snippets", () => {
   it("sem palavras ou sem acerto, devolve vazio", () => {
     expect(snippets(content, [])).toEqual([]);
     expect(snippets(content, ["viagem"])).toEqual([]);
+  });
+});
+
+describe("startsLikeNote (só decide se vale perguntar ao Jev)", () => {
+  const st = (t: string) => startsLikeNote(normalize(t));
+  it("começa como pedido de anotar", () => {
+    expect(st("anota ligar pro Marcos")).toBe(true);
+    expect(st("Registra aí a ideia da tela")).toBe(true);
+    expect(st("por favor guarda isso: comprar café")).toBe(true);
+  });
+  it("outras mensagens não gastam uma chamada ao Jev", () => {
+    expect(st("preciso ligar pro Marcos")).toBe(false);
+    expect(st("marcar consulta dia 10")).toBe(false);
+    expect(st("o que anotei sobre o contrato")).toBe(false);
   });
 });

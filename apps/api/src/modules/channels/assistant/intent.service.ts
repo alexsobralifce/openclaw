@@ -2,7 +2,7 @@ import { Injectable, Logger } from "@nestjs/common";
 import { TypeSafeClient, choice } from "@typesafe-ai/sdk";
 
 /** O que o dono quer com a mensagem, entre os pedidos que o menu atende sozinho (sem chamar o GPT). */
-export type Intent = "agenda_add" | "drive_file" | "other";
+export type Intent = "agenda_add" | "drive_file" | "note_add" | "other";
 
 export interface IntentResult {
   intent: Intent;
@@ -15,9 +15,10 @@ export const MIN_CONFIDENCE = 0.8;
 const TIMEOUT_MS = 2_500;
 
 const QUESTION = choice("O que o dono da secretária virtual quer fazer com esta mensagem do WhatsApp?", {
-  agenda_add: "Pôr um ou mais compromissos na agenda (marcar, anotar, adicionar eventos, prazos, consultas, provas).",
+  agenda_add: "Pôr um ou mais compromissos na agenda: eventos com data ou hora marcada (marcar, adicionar, prazos, consultas, provas, reuniões).",
+  note_add: "Guardar uma anotação, ideia, lembrete solto ou informação para consultar depois, SEM data nem hora marcada (anota isso, guarda isso, registra aí).",
   drive_file: "Achar ou receber um arquivo que está no Google Drive (contrato, planilha, PDF, documento).",
-  other: "Qualquer outra coisa: perguntar algo, ver a agenda, e-mails, clima, conversar, mandar e-mail, cofre de senhas.",
+  other: "Qualquer outra coisa: perguntar algo, ver a agenda, e-mails, clima, conversar, mandar e-mail, cofre de senhas, procurar o que já foi anotado.",
 });
 
 /** Só aceita a resposta do Jev quando ele está seguro; "other" nunca desvia o fluxo. */
