@@ -11,7 +11,7 @@ total_tokens: 265339
 
 ## Visão geral do sistema
 
-Monorepo pnpm 12.6 + Turborepo: API NestJS 10, painel Next.js 15 (React 19, Tailwind 3), Prisma 6 sobre Postgres. O sistema recebe mensagens de WhatsApp (via Evolution API) e Instagram, guarda tudo em um inbox multi-tenant e oferece um assistente pessoal por WhatsApp (e-mail, agenda, Drive, cofre de senhas, clima). Estado, filas e cache ficam no Postgres (`KvEntry`, `InboundEvent`, `WebhookDelivery`); não há Redis em uso.
+Monorepo pnpm 12.6 + Turborepo: API NestJS 10, painel Next.js 15 (React 19, Tailwind 3), Prisma 6 sobre Postgres. O sistema recebe mensagens de WhatsApp (via Evolution API) e Instagram, guarda tudo em um inbox multi-tenant e oferece um assistente pessoal por WhatsApp (e-mail, agenda, Drive, notas, cofre de senhas, clima). Estado, filas e cache ficam no Postgres (`KvEntry`, `InboundEvent`, `WebhookDelivery`); não há Redis em uso.
 
 ```mermaid
 graph TB
@@ -90,10 +90,10 @@ openclaw/
 | `inbound/inbound.service.ts` | Fila durável `InboundEvent` (tick 2 s, claim otimista, backoff 5s/30s/2min/10min/1h, 6 tentativas). Orquestra o roteamento |
 | `assistant/menu.service.ts` (~1.700 linhas) | Máquina de estados de menu numerado; `respond()` devolve `string \| null` (null = IA livre) |
 | `assistant/assistant.service.ts` | Fachada: envio, transcrição, limpeza do chat, agente OpenAI com tools (máx. 6 rodadas) |
-| `assistant/intent.service.ts` | Jev (TypeSafe): `agenda_add` / `drive_file` / `other`, `MIN_CONFIDENCE = 0.8`, timeout 2,5 s |
+| `assistant/intent.service.ts` | Jev (TypeSafe): `agenda_add` / `drive_file` / `note_add` / `other`, `MIN_CONFIDENCE = 0.8`, timeout 2,5 s |
 | `assistant/commander.ts` | Identifica o usuário que comanda pelo WhatsApp e checa serviços |
 | `assistant/gemini.service.ts`, `memory.service.ts`, `weather.service.ts` | Gemini (transcrição/extração/TTS), memórias e rotina, clima Open-Meteo |
-| `assistant/email-*.ts`, `drive.ts`, `agenda-events.ts`, `voice.ts`, `speech.ts`, `security.ts`, `vault-command.ts`, `routine.ts`, `location.ts`, `chat-clean.ts` | Lógica pura (testável sem mocks) |
+| `assistant/email-*.ts`, `drive.ts`, `notes.ts`, `agenda-events.ts`, `voice.ts`, `speech.ts`, `security.ts`, `vault-command.ts`, `routine.ts`, `location.ts`, `chat-clean.ts` | Lógica pura (testável sem mocks) |
 | `assistant/assistant-scheduler.service.ts` | Tick de 20 s: apaga mensagens com senha, volta ao menu por inatividade, limpeza do chat |
 | `assistant/email-watcher.service.ts` | Poll do Gmail (60 s) e aviso por WhatsApp |
 | `evolution/*` | Cliente HTTP do Evolution, `EvolutionError`, filtro 503 |
@@ -129,6 +129,7 @@ openclaw/
 ### integrations/google e state
 
 - `google.service.ts`: contas Google são `Channel` de `type: EMAIL` com refresh token cifrado (`enc1:`); múltiplas contas por workspace; Gmail, Calendar, Drive.
+- Notas no Drive: `noteAppend` (nota do dia `Assist.IA/AAAA-MM-DD.md`, lê-acrescenta-regrava sob fila por conta) e `noteSearch` (trechos em `.md`/texto de todo o Drive). Escopos `drive.readonly` + `drive.file`: lê tudo, só grava o que ele mesmo criou.
 - `state.service.ts`: KV com TTL sobre `KvEntry`; `incr` atômico por SQL cru. Módulo `@Global` (o `WebhooksModule` também).
 
 ## Guia de módulos: Web (`apps/web/src`)
@@ -214,13 +215,20 @@ Webhook → `InboundEvent` → worker → `InboxService.processIncoming` → `We
 **Testes**
 22. Construtores posicionais de `MenuService`/`AssistantService` com `as any` em ~15 specs: mudar a ordem das dependências quebra vários testes.
 23. Sem tarefa `test` no `turbo.json`; `pnpm test` na raiz não roda nada (rodar em `apps/api`).
-24. Lacunas de cobertura: public-api, webhooks (url-guard, entrega), inbox além de `deleteConversation`, `StateService` real, integrações Google (exceto `calendarCreate`/`driveSearch`), controllers.
+24. Lacunas de cobertura (as notas têm spec próprio: `notes`, `google-notes`, `notes-menu`, `notes-tools`): public-api, webhooks (url-guard, entrega), inbox além de `deleteConversation`, `StateService` real, integrações Google (exceto `calendarCreate`/`driveSearch`), controllers.
+
+**Notas no Drive** (`assistant/notes.ts`, `google.service.ts`)
+25. Gravar notas exige o escopo `drive.file`: contas Google conectadas antes dele precisam **reconectar** (Canais → Conectar Google); sem isso o erro orienta a reconexão. Usa o serviço `drive` (não há serviço `notes`).
+26. "Anota ..." solto pode ser compromisso de agenda: só vira nota com palavra explícita (`obsidian`, `diário`, `caderno`, `nota:`) ou com o Jev em `note_add` ≥ 0,8, e o Jev só é consultado se a mensagem começa como pedido de anotar (`startsLikeNote`). O bloco das notas em `respond()` vem **antes** dos comandos globais, senão o conteúdo ditado ("vou dirigir") aciona modo carro/clima.
+27. `note_search` é conteúdo externo (`EXTERNAL`) e `note_add` está em `PREFERENCE_TOOLS`: depois de ler notas/e-mails no mesmo comando a IA não grava nota (prompt injection). Notas com senha são recusadas (`looksLikeSharedSecret`).
+28. Cache da pasta (`noteFolders`) e fila (`noteLocks`) são só em memória: reiniciar apenas refaz uma busca, mas várias instâncias não serializam a gravação entre si (mesma limitação do cofre, gotcha 13). O Obsidian é opcional: o código só fala com o Drive.
 
 ## Guia de navegação
 
 | Tarefa | Arquivos |
 |---|---|
 | Novo comando/tela do assistente | `channels/assistant/menu.service.ts` (`respond`, `route`, `ALIASES`), helper puro novo ao lado, spec em `apps/api/test/` |
+| Mudar notas (anotar/buscar) | `assistant/notes.ts` (puro), `google.service.ts` (`noteAppend`/`noteSearch`), bloco "Notas" em `MenuService.respond`, tools `note_*` em `assistant.service.ts`; specs `notes*.spec.ts`; ver gotchas 25 a 28 |
 | Nova intenção do Jev | `assistant/intent.service.ts` (tipo `Intent`), gatilho em `MenuService.respond`, `test/intent.spec.ts` |
 | Nova tool da IA livre | `assistant/assistant.service.ts` (`TOOLS`, `runTool`, `toolAllowed`); se sensível, entra em `SENSITIVE` |
 | Novo endpoint do painel | controller com `@Access("<serviço>")`, service filtrando por `workspaceId`, método em `apps/web/src/lib/api.ts` |
