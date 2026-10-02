@@ -14,6 +14,7 @@ import { todayItems, when as routineWhen } from "./routine";
 import { AssistantConfig, configKey, fmtInterval, IDLE_MENU_MS, intervalProblem, parseInterval, PRESETS } from "./chat-clean";
 import { driveQueryFrom, fileIcon, fmtSize, looksLikeDriveRequest, parseDriveQuery, rankFiles, sanitizeAlternates } from "./drive";
 import { suspiciousReasons } from "./security";
+import { looksLikeNoteAdd, looksLikeNoteSearch, noteTerms, noteTextFrom } from "./notes";
 import { StateService } from "../../state/state.service";
 import { effectiveServices, Service } from "../../auth/permissions";
 import { normalize, parseChoice, pickByLabel } from "./voice";
@@ -72,6 +73,7 @@ const padTo = (t: string, n: number) => short(t, n).padEnd(n);
 const short = (s: string, n: number) => (s.length > n ? s.slice(0, n - 1) + "…" : s);
 const personName = (from: string) => (from || "").replace(/<.*>/, "").replace(/["']/g, "").trim() || from;
 /** Nome amigável da conta: Gmail pessoal vira "Pessoal"; a outra (institucional) vira "IFCE". */
+const warnLine = (f?: PromiseRejectedResult) => (f ? `⚠️ _Uma conta falhou: ${short(String(f.reason?.message ?? f.reason), 120)}_` : "");
 const accountLabel = (acc: string) => (/@gmail\.com$/i.test(acc) ? "Pessoal" : /ifce/i.test(acc) ? "IFCE" : acc.split("@")[0]);
 const emailOf = (from: string) => /<([^>]+)>/.exec(from)?.[1] ?? from;
 const dateStr = (offsetDays: number) =>
@@ -135,6 +137,13 @@ export class MenuService {
     };
 
     try {
+      // Algo a confirmar ou digitar: comandos soltos não valem
+      const pending = !!st && /(_input|_draft|_confirm|_account)$|^confirm_ai$/.test(st.screen);
+      // Notas: antes dos comandos abaixo, para o conteúdo ditado ("vou dirigir amanhã") não acionar o modo carro nem outro comando
+      if (!isInput && !pending && (looksLikeNoteSearch(flat) || looksLikeNoteAdd(flat)) && (await this.services(workspaceId)).includes("drive")) {
+        if (looksLikeNoteSearch(flat)) return await this.noteSearchView(workspaceId, text);
+        return looksLikeSharedSecret(text) ? this.secretWarning() : await this.noteAdd(workspaceId, text, flat);
+      }
       // Em telas de digitação (rascunho de e-mail, evento...), o texto é conteúdo: comandos globais só valem como mensagem inteira
       const cmd = (src: string) => new RegExp(isInput ? `^(${src})$` : `(${src})`);
       // Modo carro e modo direção são um só: texto falável, que o Android Auto/CarPlay leem em voz alta
@@ -146,7 +155,6 @@ export class MenuService {
       if (cmd("modo carro|modo direcao|android auto|carplay|car play|estou no carro|to no carro|vou dirigir|estou dirigindo|to dirigindo").test(flat)) return await this.carSet(workspaceId, true);
       if (/^(ler |ver |abrir |checar )?(os |meus )?(novos )?e-?mails?( novos)?$/.test(flat)) return await this.emailsEntry(workspaceId);
       // Fila de e-mails novos: "próximo" e "fila" valem de qualquer tela, menos onde há algo a confirmar ou digitar
-      const pending = !!st && /(_input|_draft|_confirm|_account)$|^confirm_ai$/.test(st.screen);
       if (!pending && /^(ler |ver |abrir |passa |passar )?(o )?(proximo|proxima|seguinte)( e-?mail)?$/.test(flat)) return await this.nextFromQueue(workspaceId);
       if (!pending && /^(ver |mostrar |abrir )?(a )?fila( de e-?mails?)?$/.test(flat)) return await this.queueShow(workspaceId);
       // Navegação direta por voz, de qualquer tela (fora das telas de digitação)
@@ -901,6 +909,44 @@ export class MenuService {
       this.logger.warn(`Enviar arquivo do Drive falhou: ${e.message}`);
       return `😕 ${short(e.message, 200)}`;
     }
+  }
+
+  // ─── Notas no Drive (Assist.IA/AAAA-MM-DD.md) ─────────────────
+
+  /** Guarda a anotação na nota do dia. Com várias contas Google, vale a primeira, ou a citada ("no obsidian do ifce: ..."). */
+  private async noteAdd(ws: string, text: string, flat: string): Promise<string> {
+    let content = noteTextFrom(text);
+    const accounts: string[] = await this.google.listAccounts(ws);
+    if (!accounts.length) return this.noGoogle();
+    const named = accounts.length > 1 ? accounts.find((a) => new RegExp(`\\b(obsidian|diario|caderno|notas?) (do|da|no|na) ${normalize(accountLabel(a))}\\b`).test(flat)) : undefined;
+    if (named) content = content.replace(new RegExp(`^(?:d[oa]|n[oa])\\s+${accountLabel(named)}\\s*[:,\\-–]?\\s*`, "i"), "").trim();
+    if (!content) return "🤔 O que devo anotar? Diga, por exemplo: *anota no obsidian: ligar pro Marcos*.";
+    try {
+      const r = await this.google.noteAppend(ws, content, TZ, named ?? accounts[0]);
+      return `📝 *Anotado!* _(${r.nome}${accounts.length > 1 ? ` · ${accountLabel(named ?? accounts[0])}` : ""})_`;
+    } catch (e: any) {
+      this.logger.warn(`Anotar no Drive falhou: ${e.message}`);
+      return `😕 Não consegui anotar: ${short(e.message, 200)}`;
+    }
+  }
+
+  /** "O que anotei sobre X?": trechos das notas do Drive (todas as contas) que citam as palavras. */
+  private async noteSearchView(ws: string, text: string): Promise<string> {
+    const terms = noteTerms(text);
+    if (!terms.length) return "🤔 Sobre o quê? Diga, por exemplo: *o que anotei sobre o contrato?*";
+    const accounts: string[] = await this.google.listAccounts(ws);
+    if (!accounts.length) return this.noGoogle();
+    const settled = await Promise.allSettled(accounts.map((a) => this.google.noteSearch(ws, terms, a)));
+    const hits = settled.flatMap((r) => (r.status === "fulfilled" ? r.value : [])).sort((a, b) => String(b.modificado ?? "").localeCompare(String(a.modificado ?? ""))).slice(0, 5);
+    const failed = settled.find((r): r is PromiseRejectedResult => r.status === "rejected");
+    if (!hits.length) {
+      if (failed) this.logger.warn(`Buscar notas falhou: ${failed.reason?.message ?? failed.reason}`);
+      return failed
+        ? `😕 Não consegui buscar nas notas: ${short(String(failed.reason?.message ?? failed.reason), 200)}`
+        : `🤔 Não achei nada sobre *${short(terms.join(" "), 40)}* nas suas notas.`;
+    }
+    const rows = hits.map((h) => `📄 *${short(h.nome, 40)}*${h.modificado ? ` _(${this.fmtDate(h.modificado)})_` : ""}\n${h.trechos.slice(0, 2).map((t) => `   ${short(t, 140)}`).join("\n")}`);
+    return [head("📝", "Suas notas", `"${short(terms.join(" "), 30)}"`), rows.join("\n"), warnLine(failed)].filter(Boolean).join("\n");
   }
 
   // Cofre de senhas (cadastro e edição só no painel; aqui, consulta com o cofre liberado)
