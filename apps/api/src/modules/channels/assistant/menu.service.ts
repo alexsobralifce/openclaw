@@ -1182,6 +1182,7 @@ export class MenuService {
       hiddenLine,
       foot("Responda com o número para abrir") + hint,
       items.length > 1 ? "🎙️ _Vários de uma vez? Mande 1 áudio dizendo o que responder em cada e-mail._" : "",
+      items.length > 2 ? "🗑️ _Para limpar: *apague de 1 a 4*, *apague todos* ou *apague todos menos o 3*._" : "",
       opts(BACK),
     ].filter(Boolean).join("\n");
   }

@@ -104,9 +104,13 @@ describe("pedido de apagar em lote", () => {
     expect(f("apaga o 1, 2 e 3")).toBe(true);
     expect(f("excluir 1 2 3")).toBe(true);
     expect(f("deleta o 4")).toBe(true);
+    expect(f("apague os emails de 1 a 6")).toBe(true);
+    expect(f("apague de um ate seis")).toBe(true);
+    expect(f("apaga todos")).toBe(true);
+    expect(f("apague os tres primeiros")).toBe(true);
   });
   it("não sequestra pedidos sem número ou de outra intenção", () => {
-    expect(f("apagar todos")).toBe(false);
+    expect(f("apagar o email")).toBe(false);
     expect(f("responda o 1")).toBe(false);
     expect(f("mostre a agenda")).toBe(false);
   });
@@ -121,5 +125,36 @@ describe("parseBulkDelete", () => {
   it("respeita o teto de itens (max)", () => {
     const p = parseBulkDelete("1 2 3 4 5 6 7 8", 8, 3);
     expect(p.ns).toHaveLength(3);
+  });
+  it("intervalos: 'de 1 a 6', 'do 2 ao 4', '1-3', 'até'", () => {
+    expect(parseBulkDelete("apague os emails de 1 a 6", 8).ns).toEqual([1, 2, 3, 4, 5, 6]);
+    expect(parseBulkDelete("apague do 2 ao 4", 8).ns).toEqual([2, 3, 4]);
+    expect(parseBulkDelete("apagar 1-3", 8).ns).toEqual([1, 2, 3]);
+    expect(parseBulkDelete("apague de um até seis", 8).ns).toEqual([1, 2, 3, 4, 5, 6]);
+    expect(parseBulkDelete("apague de 4 a 2", 8).ns).toEqual([2, 3, 4]);
+  });
+  it("intervalo misturado com números soltos, sem duplicar", () => {
+    expect(parseBulkDelete("apague 1 a 3 e também o 5 e o 2", 8).ns).toEqual([1, 2, 3, 5]);
+  });
+  it("intervalo que passa do fim da lista reporta o excedente", () => {
+    const p = parseBulkDelete("apague de 4 a 8", 6);
+    expect(p.ns).toEqual([4, 5, 6]);
+    expect(p.outOfRange).toEqual([7, 8]);
+  });
+  it("todos, e todos menos alguns", () => {
+    expect(parseBulkDelete("apague todos", 4).ns).toEqual([1, 2, 3, 4]);
+    expect(parseBulkDelete("apague todos menos o 3", 5).ns).toEqual([1, 2, 4, 5]);
+    expect(parseBulkDelete("apague todos exceto 2 e 4", 5).ns).toEqual([1, 3, 5]);
+    expect(parseBulkDelete("apague tudo, tirando do 1 ao 2", 4).ns).toEqual([3, 4]);
+  });
+  it("os N primeiros", () => {
+    expect(parseBulkDelete("apague os 3 primeiros", 6).ns).toEqual([1, 2, 3]);
+    expect(parseBulkDelete("apague os dois primeiros", 6).ns).toEqual([1, 2]);
+  });
+  it("números por extenso soltos", () => {
+    expect(parseBulkDelete("apague o dois e o cinco", 6).ns).toEqual([2, 5]);
+  });
+  it("exceção sem nada para apagar não escolhe nada", () => {
+    expect(parseBulkDelete("menos o 3", 6).ns).toEqual([]);
   });
 });

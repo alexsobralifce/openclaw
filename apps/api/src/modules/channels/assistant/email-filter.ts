@@ -1,5 +1,6 @@
 // Classificação de e-mails recebidos (lógica pura). Não apaga nem move nada no Gmail: só decide o que mostrar.
 import { isMutedSender, MutePrefs } from "./email-mute";
+import { normalize } from "./voice";
 
 /**
  * person: parece escrito por uma pessoa (mostrado em destaque)
@@ -161,23 +162,55 @@ export interface BulkDeletePlan {
   outOfRange: number[];
 }
 
+const NUM_WORD: Record<string, number> = { um: 1, uma: 1, dois: 2, duas: 2, tres: 3, quatro: 4, cinco: 5, seis: 6, sete: 7, oito: 8, nove: 9, dez: 10 };
+const NUM = "\\d{1,3}|um|uma|dois|duas|tres|quatro|cinco|seis|sete|oito|nove|dez";
+const MAX_RANGE = 200;
+const EXCEPT = /\b(menos|exceto|except\w*|tirando|tirar|fora|sem)\b/;
+
+const toNum = (w: string) => (/^\d/.test(w) ? Number(w) : NUM_WORD[w]);
+
 /**
- * O texto parece um pedido de apagar vários e-mails da lista? ("apagar emails 1,2,3,4,5,6", "apaga o 1, 2 e 3").
- * `flat` = texto já normalizado (minúsculas, sem acentos nem pontuação).
+ * O texto parece um pedido de apagar vários e-mails da lista? ("apagar emails 1,2,3,4,5,6", "apague de 1 a 6",
+ * "apaga todos", "apague os 3 primeiros"). `flat` = texto já normalizado (minúsculas, sem acentos nem pontuação).
  */
 export function looksLikeBulkDelete(flat: string): boolean {
   const verb = /\b(apag\w*|exclu\w*|delet\w*|remov\w*|jog\w+\s+(no|pro|para o)\s+lixo|mand\w+\s+(pro|para o)\s+lixo)\b/.test(flat);
-  return verb && /\d/.test(flat);
+  if (!verb) return false;
+  return /\d/.test(flat) || /\b(todos|todas|tudo)\b/.test(flat) || new RegExp(`\\b(${NUM})\\s+(a|ate|ao)\\s+(${NUM})\\b|\\bprimeir\\w+`).test(flat);
 }
 
-/** Extrai a lista de números citados no texto, valida contra `count` e aplica um teto de itens. */
+/** Lê um trecho do texto e devolve os números citados, na ordem: "1 a 6", "1-6", "2 e 5", "os 3 primeiros", "todos". */
+function scanNumbers(seg: string, count: number): number[] {
+  const out: number[] = [];
+  const re = new RegExp(
+    `\\b(${NUM})\\s+primeir\\w+|\\bprimeir\\w+\\s+(${NUM})\\b|\\b(${NUM})\\s*(?:-|a|ate|ao)\\s*(?:o\\s+|a\\s+)?(${NUM})\\b|\\b(todos|todas|tudo)\\b|\\b(\\d{1,3}|dois|duas|tres|quatro|cinco|seis|sete|oito|nove|dez)\\b`,
+    "g",
+  );
+  for (const m of seg.matchAll(re)) {
+    if (m[1] || m[2]) for (let n = 1; n <= Math.min(toNum(m[1] ?? m[2]), MAX_RANGE); n++) out.push(n);
+    else if (m[3] && m[4]) {
+      const [a, b] = [toNum(m[3]), toNum(m[4])];
+      for (let n = Math.min(a, b); n <= Math.min(Math.max(a, b), Math.min(a, b) + MAX_RANGE); n++) out.push(n);
+    } else if (m[5]) for (let n = 1; n <= count; n++) out.push(n);
+    else if (m[6]) out.push(toNum(m[6]));
+  }
+  return out;
+}
+
+/**
+ * Extrai os e-mails citados: números soltos, intervalos ("de 1 a 6"), "todos", "os 3 primeiros" e exceções
+ * ("todos menos o 3"). Valida contra `count` e aplica um teto de itens.
+ */
 export function parseBulkDelete(text: string, count: number, max = 10): BulkDeletePlan {
+  const flat = normalize(text).replace(/(\d)\s*-\s*(\d)/g, "$1 a $2");
+  const cut = flat.search(EXCEPT);
+  const head = cut < 0 ? flat : flat.slice(0, cut);
+  const except = new Set(cut < 0 ? [] : scanNumbers(flat.slice(cut), count));
   const seen = new Set<number>();
   const ns: number[] = [];
   const outOfRange: number[] = [];
-  for (const raw of text.match(/\d{1,3}/g) ?? []) {
-    const n = Number(raw);
-    if (seen.has(n)) continue;
+  for (const n of scanNumbers(head, count)) {
+    if (seen.has(n) || except.has(n)) continue;
     seen.add(n);
     if (n < 1 || n > count) outOfRange.push(n);
     else if (ns.length < max) ns.push(n);
