@@ -522,6 +522,10 @@ export class AssistantService {
     if (mode === "hint") {
       answer = "📷 Recebi o arquivo. O que faço com ele?\n📝 *Criar nota:* abra *Notas* e envie de novo (ou escreva _nota_ na legenda).\n🗓️ *Ler compromissos:* abra a *agenda* → *Criar eventos* e envie de novo (ou escreva _adicionar na agenda_ na legenda).";
     } else {
+      // Ler o arquivo leva alguns segundos: avisa já que o cadastro da nota está em andamento (se o aviso falhar, segue mesmo assim)
+      if (mode === "note") {
+        await this.sendToUser(c, instanceName, "📝 Recebi o arquivo! Já estou lendo e criando a nota. Em breve confirmo o cadastro por aqui.").catch((e) => this.logger.warn(`Aviso de recebimento falhou: ${e.message}`));
+      }
       try {
         const m = await this.evolution.getMediaBase64(instanceName, key);
         if (m.base64.length * 0.75 > MAX_MEDIA_BYTES) answer = "📎 Esse arquivo é grande demais para eu ler (limite de 15 MB). Mande um arquivo menor.";
@@ -531,7 +535,7 @@ export class AssistantService {
         }
       } catch (err: any) {
         this.logger.error(`Leitura de arquivo para a agenda falhou: ${err.message}`);
-        answer = "😕 Não consegui baixar ou ler o arquivo. Tente de novo, ou cole o texto dos compromissos.";
+        answer = mode === "note" ? "😕 Não consegui baixar ou ler o arquivo, então a nota *não* foi criada. Tente enviar de novo." : "😕 Não consegui baixar ou ler o arquivo. Tente de novo, ou cole o texto dos compromissos.";
       }
     }
     await this.sendToUser(c, instanceName, answer);
