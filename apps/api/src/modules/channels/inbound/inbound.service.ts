@@ -56,6 +56,8 @@ export class InboundService implements OnModuleInit, OnModuleDestroy {
     if (body?.event !== "messages.upsert") return false;
     const id: string | undefined = body?.data?.key?.id;
     if (!id) return false;
+    // O arquivo em base64 (se a Evolution mandar) não fica na fila: o assistente baixa a mídia na hora de ler
+    if (body.data?.message && "base64" in body.data.message) delete body.data.message.base64;
     const res = await prisma.inboundEvent.createMany({
       data: [{ instance, externalId: id, payload: body as Prisma.InputJsonValue }],
       skipDuplicates: true,

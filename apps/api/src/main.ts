@@ -1,3 +1,4 @@
+import { json } from "express";
 import { NestFactory } from "@nestjs/core";
 import type { NestExpressApplication } from "@nestjs/platform-express";
 import helmet from "helmet";
@@ -14,6 +15,9 @@ function assertProductionConfig() {
 async function bootstrap() {
   assertProductionConfig();
   const app = await NestFactory.create<NestExpressApplication>(AppModule, { rawBody: true }); // rawBody: a assinatura do webhook do Instagram é do corpo cru
+
+  // Webhook do WhatsApp com arquivo (PDF, foto) passa de 100 KB: limite maior só nessa rota, o resto segue com o padrão
+  app.use("/api/v1/webhooks/whatsapp", json({ limit: "25mb" }));
 
   // Atrás do proxy do Railway: confia só no último salto para que req.ip seja o IP real do cliente
   app.set("trust proxy", 1);
