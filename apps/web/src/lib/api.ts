@@ -40,6 +40,12 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   return res.json();
 }
 
+export interface NoteTopic {
+  id: string;
+  name: string;
+  notes: { id: string; name: string; modified?: string }[];
+}
+
 export const api = {
   auth: {
     login: (email: string, password: string) =>
@@ -59,6 +65,10 @@ export const api = {
   },
   assistant: {
     menu: () => request<{ items: MenuItem[] }>("/assistant/menu"),
+    notes: () => request<{ account: string; topics: NoteTopic[] }>("/assistant/notes"),
+    note: (id: string) => request<{ name: string; topic: string; content: string; link?: string }>(`/assistant/notes/${encodeURIComponent(id)}`),
+    createNote: (data: { topic: string; title?: string; content: string }) =>
+      request<{ assunto: string; nome: string }>("/assistant/notes", { method: "POST", body: JSON.stringify(data) }),
     setMenu: (hidden: string[]) => request<{ items: MenuItem[] }>("/assistant/menu", { method: "PUT", body: JSON.stringify({ hidden }) }),
   },
   users: {

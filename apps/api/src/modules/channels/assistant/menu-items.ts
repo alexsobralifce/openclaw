@@ -16,6 +16,7 @@ export const MENU_ITEMS: MenuItemDef[] = [
   { id: "memory", icon: "🧠", label: "Minha memória" },
   { id: "car", icon: "🚗", label: "Modo carro" },
   { id: "drive", icon: "📁", label: "Google Drive" },
+  { id: "notes", icon: "📝", label: "Notas" },
   { id: "contacts", icon: "📇", label: "Contatos" },
   { id: "routine", icon: "🗓️", label: "Minha rotina" },
   { id: "vault", icon: "🔐", label: "Cofre de senhas" },

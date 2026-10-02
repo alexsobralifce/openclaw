@@ -515,12 +515,15 @@ export class AssistantService {
     if (mode === "no") return;
     let answer: string;
     if (mode === "hint") {
-      answer = "📷 Recebi o arquivo. Para eu ler compromissos dele, abra a *agenda* → *Criar eventos* e envie de novo (ou escreva _adicionar na agenda_ na legenda).";
+      answer = "📷 Recebi o arquivo. O que faço com ele?\n📝 *Criar nota:* abra *Notas* e envie de novo (ou escreva _nota_ na legenda).\n🗓️ *Ler compromissos:* abra a *agenda* → *Criar eventos* e envie de novo (ou escreva _adicionar na agenda_ na legenda).";
     } else {
       try {
         const m = await this.evolution.getMediaBase64(instanceName, key);
-        if (m.base64.length * 0.75 > MAX_MEDIA_BYTES) answer = "📎 Esse arquivo é grande demais para eu ler (limite de 15 MB). Mande um print menor.";
-        else answer = await this.menu.agendaIngest(workspaceId, { text: media.caption || undefined, media: [{ mime: m.mimetype || media.mime, base64: m.base64 }] });
+        if (m.base64.length * 0.75 > MAX_MEDIA_BYTES) answer = "📎 Esse arquivo é grande demais para eu ler (limite de 15 MB). Mande um arquivo menor.";
+        else {
+          const src = { text: media.caption || undefined, media: [{ mime: m.mimetype || media.mime, base64: m.base64 }] };
+          answer = mode === "note" ? await this.menu.noteIngest(workspaceId, src) : await this.menu.agendaIngest(workspaceId, src);
+        }
       } catch (err: any) {
         this.logger.error(`Leitura de arquivo para a agenda falhou: ${err.message}`);
         answer = "😕 Não consegui baixar ou ler o arquivo. Tente de novo, ou cole o texto dos compromissos.";

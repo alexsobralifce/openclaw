@@ -5,7 +5,7 @@ import { nextDay } from "../../channels/assistant/agenda-events";
 import { DriveKind, KIND_Q, wordVariants } from "../../channels/assistant/drive";
 import { buildBook, parseAddresses, SeenAddress } from "../../channels/assistant/email-book";
 import { CONTACTS_FOLDER, Contact, EMAIL_BOOK_FOLDER, fileOfLetter, findContacts, fromPerson, groupByLetter, parseLetterFile, renderLetterFile } from "../../channels/assistant/contacts";
-import { appendEntry, dailyFileName, dayStamp, formatEntry, NOTES_FOLDER, snippets, storageAccount } from "../../channels/assistant/notes";
+import { appendEntry, dailyFileName, dayStamp, formatEntry, NoteDraft, noteFileName, NOTES_FOLDER, renderNote, snippets, storageAccount, TOPICS_FOLDER } from "../../channels/assistant/notes";
 
 const SCOPES = [
   "https://www.googleapis.com/auth/gmail.modify",
@@ -25,6 +25,17 @@ const FOLDER_MIME = "application/vnd.google-apps.folder";
 const CONTACTS_TZ = process.env.ASSISTANT_TZ || "America/Fortaleza";
 /** Quanto tempo a lista de contatos lida do Drive fica em memória (as consultas seguidas não baixam tudo de novo). */
 const CONTACTS_CACHE_MS = 5 * 60_000;
+export interface NoteTopic {
+  id: string;
+  name: string;
+}
+export interface NoteFile {
+  id: string;
+  name: string;
+  modified?: string;
+  link?: string;
+}
+
 export interface NoteHit {
   id: string;
   nome: string;
@@ -482,6 +493,79 @@ export class GoogleService implements OnModuleInit {
       return hits.filter((h): h is NoteHit => !!h);
     } catch (e) {
       throw this.driveError(e);
+    }
+  }
+
+  // ─── Notas por assunto: Assist.IA/Notas/<Assunto>/<AAAA-MM-DD título>.md ───
+
+  /** Pasta "Notas" da conta; sem `create`, devolve undefined quando ainda não existe (consultar não cria nada). */
+  private async topicsRoot(workspaceId: string, account: string | undefined, create: boolean): Promise<string | undefined> {
+    if (create) return this.driveEnsureFolder(workspaceId, account, TOPICS_FOLDER, await this.noteFolder(workspaceId, account));
+    const root = await this.driveFirst(workspaceId, account, `name='${NOTES_FOLDER}' and mimeType='${FOLDER_MIME}' and trashed=false`);
+    return root && (await this.driveFirst(workspaceId, account, `name='${TOPICS_FOLDER}' and mimeType='${FOLDER_MIME}' and '${root}' in parents and trashed=false`));
+  }
+
+  /** Cria a nota na pasta do assunto (criada se preciso). Nome repetido no mesmo dia ganha " (2)", nunca sobrescreve. */
+  noteCreate(workspaceId: string, draft: NoteDraft, timeZone: string, account?: string, origin = "whatsapp", at = new Date()): Promise<{ assunto: string; nome: string }> {
+    return this.serial(`${workspaceId}:${account ?? ""}`, async () => {
+      try {
+        const root = await this.topicsRoot(workspaceId, account, true);
+        const folder = await this.driveEnsureFolder(workspaceId, account, draft.topic, root!);
+        const existing = await this.driveFilesIn(workspaceId, account, folder);
+        const day = dayStamp(at, timeZone);
+        let nome = noteFileName(day, draft.title);
+        for (let i = 2; existing.has(nome); i++) nome = noteFileName(day, `${draft.title} (${i})`);
+        await this.driveWrite(workspaceId, account, folder, nome, renderNote(draft, day, origin));
+        return { assunto: draft.topic, nome };
+      } catch (e) {
+        this.noteFolders.delete(`${workspaceId}:${account ?? ""}`);
+        throw this.noteError(e);
+      }
+    });
+  }
+
+  /** Assuntos (subpastas de Notas), em ordem alfabética. */
+  async noteTopics(workspaceId: string, account?: string): Promise<NoteTopic[]> {
+    try {
+      const root = await this.topicsRoot(workspaceId, account, false);
+      if (!root) return [];
+      const p = new URLSearchParams({ q: `'${root}' in parents and mimeType='${FOLDER_MIME}' and trashed=false`, pageSize: "100", orderBy: "name", fields: "files(id,name)", spaces: "drive" });
+      const r = await this.g<any>(workspaceId, account, `https://www.googleapis.com/drive/v3/files?${p}`);
+      return (r.files ?? []).map((f: any) => ({ id: String(f.id), name: String(f.name) }));
+    } catch (e) {
+      throw this.noteError(e);
+    }
+  }
+
+  /** Notas de um assunto, as mais novas primeiro (o nome começa pela data). */
+  async notesIn(workspaceId: string, topicId: string, account?: string): Promise<NoteFile[]> {
+    if (!/^[\w-]{8,100}$/.test(topicId)) throw new Error("Assunto inválido.");
+    try {
+      const root = await this.topicsRoot(workspaceId, account, false);
+      const meta = await this.g<any>(workspaceId, account, `https://www.googleapis.com/drive/v3/files/${encodeURIComponent(topicId)}?fields=parents,mimeType,trashed`);
+      if (!root || meta.trashed || meta.mimeType !== FOLDER_MIME || !(meta.parents ?? []).includes(root)) throw new Error("Esse assunto não está nas suas notas.");
+      const p = new URLSearchParams({ q: `'${topicId}' in parents and mimeType!='${FOLDER_MIME}' and trashed=false`, pageSize: "100", orderBy: "name desc", fields: "files(id,name,modifiedTime,webViewLink)", spaces: "drive" });
+      const r = await this.g<any>(workspaceId, account, `https://www.googleapis.com/drive/v3/files?${p}`);
+      return (r.files ?? []).map((f: any) => ({ id: String(f.id), name: String(f.name).replace(/\.md$/, ""), modified: f.modifiedTime, link: f.webViewLink }));
+    } catch (e) {
+      throw this.noteError(e);
+    }
+  }
+
+  /** Lê uma nota; só vale arquivo dentro de Notas/<assunto>/ (o id vem do cliente, não se confia nele). */
+  async noteRead(workspaceId: string, fileId: string, account?: string): Promise<{ name: string; topic: string; content: string; link?: string }> {
+    if (!/^[\w-]{8,100}$/.test(fileId)) throw new Error("Nota inválida.");
+    try {
+      const root = await this.topicsRoot(workspaceId, account, false);
+      const f = await this.g<any>(workspaceId, account, `https://www.googleapis.com/drive/v3/files/${encodeURIComponent(fileId)}?fields=name,size,parents,trashed,webViewLink,mimeType`);
+      const parent = f.parents?.[0];
+      const up = parent ? await this.g<any>(workspaceId, account, `https://www.googleapis.com/drive/v3/files/${encodeURIComponent(parent)}?fields=name,parents`) : null;
+      if (!root || f.trashed || f.mimeType === FOLDER_MIME || !up?.parents?.includes(root)) throw new Error("Essa nota não está nas suas notas.");
+      if (Number(f.size ?? 0) > NOTE_MAX_BYTES) throw new Error("A nota é grande demais para abrir aqui; abra o arquivo no Drive.");
+      const bytes = await this.gBytes(workspaceId, account, `https://www.googleapis.com/drive/v3/files/${encodeURIComponent(fileId)}?alt=media`);
+      return { name: String(f.name).replace(/\.md$/, ""), topic: String(up.name), content: bytes.toString("utf8"), link: f.webViewLink };
+    } catch (e) {
+      throw this.noteError(e);
     }
   }
 

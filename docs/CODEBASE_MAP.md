@@ -241,6 +241,11 @@ Webhook → `InboundEvent` → worker → `InboxService.processIncoming` → `We
 35. "Enviar e-mail" abre um passo a passo (conta → para → assunto → texto → rascunho → 1 Enviar). Nada sai antes da tela de confirmação. O destinatário aceita endereços ou o nome de um contato (usa `contactsLookup`, exige o serviço `drive`). `composeSeed` só captura o comando sozinho ou com `para <endereço>` / `assunto:`; qualquer texto a mais ("mandar e-mail pro Marcos dizendo...") é pedido livre e vai para a IA (`gmail_send`, também com confirmação). O corpo é redigido pela IA a partir da instrução, ou enviado como está com `texto:`.
 36. As telas `compose_*` seguem a convenção de sufixos do `pending` (`_input`, `_account`, `_confirm`, `_draft`) para os comandos globais não dispararem no meio; `email_account` trata o comando por conta própria porque já conta como pendente. O assunto vai codificado em base64 no cabeçalho e o `Para` só recebe endereços validados por regex (sem quebra de linha), então não há injeção de `Bcc:`.
 
+**Notas por assunto** (`assistant/notes.ts`, `google.service.ts`, tela `notes_*`, `apps/web/.../dashboard/notes`)
+37. Layout no Drive: `Assist.IA/Notas/<Assunto>/<AAAA-MM-DD título>.md` (a nota do dia continua em `Assist.IA/AAAA-MM-DD.md`). `noteCreate` nunca sobrescreve (repetido vira `(2)`); `noteTopics`/`notesIn`/`noteRead` só leem dentro de `Notas` (o id vem do cliente e é validado pela ancestralidade das pastas).
+38. PDF/foto vira nota em `MenuService.noteIngest` (Gemini; o conteúdo é só dado, a IA reaproveita os assuntos existentes e usa o da legenda). `agendaMediaIntent` decide: tela `notes_*` ou legenda com "nota" → nota; `event_input`/"agenda" → eventos; senão só orienta. Texto: `nota sobre X: ...` (precisa de `:` ou `-`, para não colidir com a busca).
+39. Rotas do painel (`@Access("drive")`): `GET/POST /assistant/notes`, `GET /assistant/notes/:id`. O menu agora tem 12 itens (`KEYS` só tem emoji até 10; depois cai em `11.`).
+
 ## Guia de navegação
 
 | Tarefa | Arquivos |
@@ -250,6 +255,7 @@ Webhook → `InboundEvent` → worker → `InboxService.processIncoming` → `We
 | Mudar contatos (importar/consultar) | `assistant/contacts.ts` (puro), `google.service.ts` (`contactsImport`/`contactsLookup`/`importContactsOnce`), bloco "Contatos" em `MenuService.respond`, tool `contact_search`; specs `contacts*.spec.ts`, `google-contacts.spec.ts`; ver gotchas 29 a 32 |
 | Mudar o passo a passo de enviar e-mail | `assistant/email-compose.ts` (puro) e as telas `compose_*` / `compose*` em `MenuService`; spec `email-compose*.spec.ts`; ver gotchas 35 e 36 |
 | Mudar busca de e-mails / catálogo de endereços | `assistant/email-search.ts` e `email-book.ts` (puros), `google.service.ts` (`emailBookImport`, `gmailHeaders`, `loadBook`), `MenuService.emailSearchView` / `emailBookRefresh`; specs `email-search*.spec.ts`, `google-contacts.spec.ts`; ver gotchas 33 e 34 |
+| Mudar notas por assunto / PDF → nota | `assistant/notes.ts` (puro), `google.service.ts` (`noteCreate`/`noteTopics`/`notesIn`/`noteRead`), telas `notes_*` e `noteIngest` em `MenuService`, `assistant-settings.controller.ts`, página `dashboard/notes`; spec `notes-topics.spec.ts` |
 | Mudar notas (anotar/buscar) | `assistant/notes.ts` (puro), `google.service.ts` (`noteAppend`/`noteSearch`), bloco "Notas" em `MenuService.respond`, tools `note_*` em `assistant.service.ts`; specs `notes*.spec.ts`; ver gotchas 25 a 28 |
 | Nova intenção do Jev | `assistant/intent.service.ts` (tipo `Intent`), gatilho em `MenuService.respond`, `test/intent.spec.ts` |
 | Nova tool da IA livre | `assistant/assistant.service.ts` (`TOOLS`, `runTool`, `toolAllowed`); se sensível, entra em `SENSITIVE` |
