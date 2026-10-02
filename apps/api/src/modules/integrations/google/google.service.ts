@@ -3,6 +3,7 @@ import { prisma } from "@openclaw/database";
 import { isSealed, openToken, sealToken } from "../../webhooks/crypto";
 import { nextDay } from "../../channels/assistant/agenda-events";
 import { DriveKind, KIND_Q, wordVariants } from "../../channels/assistant/drive";
+import { CONTACTS_FOLDER, Contact, fileOfLetter, findContacts, fromPerson, groupByLetter, parseLetterFile, renderLetterFile } from "../../channels/assistant/contacts";
 import { appendEntry, dailyFileName, dayStamp, formatEntry, NOTES_FOLDER, snippets } from "../../channels/assistant/notes";
 
 const SCOPES = [
@@ -11,6 +12,8 @@ const SCOPES = [
   // Lê qualquer arquivo (buscar e baixar), mas só grava nos arquivos que ele mesmo criou (notas em Assist.IA/); nunca apaga
   "https://www.googleapis.com/auth/drive.readonly",
   "https://www.googleapis.com/auth/drive.file",
+  // Só leitura dos contatos: viram arquivos Markdown por letra em Assist.IA/Contatos (importados na primeira conexão)
+  "https://www.googleapis.com/auth/contacts.readonly",
   "openid",
   "email",
 ];
@@ -18,6 +21,9 @@ const SCOPES = [
 /** Nota maior que isto não é lida inteira (busca) nem recebe mais linhas. */
 const NOTE_MAX_BYTES = 1024 * 1024;
 const FOLDER_MIME = "application/vnd.google-apps.folder";
+const CONTACTS_TZ = process.env.ASSISTANT_TZ || "America/Fortaleza";
+/** Quanto tempo a lista de contatos lida do Drive fica em memória (as consultas seguidas não baixam tudo de novo). */
+const CONTACTS_CACHE_MS = 5 * 60_000;
 export interface NoteHit {
   id: string;
   nome: string;
@@ -53,6 +59,8 @@ export class GoogleService implements OnModuleInit {
   private noteFolders = new Map<string, string>();
   /** Fila por conta: ler-acrescentar-gravar duas notas ao mesmo tempo perderia uma delas. */
   private noteLocks = new Map<string, Promise<unknown>>();
+  /** Contatos lidos do Drive por conta (consulta rápida). */
+  private contactCache = new Map<string, { at: number; contacts: Contact[] }>();
 
   /** Cifra os refresh tokens que ainda estão em texto puro (contas conectadas antes da cifragem). */
   async onModuleInit() {
@@ -119,7 +127,8 @@ export class GoogleService implements OnModuleInit {
     const email: string = info.email ?? "google";
 
     const existing = await this.findChannel(workspaceId, email);
-    const config = { provider: "google", email, refreshToken: sealToken(t.refresh_token) };
+    // Mantém o que já estava no canal (ex.: contactsSyncedAt) ao reconectar
+    const config = { ...((existing?.config as object | undefined) ?? {}), provider: "google", email, refreshToken: sealToken(t.refresh_token) };
     if (existing) {
       await prisma.channel.update({ where: { id: existing.id }, data: { name: `Google (${email})`, config } });
     } else {
@@ -128,6 +137,8 @@ export class GoogleService implements OnModuleInit {
       });
     }
     if (existing) this.tokenCache.delete(existing.id);
+    // Primeira vez com contatos: importa em segundo plano, sem segurar a volta do OAuth
+    void this.importContactsOnce(workspaceId, email);
     return email;
   }
 
@@ -468,6 +479,139 @@ export class GoogleService implements OnModuleInit {
         }),
       );
       return hits.filter((h): h is NoteHit => !!h);
+    } catch (e) {
+      throw this.driveError(e);
+    }
+  }
+
+  // ─── Contatos do Google → Markdown por letra no Drive ─────────
+
+  /** Erros da People API em português claro, com o endereço para ativar a API no Google Cloud. */
+  private peopleError(e: any): Error {
+    const m = String(e?.message ?? e);
+    if (/SERVICE_DISABLED|accessNotConfigured|has not been used in project|API has not been used/i.test(m)) {
+      const url = m.match(/https:\/\/console\.(?:developers|cloud)\.google\.com\/[^\s"'\\)]+/)?.[0] ?? "https://console.cloud.google.com/apis/library/people.googleapis.com";
+      return new Error(`A API de Contatos (People API) está desativada no projeto do Google Cloud. Ative em: ${url}`);
+    }
+    if (/ACCESS_TOKEN_SCOPE_INSUFFICIENT|insufficientPermissions|insufficient authentication scopes/i.test(m)) {
+      return new Error("Esta conta ainda não liberou os contatos. Reconecte o Google em Canais → Conectar Google.");
+    }
+    return this.noteError(e);
+  }
+
+  /** Todos os contatos salvos da conta (nome, telefones, e-mails, empresa), até ~25 mil. */
+  private async contactsFetch(workspaceId: string, account: string | undefined): Promise<Contact[]> {
+    const out: Contact[] = [];
+    let pageToken = "";
+    for (let page = 0; page < 25; page++) {
+      const p = new URLSearchParams({ personFields: "names,emailAddresses,phoneNumbers,organizations", pageSize: "1000", sortOrder: "LAST_MODIFIED_DESCENDING" });
+      if (pageToken) p.set("pageToken", pageToken);
+      const r = await this.g<any>(workspaceId, account, `https://people.googleapis.com/v1/people/me/connections?${p}`);
+      for (const person of r.connections ?? []) {
+        const c = fromPerson(person);
+        if (c) out.push(c);
+      }
+      pageToken = r.nextPageToken ?? "";
+      if (!pageToken) break;
+    }
+    return out;
+  }
+
+  /** Acha (ou cria) uma subpasta dentro de `parent`. */
+  private async driveEnsureFolder(workspaceId: string, account: string | undefined, name: string, parent: string): Promise<string> {
+    const esc = name.replace(/'/g, "\\'");
+    const found = await this.driveFirst(workspaceId, account, `name='${esc}' and mimeType='${FOLDER_MIME}' and '${parent}' in parents and trashed=false`);
+    if (found) return found;
+    const created = await this.g<any>(workspaceId, account, "https://www.googleapis.com/drive/v3/files?fields=id", {
+      method: "POST",
+      body: JSON.stringify({ name, mimeType: FOLDER_MIME, parents: [parent] }),
+    });
+    return created.id as string;
+  }
+
+  /** Arquivos de uma pasta (nome → id). */
+  private async driveFilesIn(workspaceId: string, account: string | undefined, folder: string): Promise<Map<string, string>> {
+    const out = new Map<string, string>();
+    const p = new URLSearchParams({ q: `'${folder}' in parents and mimeType!='${FOLDER_MIME}' and trashed=false`, pageSize: "100", fields: "files(id,name)", spaces: "drive" });
+    const r = await this.g<any>(workspaceId, account, `https://www.googleapis.com/drive/v3/files?${p}`);
+    for (const f of r.files ?? []) out.set(String(f.name), String(f.id));
+    return out;
+  }
+
+  /** Grava `content` no arquivo (atualiza se já existe, cria se não). */
+  private async driveWrite(workspaceId: string, account: string | undefined, folder: string, name: string, content: string, id?: string): Promise<void> {
+    if (id) return this.driveUpload(workspaceId, account, "PATCH", `https://www.googleapis.com/upload/drive/v3/files/${id}?uploadType=media`, content);
+    await this.driveUpload(workspaceId, account, "POST", "https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id", content, { name, parents: [folder], mimeType: "text/markdown" });
+  }
+
+  /**
+   * Importa os contatos da conta para Assist.IA/Contatos/<letra>.md (um arquivo por letra, reescrito por inteiro: rodar de novo
+   * não duplica nada). Letras que ficaram sem contatos viram um arquivo vazio, para não sobrar gente que foi apagada.
+   */
+  contactsImport(workspaceId: string, account?: string, at = new Date()): Promise<{ total: number; arquivos: number }> {
+    return this.serial(`contacts:${workspaceId}:${account ?? ""}`, async () => {
+      try {
+        const people = await this.contactsFetch(workspaceId, account);
+        const grouped = groupByLetter(people);
+        const root = await this.noteFolder(workspaceId, account);
+        const folder = await this.driveEnsureFolder(workspaceId, account, CONTACTS_FOLDER, root);
+        const existing = await this.driveFilesIn(workspaceId, account, folder);
+        const day = dayStamp(at, CONTACTS_TZ);
+        const jobs: { name: string; content: string }[] = [...grouped].map(([letter, cs]) => ({ name: fileOfLetter(letter), content: renderLetterFile(letter, cs, day) }));
+        const written = new Set(jobs.map((j) => j.name));
+        for (const name of existing.keys()) {
+          const letter = name === fileOfLetter("#") ? "#" : name.match(/^([A-Z])\.md$/)?.[1];
+          if (letter && !written.has(name)) jobs.push({ name, content: renderLetterFile(letter, [], day) });
+        }
+        // Poucos de cada vez, para não estourar o limite de requisições do Drive
+        for (let i = 0; i < jobs.length; i += 4) {
+          await Promise.all(jobs.slice(i, i + 4).map((j) => this.driveWrite(workspaceId, account, folder, j.name, j.content, existing.get(j.name))));
+        }
+        this.contactCache.delete(`${workspaceId}:${account ?? ""}`);
+        await this.markContactsSynced(workspaceId, account, at);
+        return { total: people.length, arquivos: grouped.size };
+      } catch (e) {
+        throw this.peopleError(e);
+      }
+    });
+  }
+
+  private async markContactsSynced(workspaceId: string, account: string | undefined, at: Date) {
+    const ch = await this.findChannel(workspaceId, account);
+    if (ch) await prisma.channel.update({ where: { id: ch.id }, data: { config: { ...(ch.config as object), contactsSyncedAt: at.toISOString() } } });
+  }
+
+  /** Primeira conexão da conta: importa os contatos uma vez. Falhar não atrapalha a conexão; o comando "atualizar contatos" refaz. */
+  async importContactsOnce(workspaceId: string, account: string): Promise<void> {
+    try {
+      const ch = await this.findChannel(workspaceId, account);
+      if (!ch || (ch.config as any)?.contactsSyncedAt) return;
+      const r = await this.contactsImport(workspaceId, account);
+      this.logger.log(`Contatos importados para o Drive: ${r.total} em ${r.arquivos} arquivo(s)`);
+    } catch (e: any) {
+      this.logger.warn(`Importar contatos na conexão falhou: ${e.message}`);
+    }
+  }
+
+  /** Contatos que casam com o nome, lidos dos arquivos do Drive. Devolve null se a conta ainda não importou contatos. */
+  async contactsLookup(workspaceId: string, query: string, account?: string, max = 5): Promise<Contact[] | null> {
+    const key = `${workspaceId}:${account ?? ""}`;
+    const hit = this.contactCache.get(key);
+    if (hit && Date.now() - hit.at < CONTACTS_CACHE_MS) return findContacts(hit.contacts, query, max);
+    try {
+      const root = await this.driveFirst(workspaceId, account, `name='${NOTES_FOLDER}' and mimeType='${FOLDER_MIME}' and trashed=false`);
+      const folder = root && (await this.driveFirst(workspaceId, account, `name='${CONTACTS_FOLDER}' and mimeType='${FOLDER_MIME}' and '${root}' in parents and trashed=false`));
+      if (!folder) return null;
+      const files = [...(await this.driveFilesIn(workspaceId, account, folder))].filter(([n]) => /^([A-Z]|Outros)\.md$/.test(n));
+      const contacts: Contact[] = [];
+      for (let i = 0; i < files.length; i += 6) {
+        const parts = await Promise.all(
+          files.slice(i, i + 6).map(async ([, id]) => parseLetterFile((await this.gBytes(workspaceId, account, `https://www.googleapis.com/drive/v3/files/${id}?alt=media`)).toString("utf8"))),
+        );
+        parts.forEach((p) => contacts.push(...p));
+      }
+      this.contactCache.set(key, { at: Date.now(), contacts });
+      return findContacts(contacts, query, max);
     } catch (e) {
       throw this.driveError(e);
     }

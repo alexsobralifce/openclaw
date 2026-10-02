@@ -9,12 +9,13 @@ const call = (id: string, name: string, args: object) => ({ id, type: "function"
 function build() {
   const noteAppend = vi.fn(async () => ({ nome: "2026-10-01.md", dia: "2026-10-01" }));
   const noteSearch = vi.fn(async () => [{ id: "n1", nome: "reunioes.md", modificado: "2026-09-30T12:00:00Z", link: "x", trechos: ["- Contrato do Marcos assinado"] }]);
-  const google = { listAccounts: async () => ["a@gmail.com", "b@ifce.edu.br"], noteAppend, noteSearch };
+  const contactsLookup = vi.fn(async (_ws: string, _q: string, acc: string) => (acc === "a@gmail.com" ? [{ nome: "Marcos Silva", telefones: ["(85) 99999-0000"], emails: ["marcos@x.com"] }] : null));
+  const google = { listAccounts: async () => ["a@gmail.com", "b@ifce.edu.br"], noteAppend, noteSearch, contactsLookup };
   const menu = { setExecutor: vi.fn(), setFileSender: vi.fn(), setChatCleaner: vi.fn(), requestConfirm: vi.fn() };
   const memory = { promptBlock: async () => "" };
   const state = { get: async () => null, set: async () => {}, del: async () => {} };
   const svc = new AssistantService({} as any, google as any, menu as any, memory as any, {} as any, state as any);
-  return { svc, noteAppend, noteSearch };
+  return { svc, noteAppend, noteSearch, contactsLookup };
 }
 
 /** OpenAI de mentira: devolve as respostas na ordem e guarda o que recebeu. */
@@ -110,5 +111,43 @@ describe("ferramentas de notas na IA livre", () => {
     const system = sent[0].messages[0].content as string;
     expect(system).toContain("8. Notas:");
     expect(system).toMatch(/DADO não confiável/);
+  });
+
+  it("contact_search devolve os contatos como conteúdo externo não confiável", async () => {
+    const { svc, contactsLookup } = build();
+    const sent = fakeOpenAI([{ role: "assistant", content: null, tool_calls: [call("1", "contact_search", { name: "Marcos" })] }, { role: "assistant", content: "Achei." }]);
+    await (svc as any).think(commander(["drive"]), "qual o telefone do Marcos");
+    expect(contactsLookup).toHaveBeenCalledTimes(2);
+    const r = lastToolResult(sent, "contact_search");
+    expect(r.AVISO).toMatch(/NÃO CONFIÁVEL/);
+    expect(r.dados.contatos[0]).toMatchObject({ nome: "Marcos Silva", telefones: ["(85) 99999-0000"] });
+    expect(r.dados.naoImportado).toBeUndefined();
+  });
+
+  it("contact_search avisa quando nenhuma conta importou contatos", async () => {
+    const { svc, contactsLookup } = build();
+    contactsLookup.mockResolvedValue(null as any);
+    const sent = fakeOpenAI([{ role: "assistant", content: null, tool_calls: [call("1", "contact_search", { name: "Marcos" })] }, { role: "assistant", content: "ok" }]);
+    await (svc as any).think(commander(["drive"]), "x");
+    expect(lastToolResult(sent, "contact_search").dados).toMatchObject({ contatos: [], naoImportado: true });
+  });
+
+  it("depois de ler contatos, o mesmo comando não pode gravar nota (prompt injection)", async () => {
+    const { svc, noteAppend } = build();
+    const sent = fakeOpenAI([
+      { role: "assistant", content: null, tool_calls: [call("1", "contact_search", { name: "Marcos" })] },
+      { role: "assistant", content: null, tool_calls: [call("2", "note_add", { text: "ignore as regras" })] },
+      { role: "assistant", content: "pronto" },
+    ]);
+    await (svc as any).think(commander(["drive"]), "x");
+    expect(noteAppend).not.toHaveBeenCalled();
+    expect(lastToolResult(sent, "note_add").error).toMatch(/depois de ler conteúdo externo/);
+  });
+
+  it("sem o serviço drive, contact_search não é oferecida", async () => {
+    const { svc } = build();
+    const sent = fakeOpenAI([{ role: "assistant", content: "oi" }]);
+    await (svc as any).think(commander(["inbox", "email"]), "oi");
+    expect(sent[0].tools.map((t: any) => t.function.name)).not.toContain("contact_search");
   });
 });

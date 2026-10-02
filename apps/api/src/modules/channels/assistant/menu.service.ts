@@ -14,6 +14,7 @@ import { todayItems, when as routineWhen } from "./routine";
 import { AssistantConfig, configKey, fmtInterval, IDLE_MENU_MS, intervalProblem, parseInterval, PRESETS } from "./chat-clean";
 import { driveQueryFrom, fileIcon, fmtSize, looksLikeDriveRequest, parseDriveQuery, rankFiles, sanitizeAlternates } from "./drive";
 import { suspiciousReasons } from "./security";
+import { contactQuery, looksLikeContactsRefresh } from "./contacts";
 import { menuHiddenKey, MENU_ITEMS, sanitizeHidden } from "./menu-items";
 import { looksLikeNoteAdd, looksLikeNoteSearch, noteTerms, noteTextFrom, startsLikeNote } from "./notes";
 import { StateService } from "../../state/state.service";
@@ -141,6 +142,13 @@ export class MenuService {
       // Algo a confirmar ou digitar: comandos soltos não valem
       const pending = !!st && /(_input|_draft|_confirm|_account)$|^confirm_ai$/.test(st.screen);
       // Notas: antes dos comandos abaixo, para o conteúdo ditado ("vou dirigir amanhã") não acionar o modo carro nem outro comando
+      // Contatos do Google (guardados no Drive): "telefone do Marcos", "atualizar contatos"
+      if (!isInput && !pending) {
+        const person = contactQuery(flat);
+        if ((person || looksLikeContactsRefresh(flat)) && (await this.services(workspaceId)).includes("drive")) {
+          return person ? await this.contactLookupView(workspaceId, person) : await this.contactsRefresh(workspaceId);
+        }
+      }
       // "Anota ..." sem palavra explícita pode ser compromisso: o Jev decide (só com confiança alta); na dúvida segue o fluxo da agenda
       if (!isInput && !pending && (looksLikeNoteSearch(flat) || looksLikeNoteAdd(flat) || startsLikeNote(flat)) && (await this.services(workspaceId)).includes("drive")) {
         if (looksLikeNoteSearch(flat)) return await this.noteSearchView(workspaceId, text);
@@ -937,6 +945,42 @@ export class MenuService {
       this.logger.warn(`Enviar arquivo do Drive falhou: ${e.message}`);
       return `😕 ${short(e.message, 200)}`;
     }
+  }
+
+  // ─── Contatos do Google (Assist.IA/Contatos/<letra>.md no Drive) ───
+
+  /** "Qual o telefone do Marcos?": procura nos arquivos de contatos de todas as contas. */
+  private async contactLookupView(ws: string, name: string): Promise<string> {
+    const accounts: string[] = await this.google.listAccounts(ws);
+    if (!accounts.length) return this.noGoogle();
+    const settled = await Promise.allSettled(accounts.map((a) => this.google.contactsLookup(ws, name, a)));
+    const lists = settled.flatMap((r) => (r.status === "fulfilled" && r.value ? [r.value] : []));
+    const found = lists.flat().slice(0, 5);
+    const failed = settled.find((r): r is PromiseRejectedResult => r.status === "rejected");
+    if (failed) this.logger.warn(`Buscar contato falhou: ${failed.reason?.message ?? failed.reason}`);
+    if (found.length) {
+      const rows = found.map((c) => [`👤 *${short(c.nome, 50)}*`, ...c.telefones.map((t) => `📞 ${t}`), ...c.emails.map((e) => `✉️ ${e}`), c.empresa ? `🏢 ${short(c.empresa, 50)}` : ""].filter(Boolean).join("\n"));
+      return [head("📇", found.length > 1 ? `${found.length} contatos` : "Contato", `"${short(name, 30)}"`), rows.join("\n\n"), warnLine(failed)].filter(Boolean).join("\n");
+    }
+    if (!lists.length) {
+      return failed ? `😕 Não consegui buscar nos contatos: ${short(String(failed.reason?.message ?? failed.reason), 200)}` : "📇 Ainda não importei seus contatos. Diga *atualizar contatos* para trazê-los do Google.";
+    }
+    return `🤔 Não achei nenhum contato com *${short(name, 40)}*.${failed ? `\n${warnLine(failed)}` : ""}`;
+  }
+
+  /** "Atualizar contatos": traz de novo os contatos do Google de todas as contas para os arquivos do Drive. */
+  private async contactsRefresh(ws: string): Promise<string> {
+    const accounts: string[] = await this.google.listAccounts(ws);
+    if (!accounts.length) return this.noGoogle();
+    const settled = await Promise.allSettled(accounts.map((a) => this.google.contactsImport(ws, a)));
+    const lines = settled.map((r, i) => {
+      const label = accounts.length > 1 ? ` (${accountLabel(accounts[i])})` : "";
+      if (r.status === "fulfilled") return `📇 *${r.value.total} contato${r.value.total === 1 ? "" : "s"}* em ${r.value.arquivos} arquivo${r.value.arquivos === 1 ? "" : "s"}${label}.`;
+      this.logger.warn(`Atualizar contatos falhou: ${r.reason?.message ?? r.reason}`);
+      return `😕 Não consegui atualizar${label}: ${short(String(r.reason?.message ?? r.reason), 240)}`;
+    });
+    const ok = settled.some((r) => r.status === "fulfilled");
+    return [ok ? "✅ *Contatos atualizados* em Assist.IA/Contatos no seu Drive." : "", ...lines].filter(Boolean).join("\n");
   }
 
   // ─── Notas no Drive (Assist.IA/AAAA-MM-DD.md) ─────────────────

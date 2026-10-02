@@ -150,6 +150,14 @@ const TOOLS = [
   {
     type: "function",
     function: {
+      name: "contact_search",
+      description: "Procura o telefone e o e-mail de uma pessoa nos contatos do Google do dono (já importados para o Drive). Use quando ele pedir o número ou o e-mail de alguém, ou antes de mandar e-mail para um nome sem endereço. Se naoImportado=true, peça para ele dizer \"atualizar contatos\".",
+      parameters: { type: "object", properties: { name: { type: "string", description: "Nome ou parte do nome da pessoa" } }, required: ["name"] },
+    },
+  },
+  {
+    type: "function",
+    function: {
       name: "note_add",
       description: "Anota uma linha na nota do dia do dono (Markdown no Google Drive, pasta Assist.IA). Use SÓ quando o próprio dono pedir para anotar/guardar uma ideia, lembrete ou informação SEM data e hora marcadas (com data e hora é compromisso: use calendar_create_event). Nunca grave senhas.",
       parameters: { type: "object", properties: { text: { type: "string", description: "O que anotar, curto, como o dono disse" }, account: { type: "string", description: "Conta Google (opcional; padrão: a primeira)" } }, required: ["text"] },
@@ -240,7 +248,7 @@ const TOOLS = [
 // Ações que mudam o mundo exterior: exigem confirmação explícita do dono.
 const SENSITIVE = new Set(["gmail_send", "calendar_create_event", "reply_to_conversation"]);
 // Ferramentas que trazem texto de terceiros (potencial prompt injection).
-const EXTERNAL = new Set(["gmail_search", "gmail_read", "list_conversations", "drive_search", "note_search"]);
+const EXTERNAL = new Set(["gmail_search", "gmail_read", "list_conversations", "drive_search", "note_search", "contact_search"]);
 // Mudam preferências do dono: não valem depois de ler texto de terceiros no mesmo comando
 const PREFERENCE_TOOLS = new Set(["remember", "email_no_interest", "routine_set", "routine_remove", "set_location", "note_add"]);
 const MAX_PENDING = 3;
@@ -261,6 +269,7 @@ const TOOL_SERVICE: Record<string, Service | Service[]> = {
   drive_send_file: "drive",
   note_add: "drive",
   note_search: "drive",
+  contact_search: "drive",
   calendar_list_events: "calendar",
   calendar_create_event: "calendar",
 };
@@ -640,6 +649,16 @@ export class AssistantService {
         arquivos: r.items.map((f) => ({ id: f.id, conta: f.account, nome: f.nome, tipo: f.tipo, modificado: f.modificado, tamanho: f.tamanho })),
         ...(r.errors.length ? { avisos: r.errors } : {}),
       };
+    }
+    if (name === "contact_search") {
+      const who = String(args.name ?? "").trim().slice(0, 60);
+      if (who.length < 2) return { error: "informe o nome da pessoa" };
+      const accounts: string[] = await this.google.listAccounts(workspaceId);
+      if (!accounts.length) return { error: "Google não conectado. Peça ao dono para conectar em Canais > Conectar Google no painel." };
+      const settled = await Promise.allSettled(accounts.map((a) => this.google.contactsLookup(workspaceId, who, a)));
+      const lists = settled.flatMap((r) => (r.status === "fulfilled" && r.value ? [r.value] : []));
+      const erros = settled.flatMap((r) => (r.status === "rejected" ? [String(r.reason?.message ?? r.reason)] : []));
+      return { contatos: lists.flat().slice(0, 5), ...(lists.length ? {} : { naoImportado: true }), ...(erros.length ? { avisos: erros } : {}) };
     }
     if (name === "note_add") {
       const text = String(args.text ?? "").replace(/\s+/g, " ").trim().slice(0, 1_000);
