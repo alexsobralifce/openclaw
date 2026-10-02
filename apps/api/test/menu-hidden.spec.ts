@@ -34,7 +34,7 @@ describe("menu principal com itens ocultos", () => {
   it("sem ocultar nada, mostra todos", async () => {
     const { menu } = build();
     const out = (await menu.respond("w1", "menu")) as string;
-    for (const l of ["E-mails", "Google Agenda", "Conversas de clientes", "Perguntar à IA", "Minha memória", "Modo carro", "Google Drive", "Minha rotina", "Cofre de senhas", "Configurações"]) expect(out).toContain(l);
+    for (const l of ["E-mails", "Google Agenda", "Conversas de clientes", "Perguntar à IA", "Minha memória", "Modo carro", "Google Drive", "Contatos", "Minha rotina", "Cofre de senhas", "Configurações"]) expect(out).toContain(l);
   });
 
   it("item oculto some da lista e a numeração se ajusta", async () => {
@@ -46,9 +46,9 @@ describe("menu principal com itens ocultos", () => {
     expect(out).not.toContain("Modo carro");
     expect(out).not.toContain("Perguntar à IA");
     expect(out).toContain("Google Drive");
-    // 7 itens visíveis (10 menos 3), numerados em sequência
-    expect(out).toContain("7️⃣");
-    expect(out).not.toContain("8️⃣");
+    // 8 itens visíveis (11 menos 3), numerados em sequência
+    expect(out).toContain("8️⃣");
+    expect(out).not.toContain("9️⃣");
   });
 
   it("o número escolhido abre o item certo depois de esconder outros", async () => {

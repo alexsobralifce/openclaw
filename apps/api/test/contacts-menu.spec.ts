@@ -111,3 +111,57 @@ describe("menu: atualizar contatos", () => {
     expect(out).toMatch(/Google/);
   });
 });
+
+describe("menu: item Contatos", () => {
+  it("aparece no menu principal dizendo o que dá para pedir", async () => {
+    const { menu } = build();
+    const out = (await menu.respond("w1", "menu")) as string;
+    expect(out).toContain("📇 Contatos");
+    expect(out).toContain("telefone ou e-mail do Marcos");
+  });
+
+  it("a tela de contatos mostra os dados do nome digitado e continua aberta para o próximo", async () => {
+    const { menu, contactsLookup } = build();
+    const entry = (await menu.respond("w1", "contatos")) as string;
+    expect(entry).toContain("Diga o *nome* da pessoa");
+    const found = (await menu.respond("w1", "Marcos")) as string;
+    expect(contactsLookup).toHaveBeenCalledWith("w1", "Marcos");
+    expect(found).toContain("(85) 99999-0000");
+    expect(found).toContain("Diga outro nome");
+    await menu.respond("w1", "telefone da Maria");
+    expect(contactsLookup.mock.calls[1][1]).toBe("maria");
+  });
+
+  it("o número do item abre a tela (o item vem logo depois do Drive)", async () => {
+    const { menu } = build();
+    const main = (await menu.respond("w1", "menu")) as string;
+    const line = main.split("\n").find((l) => l.includes("📇 Contatos"))!;
+    const num = line.split(" ")[0];
+    const digit = ["0️⃣", "1️⃣", "2️⃣", "3️⃣", "4️⃣", "5️⃣", "6️⃣", "7️⃣", "8️⃣", "9️⃣", "🔟"].indexOf(num);
+    const out = (await menu.respond("w1", String(digit >= 0 ? digit : parseInt(num)))) as string;
+    expect(out).toContain("Diga o *nome* da pessoa");
+  });
+
+  it("'atualizar contatos' funciona dentro da tela e 0 volta ao menu", async () => {
+    const { menu, contactsImport } = build();
+    await menu.respond("w1", "contatos");
+    const out = (await menu.respond("w1", "atualizar contatos")) as string;
+    expect(contactsImport).toHaveBeenCalledTimes(1);
+    expect(out).toContain("Contatos atualizados");
+    const back = (await menu.respond("w1", "0")) as string;
+    expect(back).toContain("Menu principal");
+  });
+
+  it("sem Google conectado, o item nem aparece", async () => {
+    const { menu } = build({ accounts: [] });
+    const out = (await menu.respond("w1", "menu")) as string;
+    expect(out).not.toContain("Contatos");
+  });
+
+  it("pode ser escondido pelo painel e continua funcionando se escrito", async () => {
+    const { menu } = build();
+    await menu.setHiddenItems("w1", ["contacts"]);
+    expect(((await menu.respond("w1", "menu")) as string)).not.toContain("📇 Contatos");
+    expect(((await menu.respond("w1", "contatos")) as string)).toContain("Diga o *nome* da pessoa");
+  });
+});

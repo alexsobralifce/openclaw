@@ -145,7 +145,9 @@ export class MenuService {
       // Contatos do Google (guardados no Drive): "telefone do Marcos", "atualizar contatos"
       if (!isInput && !pending) {
         const person = contactQuery(flat);
-        if ((person || looksLikeContactsRefresh(flat)) && (await this.services(workspaceId)).includes("drive")) {
+        const open = /^(ver |abrir |mostrar )?(os |meus )?contatos$/.test(flat);
+        if ((person || open || looksLikeContactsRefresh(flat)) && (await this.services(workspaceId)).includes("drive")) {
+          if (open) return await this.contactsEntry(workspaceId);
           return person ? await this.contactLookupView(workspaceId, person) : await this.contactsRefresh(workspaceId);
         }
       }
@@ -335,6 +337,13 @@ export class MenuService {
       }
 
       // Drive
+      case "contacts_input": {
+        if (n === 0) return this.mainMenu(ws, false);
+        const flat = normalize(text);
+        // A tela continua aberta: dá para pedir vários nomes em seguida
+        const out = looksLikeContactsRefresh(flat) ? await this.contactsRefresh(ws) : await this.contactLookupView(ws, contactQuery(flat) ?? text.trim().slice(0, 60));
+        return `${out}\n${DIV}\n💡 _Diga outro nome, ou 0 para voltar._`;
+      }
       case "drive_input": {
         if (n === 0) return this.mainMenu(ws, false);
         return this.driveSearch(ws, driveQueryFrom(text) || text);
@@ -575,6 +584,8 @@ export class MenuService {
     if (accounts.length && services.includes("drive")) {
       options.push({ type: "drive" });
       labels.push({ id: "drive", icon: "📁", label: "Google Drive", sub: "pedir um arquivo" });
+      options.push({ type: "contacts" });
+      labels.push({ id: "contacts", icon: "📇", label: "Contatos", sub: "peça: telefone ou e-mail do Marcos" });
     }
     options.push({ type: "routine" });
     labels.push({ id: "routine", icon: "🗓️", label: "Minha rotina" });
@@ -601,6 +612,7 @@ export class MenuService {
       agenda: google && services.includes("calendar"),
       clients: services.includes("inbox"),
       drive: google && services.includes("drive"),
+      contacts: google && services.includes("drive"),
       vault: services.includes("vault"),
     };
     return MENU_ITEMS.filter((i) => available[i.id] ?? true).map((i) => ({ id: i.id, icon: i.icon, label: i.label, hidden: hidden.has(i.id), locked: i.id === "config" }));
@@ -770,6 +782,7 @@ export class MenuService {
     if (opt.type === "clients") return this.clientList(ws);
     if (opt.type === "memory") return this.memoryList(ws);
     if (opt.type === "drive") return this.driveEntry(ws);
+    if (opt.type === "contacts") return this.contactsEntry(ws);
     if (opt.type === "routine") return this.routineList(ws);
     if (opt.type === "config") return this.configMenu(ws);
     if (opt.type === "vault") return this.vaultHome(ws);
@@ -857,6 +870,19 @@ export class MenuService {
   }
 
   // Google Drive
+
+  private async contactsEntry(ws: string) {
+    if (!(await this.google.listAccounts(ws)).length) return this.noGoogle();
+    await this.set(ws, "contacts_input");
+    return [
+      head("📇", "Contatos", "telefone e e-mail dos seus contatos do Google"),
+      "Diga o *nome* da pessoa e eu busco o telefone e o e-mail.",
+      '_Ex.: "Marcos" ou "telefone da Maria"_',
+      "_Contatos novos ou primeira vez? Diga *atualizar contatos*._",
+      DIV,
+      opts(BACK),
+    ].join("\n");
+  }
 
   private async driveEntry(ws: string) {
     const accounts = await this.google.listAccounts(ws);
