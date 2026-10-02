@@ -8,6 +8,7 @@ import { AssistantSchedulerService } from "./assistant/assistant-scheduler.servi
 import { WeatherService } from "./assistant/weather.service";
 import { AssistantService } from "./assistant/assistant.service";
 import { MenuService } from "./assistant/menu.service";
+import { AssistantSettingsController } from "./assistant/assistant-settings.controller";
 import { MemoryService } from "./assistant/memory.service";
 import { GeminiService } from "./assistant/gemini.service";
 import { IntentService } from "./assistant/intent.service";
@@ -30,7 +31,7 @@ import { InstagramWorker } from "./workers/instagram.worker";
       inject: [ConfigService],
     }),
   ],
-  controllers: [ChannelsController],
+  controllers: [ChannelsController, AssistantSettingsController],
   providers: [ChannelsService, WhatsappWorker, InstagramWorker, InstagramService, InboundService, AssistantService, MenuService, MemoryService, GeminiService, IntentService, EmailWatcherService, WeatherService, AssistantSchedulerService],
   exports: [ChannelsService, EvolutionModule, AssistantService],
 })

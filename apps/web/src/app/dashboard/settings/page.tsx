@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { api } from "@/lib/api";
+import { api, MenuItem } from "@/lib/api";
 import { setUser } from "@/lib/auth";
 import { useMe } from "@/hooks/useMe";
 
@@ -15,6 +15,9 @@ export default function SettingsPage() {
   const [form, setForm] = useState({ name: "", phone: "" });
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
   const [saving, setSaving] = useState(false);
+  const [menu, setMenu] = useState<MenuItem[] | null>(null);
+  const [menuMsg, setMenuMsg] = useState<{ ok: boolean; text: string } | null>(null);
+  const [menuSaving, setMenuSaving] = useState(false);
 
   useEffect(() => {
     if (me) setForm({ name: me.name, phone: me.phone ?? "" });
@@ -23,6 +26,26 @@ export default function SettingsPage() {
   useEffect(() => {
     api.auth.services().then(setCatalog).catch(() => {});
   }, []);
+
+  const hasAssistant = !!me?.services?.includes("assistant");
+  useEffect(() => {
+    if (hasAssistant) api.assistant.menu().then((r) => setMenu(r.items)).catch((e) => setMenuMsg({ ok: false, text: e.message }));
+  }, [hasAssistant]);
+
+  async function saveMenu() {
+    if (!menu) return;
+    setMenuMsg(null);
+    setMenuSaving(true);
+    try {
+      const r = await api.assistant.setMenu(menu.filter((i) => i.hidden).map((i) => i.id));
+      setMenu(r.items);
+      setMenuMsg({ ok: true, text: "Menu salvo. Vale na próxima vez que o menu aparecer no WhatsApp." });
+    } catch (e: any) {
+      setMenuMsg({ ok: false, text: e.message });
+    } finally {
+      setMenuSaving(false);
+    }
+  }
 
   async function save(e: React.FormEvent) {
     e.preventDefault();
@@ -82,6 +105,44 @@ export default function SettingsPage() {
           </div>
         )}
       </section>
+
+      {services.includes("assistant") && (
+        <section className={`${card} space-y-3`}>
+          <h2 className="text-sm font-semibold text-gray-300">Menu do WhatsApp</h2>
+          <p className="text-xs text-gray-400">
+            Marque o que deve aparecer na lista do menu. O que ficar desmarcado some da lista, mas continua funcionando se você escrever ou falar
+            (por exemplo, <b>agenda</b> ou <b>drive</b>).
+          </p>
+          {menu === null ? (
+            <p className="text-xs text-gray-500">{menuMsg ? "" : "Carregando..."}</p>
+          ) : (
+            <ul className="space-y-1">
+              {menu.map((it) => (
+                <li key={it.id}>
+                  <label className={`flex items-center gap-2 text-sm ${it.locked ? "text-gray-500" : "text-gray-200 cursor-pointer"}`}>
+                    <input
+                      type="checkbox"
+                      className="accent-teal-500"
+                      checked={!it.hidden}
+                      disabled={it.locked}
+                      onChange={(e) => setMenu(menu.map((m) => (m.id === it.id ? { ...m, hidden: !e.target.checked } : m)))}
+                    />
+                    <span aria-hidden>{it.icon}</span>
+                    <span>{it.label}</span>
+                    {it.locked && <span className="text-[11px] text-gray-600">(sempre aparece)</span>}
+                  </label>
+                </li>
+              ))}
+            </ul>
+          )}
+          {menuMsg && <p className={`text-xs ${menuMsg.ok ? "text-teal-400" : "text-red-400"}`}>{menuMsg.text}</p>}
+          {menu !== null && (
+            <button type="button" onClick={saveMenu} disabled={menuSaving} className={`${btn} bg-teal-600 hover:bg-teal-500 text-white disabled:opacity-50`}>
+              {menuSaving ? "Salvando..." : "Salvar menu"}
+            </button>
+          )}
+        </section>
+      )}
 
       {services.includes("assistant") && (
         <section className={`${card} space-y-2`}>

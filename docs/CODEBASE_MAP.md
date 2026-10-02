@@ -93,7 +93,8 @@ openclaw/
 | `assistant/intent.service.ts` | Jev (TypeSafe): `agenda_add` / `drive_file` / `note_add` / `other`, `MIN_CONFIDENCE = 0.8`, timeout 2,5 s |
 | `assistant/commander.ts` | Identifica o usuário que comanda pelo WhatsApp e checa serviços |
 | `assistant/gemini.service.ts`, `memory.service.ts`, `weather.service.ts` | Gemini (transcrição/extração/TTS), memórias e rotina, clima Open-Meteo |
-| `assistant/email-*.ts`, `drive.ts`, `notes.ts`, `agenda-events.ts`, `voice.ts`, `speech.ts`, `security.ts`, `vault-command.ts`, `routine.ts`, `location.ts`, `chat-clean.ts` | Lógica pura (testável sem mocks) |
+| `assistant/email-*.ts`, `drive.ts`, `notes.ts`, `menu-items.ts`, `agenda-events.ts`, `voice.ts`, `speech.ts`, `security.ts`, `vault-command.ts`, `routine.ts`, `location.ts`, `chat-clean.ts` | Lógica pura (testável sem mocks) |
+| `assistant/assistant-settings.controller.ts` | `GET/PUT /assistant/menu` (`@Access("assistant")`): itens do menu principal que o dono esconde pelo painel; guardado em `KvEntry` `menuhide:<ws>` |
 | `assistant/assistant-scheduler.service.ts` | Tick de 20 s: apaga mensagens com senha, volta ao menu por inatividade, limpeza do chat |
 | `assistant/email-watcher.service.ts` | Poll do Gmail (60 s) e aviso por WhatsApp |
 | `evolution/*` | Cliente HTTP do Evolution, `EvolutionError`, filtro 503 |
@@ -228,6 +229,7 @@ Webhook → `InboundEvent` → worker → `InboxService.processIncoming` → `We
 | Tarefa | Arquivos |
 |---|---|
 | Novo comando/tela do assistente | `channels/assistant/menu.service.ts` (`respond`, `route`, `ALIASES`), helper puro novo ao lado, spec em `apps/api/test/` |
+| Novo item no menu principal | `menu-items.ts` (`MENU_ITEMS`, para poder ser escondido), `MenuService.mainOptions` (com `id`) e `menuItems`; o painel lê pela rota `/assistant/menu`; item escondido só sai da lista, o comando digitado continua valendo |
 | Mudar notas (anotar/buscar) | `assistant/notes.ts` (puro), `google.service.ts` (`noteAppend`/`noteSearch`), bloco "Notas" em `MenuService.respond`, tools `note_*` em `assistant.service.ts`; specs `notes*.spec.ts`; ver gotchas 25 a 28 |
 | Nova intenção do Jev | `assistant/intent.service.ts` (tipo `Intent`), gatilho em `MenuService.respond`, `test/intent.spec.ts` |
 | Nova tool da IA livre | `assistant/assistant.service.ts` (`TOOLS`, `runTool`, `toolAllowed`); se sensível, entra em `SENSITIVE` |

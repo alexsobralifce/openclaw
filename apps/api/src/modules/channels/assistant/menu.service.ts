@@ -14,6 +14,7 @@ import { todayItems, when as routineWhen } from "./routine";
 import { AssistantConfig, configKey, fmtInterval, IDLE_MENU_MS, intervalProblem, parseInterval, PRESETS } from "./chat-clean";
 import { driveQueryFrom, fileIcon, fmtSize, looksLikeDriveRequest, parseDriveQuery, rankFiles, sanitizeAlternates } from "./drive";
 import { suspiciousReasons } from "./security";
+import { menuHiddenKey, MENU_ITEMS, sanitizeHidden } from "./menu-items";
 import { looksLikeNoteAdd, looksLikeNoteSearch, noteTerms, noteTextFrom, startsLikeNote } from "./notes";
 import { StateService } from "../../state/state.service";
 import { effectiveServices, Service } from "../../auth/permissions";
@@ -544,38 +545,64 @@ export class MenuService {
     const services = await this.services(ws);
     const accounts = await this.google.listAccounts(ws);
     const options: any[] = [];
-    const labels: { icon: string; label: string; sub?: string }[] = [];
+    const labels: { id: string; icon: string; label: string; sub?: string }[] = [];
     if (accounts.length && services.includes("email")) {
       options.push(accounts.length === 1 ? { type: "emails", account: accounts[0] } : { type: "emails_pick" });
-      labels.push({ icon: "📧", label: "E-mails", sub: accounts.map(accountLabel).join(" · ") });
+      labels.push({ id: "email", icon: "📧", label: "E-mails", sub: accounts.map(accountLabel).join(" · ") });
     }
     if (accounts.length && services.includes("calendar")) {
       options.push({ type: "agenda" });
-      labels.push({ icon: "📅", label: "Google Agenda" });
+      labels.push({ id: "agenda", icon: "📅", label: "Google Agenda" });
     }
     if (services.includes("inbox")) {
       options.push({ type: "clients" });
-      labels.push({ icon: "💬", label: "Conversas de clientes" });
+      labels.push({ id: "clients", icon: "💬", label: "Conversas de clientes" });
     }
     options.push({ type: "free" });
-    labels.push({ icon: "🤖", label: "Perguntar à IA" });
+    labels.push({ id: "free", icon: "🤖", label: "Perguntar à IA" });
     options.push({ type: "memory" });
-    labels.push({ icon: "🧠", label: "Minha memória" });
+    labels.push({ id: "memory", icon: "🧠", label: "Minha memória" });
     options.push({ type: "car" });
-    labels.push({ icon: "🚗", label: "Modo carro" });
+    labels.push({ id: "car", icon: "🚗", label: "Modo carro" });
     if (accounts.length && services.includes("drive")) {
       options.push({ type: "drive" });
-      labels.push({ icon: "📁", label: "Google Drive", sub: "pedir um arquivo" });
+      labels.push({ id: "drive", icon: "📁", label: "Google Drive", sub: "pedir um arquivo" });
     }
     options.push({ type: "routine" });
-    labels.push({ icon: "🗓️", label: "Minha rotina" });
+    labels.push({ id: "routine", icon: "🗓️", label: "Minha rotina" });
     if (services.includes("vault")) {
       options.push({ type: "vault" });
-      labels.push({ icon: "🔐", label: "Cofre de senhas", sub: "peça: senha do github" });
+      labels.push({ id: "vault", icon: "🔐", label: "Cofre de senhas", sub: "peça: senha do github" });
     }
     options.push({ type: "config" });
-    labels.push({ icon: "⚙️", label: "Configurações", sub: "limpeza do chat" });
-    return { options, labels };
+    labels.push({ id: "config", icon: "⚙️", label: "Configurações", sub: "limpeza do chat" });
+    // Itens que o dono escondeu no painel (menos os sempre visíveis): saem da lista, mas o comando escrito ou falado continua valendo
+    const hidden = new Set(sanitizeHidden(await this.state.get(menuHiddenKey(ws))));
+    const keep = labels.map((l) => !hidden.has(l.id));
+    return { options: options.filter((_, k) => keep[k]), labels: labels.filter((_, k) => keep[k]) };
+  }
+
+  /** Itens do menu que este usuário pode ver, com o estado de cada um (para a tela de configuração do painel). */
+  async menuItems(ws: string): Promise<{ id: string; icon: string; label: string; hidden: boolean; locked: boolean }[]> {
+    const hidden = new Set(sanitizeHidden(await this.state.get(menuHiddenKey(ws))));
+    const services = await this.services(ws);
+    const accounts = await this.google.listAccounts(ws);
+    const google = accounts.length > 0;
+    const available: Record<string, boolean> = {
+      email: google && services.includes("email"),
+      agenda: google && services.includes("calendar"),
+      clients: services.includes("inbox"),
+      drive: google && services.includes("drive"),
+      vault: services.includes("vault"),
+    };
+    return MENU_ITEMS.filter((i) => available[i.id] ?? true).map((i) => ({ id: i.id, icon: i.icon, label: i.label, hidden: hidden.has(i.id), locked: i.id === "config" }));
+  }
+
+  /** Guarda quais itens ficam fora do menu; ids desconhecidos e o item sempre visível são ignorados. */
+  async setHiddenItems(ws: string, ids: unknown): Promise<string[]> {
+    const clean = sanitizeHidden(ids);
+    await this.state.set(menuHiddenKey(ws), clean);
+    return clean;
   }
 
   // ─── Fila de e-mails novos ─────────────────────────────────────

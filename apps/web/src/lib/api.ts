@@ -1,5 +1,14 @@
 const API = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001";
 
+/** Item do menu principal do WhatsApp; `hidden` = fora da lista, `locked` = sempre visível. */
+export interface MenuItem {
+  id: string;
+  icon: string;
+  label: string;
+  hidden: boolean;
+  locked: boolean;
+}
+
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const token = typeof window !== "undefined" ? localStorage.getItem("oc_token") : null;
   const res = await fetch(`${API}/api/v1${path}`, {
@@ -47,6 +56,10 @@ export const api = {
     services: () => request<Record<string, string>>("/auth/services"),
     updateMe: (data: { name?: string; phone?: string }) =>
       request<any>("/auth/me", { method: "PATCH", body: JSON.stringify(data) }),
+  },
+  assistant: {
+    menu: () => request<{ items: MenuItem[] }>("/assistant/menu"),
+    setMenu: (hidden: string[]) => request<{ items: MenuItem[] }>("/assistant/menu", { method: "PUT", body: JSON.stringify({ hidden }) }),
   },
   users: {
     catalog: () => request<{ services: Record<string, string>; defaults: Record<string, string[]> }>("/users/services"),
