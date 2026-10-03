@@ -1,5 +1,5 @@
 import { Injectable } from "@nestjs/common";
-import { geminiTokens, recordUsage } from "./usage";
+import { assertQuota, geminiTokens, recordUsage } from "./usage";
 
 const BASE = "https://generativelanguage.googleapis.com/v1beta/models";
 
@@ -29,6 +29,7 @@ export class GeminiService {
   }
 
   private async call(model: string, body: object, timeoutMs = 30_000, retries = 2): Promise<any> {
+    await assertQuota();
     let lastErr = "";
     for (let attempt = 0; attempt <= retries; attempt++) {
       // Esta chave só é aceita na URL; nunca registrar a URL em logs.

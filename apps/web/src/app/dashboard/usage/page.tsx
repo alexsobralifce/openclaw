@@ -77,6 +77,11 @@ export default function UsagePage() {
               <div className="text-xs text-gray-500">Com preço: {data.pricedModels.join(", ")}</div>
             </div>
           </div>
+          <p className="text-xs text-gray-500">
+            {data.monthlyLimit > 0
+              ? `Limite mensal por usuário: ${nf.format(data.monthlyLimit)} tokens (root e admin não têm limite). Ao passar, a IA para de responder para a pessoa até o mês seguinte; o menu continua.`
+              : "Sem limite mensal por usuário. Para definir, configure AI_MONTHLY_TOKEN_LIMIT no servidor."}
+          </p>
           {data.total.unpricedTokens > 0 && (
             <p className="text-xs text-amber-300/90">
               O custo só soma modelos com preço conhecido. Para incluir os demais (ex.: Gemini), defina no servidor <code>AI_PRICES</code>, como {`{"nome-do-modelo":{"in":0.10,"out":0.40}}`}, em US$ por 1 milhão de tokens. Para ver em reais, defina <code>AI_USD_BRL</code>. A projeção usa o ritmo desde o primeiro uso de cada pessoa; com poucos dias de dados, é só uma ideia.

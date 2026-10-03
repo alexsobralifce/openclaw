@@ -11,6 +11,10 @@ const TZ = process.env.ASSISTANT_TZ || "America/Fortaleza";
 export interface UsageContext {
   userId?: string;
   workspaceId?: string;
+  /** root e admin não têm limite. */
+  exempt?: boolean;
+  /** A cota foi atingida neste fluxo: quem responde ao usuário acrescenta o aviso. */
+  quotaHit?: boolean;
 }
 const als = new AsyncLocalStorage<UsageContext>();
 
@@ -40,6 +44,7 @@ export function recordUsage(provider: string, model: string, tokens: Tokens, fal
   const userId = ctx?.userId ?? SYSTEM_USER;
   const workspaceId = ctx?.workspaceId ?? fallbackWs ?? "";
   const day = dayStamp(at, TZ);
+  bumpMonth(userId, tokens.input + tokens.output);
   void Promise.resolve()
     .then(() =>
       prisma.aiUsage.upsert({
@@ -136,3 +141,65 @@ export function rollup(rows: UsageRow[], prices: Record<string, Price> = {}, tod
   const total = list.reduce((s, u) => ({ calls: s.calls + u.calls, inputTokens: s.inputTokens + u.inputTokens, outputTokens: s.outputTokens + u.outputTokens, totalTokens: s.totalTokens + u.totalTokens }), { calls: 0, inputTokens: 0, outputTokens: 0, totalTokens: 0 });
   return { users: list, total, byDay: [...days].map(([day, tokens]) => ({ day, tokens })).sort((a, b) => a.day.localeCompare(b.day)) };
 }
+
+// ─── Limite mensal de tokens por usuário ─────────────────────────
+
+/** Limite de tokens por usuário no mês (AI_MONTHLY_TOKEN_LIMIT); 0 ou vazio = sem limite. */
+export const monthlyLimit = () => {
+  const n = Math.trunc(Number(process.env.AI_MONTHLY_TOKEN_LIMIT));
+  return Number.isFinite(n) && n > 0 ? n : 0;
+};
+
+export class QuotaExceededError extends Error {
+  constructor(limit: number) {
+    super(`Limite mensal de uso de IA atingido (${limit.toLocaleString("pt-BR")} tokens).`);
+  }
+}
+
+/** Aviso para o usuário, acrescentado à resposta quando a cota barrou alguma chamada. */
+export const QUOTA_NOTICE = "⚠️ *Você atingiu o limite mensal de uso de IA.* O menu continua funcionando, mas leitura de arquivos, áudio e respostas da IA voltam no próximo mês. Se precisar de mais, fale com o administrador.";
+
+/** O fluxo atual bateu na cota? */
+export const quotaHit = () => !!als.getStore()?.quotaHit;
+
+const monthCache = new Map<string, { at: number; tokens: number }>();
+const MONTH_CACHE_MS = 60_000;
+
+/** Tokens do usuário no mês corrente (cache de 1 min para não consultar o banco a cada chamada). */
+async function monthTokens(userId: string, at = new Date()): Promise<number> {
+  const hit = monthCache.get(userId);
+  if (hit && Date.now() - hit.at < MONTH_CACHE_MS) return hit.tokens;
+  const first = `${dayStamp(at, TZ).slice(0, 7)}-01`;
+  const agg = await prisma.aiUsage.aggregate({ where: { userId, day: { gte: first } }, _sum: { inputTokens: true, outputTokens: true } });
+  const tokens = (agg._sum.inputTokens ?? 0) + (agg._sum.outputTokens ?? 0);
+  monthCache.set(userId, { at: Date.now(), tokens });
+  return tokens;
+}
+
+/**
+ * Chamar antes de gastar IA: barra o usuário que passou do limite do mês. Sem limite configurado, sem usuário (rotinas
+ * automáticas) ou isento (root/admin), não faz nada. Se o banco falhar, deixa passar: contar nunca derruba o assistente.
+ */
+export async function assertQuota(): Promise<void> {
+  const limit = monthlyLimit();
+  const ctx = als.getStore();
+  if (!limit || !ctx?.userId || ctx.exempt) return;
+  let used = 0;
+  try {
+    used = await monthTokens(ctx.userId);
+  } catch {
+    return;
+  }
+  if (used >= limit) {
+    ctx.quotaHit = true;
+    throw new QuotaExceededError(limit);
+  }
+}
+
+/** Soma ao cache o que acabou de ser gasto, para a cota valer sem esperar o minuto do cache. */
+export function bumpMonth(userId: string, tokens: number): void {
+  const hit = monthCache.get(userId);
+  if (hit) hit.tokens += tokens;
+}
+
+export const resetQuotaCache = () => monthCache.clear();

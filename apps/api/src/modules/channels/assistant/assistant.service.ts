@@ -1,4 +1,4 @@
-import { openaiTokens, recordUsage, trackUser } from "./usage";
+import { assertQuota, openaiTokens, QUOTA_NOTICE, quotaHit, recordUsage, trackUser } from "./usage";
 import { ForbiddenException, Injectable, Logger } from "@nestjs/common";
 import { prisma } from "@openclaw/database";
 import { GoogleService } from "../../integrations/google/google.service";
@@ -429,7 +429,7 @@ export class AssistantService {
   async voice(workspaceId: string, text: string): Promise<{ fala: string }> {
     const owner = await workspaceCommander(workspaceId);
     if (!owner || !can(owner, "assistant")) throw new ForbiddenException("O assistente não está liberado para esta conta.");
-    trackUser({ userId: owner.userId, workspaceId });
+    trackUser({ userId: owner.userId, workspaceId, exempt: owner.role === "ROOT" || owner.role === "ADMIN" });
     await this.menu.enterCar(workspaceId);
     // Vários comandos numa chamada só, separados por ";" (ex.: "ler e-mails; Pessoal"): o menu avança uma tela por comando
     // e a resposta é a do último. Poupa ações na macro e evita errar a tela.
@@ -439,6 +439,7 @@ export class AssistantService {
       for (const step of steps.length ? steps : [text]) answer = await this.menu.respond(workspaceId, step);
     } catch (err: any) {
       this.logger.error(`Comando de voz falhou: ${err.message}`);
+      if (quotaHit()) answer = "Você atingiu o limite mensal de uso de IA. Fale com o administrador.";
     }
     // Nada daqui vai para o WhatsApp: limpa as marcas de "segredo" e "código digitado" para não vazarem no próximo envio
     await this.menu.takeSecret(workspaceId);
@@ -464,6 +465,7 @@ export class AssistantService {
 
     const apiKey = process.env.OPENAI_API_KEY;
     if (!apiKey) throw new Error("Nenhum serviço de transcrição configurado");
+    await assertQuota();
     const ext = mime.includes("mp4") ? "mp4" : mime.includes("mpeg") ? "mp3" : "ogg";
     const form = new FormData();
     form.append("file", new Blob([audio], { type: mime }), `audio.${ext}`);
@@ -493,7 +495,7 @@ export class AssistantService {
   /** Devolve `redact: true` quando a mensagem tinha um código do cofre: o registro de entrada deve escondê-la. */
   async handle(c: Commander, instanceName: string, text: string, opts: { heard?: boolean; quoted?: string } = {}): Promise<{ redact: boolean }> {
     const workspaceId = c.workspaceId;
-    trackUser({ userId: c.userId, workspaceId });
+    trackUser({ userId: c.userId, workspaceId, exempt: c.role === "ROOT" || c.role === "ADMIN" });
     let answer: string;
     try {
       answer = (await this.menu.respond(workspaceId, text, opts.quoted || undefined)) ?? (await this.think(c, text));
@@ -501,6 +503,7 @@ export class AssistantService {
       this.logger.error(`Assistente falhou: ${err.message}`);
       answer = "Erro ao processar o comando. Tente novamente.";
     }
+    if (quotaHit()) answer = `${answer}\n\n${QUOTA_NOTICE}`;
     if (opts.heard && !(await this.menu.isCar(workspaceId))) answer = `🎙️ _"${text}"_\n\n${answer}`;
     const secret = await this.menu.takeSecret(workspaceId);
     const redact = await this.menu.takeRedact(workspaceId);
@@ -515,7 +518,7 @@ export class AssistantService {
    */
   async handleAgendaMedia(c: Commander, instanceName: string, key: object, media: { mime: string; caption: string }) {
     const workspaceId = c.workspaceId;
-    trackUser({ userId: c.userId, workspaceId });
+    trackUser({ userId: c.userId, workspaceId, exempt: c.role === "ROOT" || c.role === "ADMIN" });
     const mode = await this.menu.agendaMediaIntent(workspaceId, media.caption);
     if (mode === "no") return;
     let answer: string;
@@ -538,6 +541,7 @@ export class AssistantService {
         answer = mode === "note" ? "😕 Não consegui baixar ou ler o arquivo, então a nota *não* foi criada. Tente enviar de novo." : "😕 Não consegui baixar ou ler o arquivo. Tente de novo, ou cole o texto dos compromissos.";
       }
     }
+    if (quotaHit()) answer = `${answer}\n\n${QUOTA_NOTICE}`;
     await this.sendToUser(c, instanceName, answer);
     await this.scheduleIdle(c, instanceName);
   }
@@ -565,6 +569,7 @@ export class AssistantService {
     let flagged = false;
 
     for (let i = 0; i < MAX_ROUNDS; i++) {
+      await assertQuota();
       const res = await fetch("https://api.openai.com/v1/chat/completions", {
         method: "POST",
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${apiKey}` },

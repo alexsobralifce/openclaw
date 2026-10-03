@@ -2,7 +2,7 @@ import { Controller, ForbiddenException, Get, Query, Request } from "@nestjs/com
 import { prisma } from "@openclaw/database";
 import { Access } from "../auth/access";
 import { dayStamp } from "../channels/assistant/notes";
-import { loadPrices, rollup, SYSTEM_USER } from "../channels/assistant/usage";
+import { loadPrices, monthlyLimit, rollup, SYSTEM_USER } from "../channels/assistant/usage";
 
 const TZ = process.env.ASSISTANT_TZ || "America/Fortaleza";
 
@@ -36,6 +36,7 @@ export class UsageController {
       since,
       total: { ...r.total, costUsd: r.users.reduce((s, u) => s + u.costUsd, 0), unpricedTokens: r.users.reduce((s, u) => s + u.unpricedTokens, 0) },
       avgMonthlyUsd,
+      monthlyLimit: monthlyLimit(),
       activeUsers: active.length,
       usdBrl: Number(process.env.AI_USD_BRL) > 0 ? Number(process.env.AI_USD_BRL) : null,
       pricedModels: Object.keys(prices),

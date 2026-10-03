@@ -20,7 +20,7 @@ import { looksLikeEmailBookRefresh } from "./email-book";
 import { cleanSubject, ComposeSeed, composeSeed, extractAddresses, MAX_BODY, verbatimBody } from "./email-compose";
 import { menuHiddenKey, MENU_ITEMS, sanitizeHidden } from "./menu-items";
 import { cleanTitle, looksLikeNoteAdd, looksLikeNoteCaption, looksLikeNoteSearch, looksLikeNotesHome, noteTerms, noteTextFrom, noteWithTopic, parseNotePlan, pickTopic, startsLikeNote, storageAccount, topicRequest } from "./notes";
-import { openaiTokens, recordUsage } from "./usage";
+import { assertQuota, openaiTokens, recordUsage } from "./usage";
 import { StateService } from "../../state/state.service";
 import { effectiveServices, Service } from "../../auth/permissions";
 import { normalize, parseChoice, pickByLabel } from "./voice";
@@ -2191,6 +2191,7 @@ export class MenuService {
       if (mem) system = `${system}\n\n${mem}`;
     }
     if (!key) throw new Error("OPENAI_API_KEY não configurada");
+    await assertQuota();
     const res = await fetch("https://api.openai.com/v1/chat/completions", {
       method: "POST",
       headers: { "Content-Type": "application/json", Authorization: `Bearer ${key}` },

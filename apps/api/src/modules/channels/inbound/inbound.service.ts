@@ -1,4 +1,4 @@
-import { trackUser } from "../assistant/usage";
+import { QUOTA_NOTICE, quotaHit, trackUser } from "../assistant/usage";
 import { Injectable, Logger, OnModuleDestroy, OnModuleInit } from "@nestjs/common";
 import { prisma, Prisma } from "@openclaw/database";
 import { AssistantService } from "../assistant/assistant.service";
@@ -159,7 +159,7 @@ export class InboundService implements OnModuleInit, OnModuleDestroy {
       // Modo "mensagem para si mesmo": as mensagens do dono também são do número conectado e podem ser apagadas na limpeza
       if (data.key.fromMe) await this.assistant.trackMessage(commander.workspaceId, instance, data.key);
 
-      trackUser({ userId: commander.userId, workspaceId: commander.workspaceId });
+      trackUser({ userId: commander.userId, workspaceId: commander.workspaceId, exempt: commander.role === "ROOT" || commander.role === "ADMIN" });
       let text = commandText(data.message);
       let heard = false;
       if (!text && isVoiceOrAudio(data.message)) {
@@ -175,7 +175,7 @@ export class InboundService implements OnModuleInit, OnModuleDestroy {
           this.logger.error(`Transcrição falhou: ${err.message}`);
         }
         if (!text) {
-          await this.assistant.sendToUser(commander, instance, "Não consegui entender o áudio. Pode tentar de novo ou escrever?");
+          await this.assistant.sendToUser(commander, instance, quotaHit() ? `Não consegui ouvir o áudio.\n\n${QUOTA_NOTICE}` : "Não consegui entender o áudio. Pode tentar de novo ou escrever?");
           return;
         }
       }
