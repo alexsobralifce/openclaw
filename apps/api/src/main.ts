@@ -4,6 +4,7 @@ import helmet from "helmet";
 import { RequestMethod, ValidationPipe } from "@nestjs/common";
 import { AppModule } from "./app.module";
 import { configureBodyParsers } from "./body-parsers";
+import { webOrigins } from "./web-origins";
 
 function assertProductionConfig() {
   if (process.env.NODE_ENV !== "production") return;
@@ -28,7 +29,7 @@ async function bootstrap() {
   app.setGlobalPrefix("api/v1", { exclude: [{ path: "api/public/v1/(.*)", method: RequestMethod.ALL }] });
   app.useGlobalPipes(new ValidationPipe({ whitelist: true, transform: true }));
   app.enableCors({
-    origin: process.env.WEB_URL || "http://localhost:3000",
+    origin: webOrigins(),
     credentials: true,
   });
 

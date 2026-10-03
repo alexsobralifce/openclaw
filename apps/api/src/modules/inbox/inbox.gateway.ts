@@ -12,9 +12,10 @@ import { JwtService } from "@nestjs/jwt";
 import { Server, Socket } from "socket.io";
 import { prisma } from "@openclaw/database";
 import type { WsNewMessage, WsConversationUpdated, WsConversationDeleted } from "@openclaw/types";
+import { webOrigins } from "../../web-origins";
 
 @WebSocketGateway({
-  cors: { origin: process.env.WEB_URL || "http://localhost:3000", credentials: true },
+  cors: { origin: webOrigins(), credentials: true },
   namespace: "/inbox",
 })
 export class InboxGateway implements OnGatewayConnection, OnGatewayDisconnect {

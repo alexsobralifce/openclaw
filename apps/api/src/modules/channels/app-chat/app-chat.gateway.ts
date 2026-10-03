@@ -3,10 +3,11 @@ import { Logger } from "@nestjs/common";
 import { JwtService } from "@nestjs/jwt";
 import { Server, Socket } from "socket.io";
 import { prisma } from "@openclaw/database";
+import { webOrigins } from "../../../web-origins";
 
 /** Tempo real do chat do app: cada usuário entra na própria sala e recebe só as mensagens dele. */
 @WebSocketGateway({
-  cors: { origin: process.env.WEB_URL || "http://localhost:3000", credentials: true },
+  cors: { origin: webOrigins(), credentials: true },
   namespace: "/chat",
 })
 export class AppChatGateway implements OnGatewayConnection {
