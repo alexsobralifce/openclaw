@@ -1,36 +1,27 @@
 # Domínio magobox.com.br (Registro.br → Railway)
 
-Registrado em 03/10/2026, vence em 03/10/2027. DNS no padrão do Registro.br (`a.auto.dns.br`, `b.auto.dns.br`).
+Registrado em 03/10/2026 (titular: o próprio dono), vence em 03/10/2027. DNS no Registro.br, modo avançado, servidores `a.sec.dns.br` e `b.sec.dns.br` (DNSSEC ligado).
 
-## 1. Registros DNS (painel do Registro.br → DNS → Editar zona)
+## Situação (03/10/2026)
 
-| Tipo  | Nome                  | Valor                                                                              | Serviço |
-|-------|-----------------------|------------------------------------------------------------------------------------|---------|
-| CNAME | `@` (raiz)            | `oom5lfhk.up.railway.app`                                                          | web     |
-| TXT   | `_railway-verify`     | `railway-verify=0c7a002fadb44d2b504cae7b5a5f66f41ed724d8adbd699a5dccc303e6a91e21`  | web     |
-| CNAME | `www`                 | `fpxtgxx3.up.railway.app`                                                          | web     |
-| TXT   | `_railway-verify.www` | `railway-verify=eef047397493f41133d5330c2ec36a36c1e39d8869f37ef03b15b514efd818c0`  | web     |
-| CNAME | `api`                 | `rl8xbyhs.up.railway.app`                                                          | api     |
-| TXT   | `_railway-verify.api` | `railway-verify=51dd0feb921c2fa6e70304578376fc82b1d3eb9a72e2aaf2645cd0927229f516`  | api     |
+| Endereço | Serviço | Estado |
+|---|---|---|
+| `app.magobox.com.br` | web (painel e login) | no ar, HTTPS válido |
+| `www.magobox.com.br` | web (site público, endereço canônico) | no ar, HTTPS válido |
+| `api.magobox.com.br` | api | no ar, HTTPS válido |
+| `magobox.com.br` (sem prefixo) | — | **não resolve** (o Registro.br não aceita CNAME na raiz) |
 
-CNAME na raiz (`@`): o Registro.br pode recusar, pois a raiz já tem registros SOA/NS. Se recusar, use ALIAS/ANAME se o painel
-oferecer; senão, publique o painel em `app.magobox.com.br` (CNAME `app` → mesmo valor da raiz) e redirecione a raiz para ele.
+Registros na zona (CNAME para o destino do Railway + TXT `_railway-verify.<nome>` de cada um): consulte `railway domain list --service web|api` e `railway domain status <id> --service ...` para ver os valores atuais.
 
-Conferir: `railway domain status <id>` ou `dig +short CNAME api.magobox.com.br`.
+## Variáveis do Railway
 
-## 2. Depois que os três ficarem "Verified" e com certificado
+- api: `WEB_URL=https://app.magobox.com.br`, `WEB_ORIGINS=<endereço antigo do Railway>,https://www.magobox.com.br`, `PUBLIC_API_URL=https://api.magobox.com.br`, `GOOGLE_REDIRECT_URI=https://api.magobox.com.br/api/v1/integrations/google/callback`, `WEBPUSH_*`.
+- web (build-args, exigem novo deploy): `NEXT_PUBLIC_API_URL=https://api.magobox.com.br`, `NEXT_PUBLIC_SITE_URL=https://www.magobox.com.br`.
+- **Não mexer em `API_URL`** (endereço interno usado pela Evolution) nem em `INSTAGRAM_REDIRECT_URI` (a Meta ainda não tem a URL nova).
 
-Trocar no Railway (isso reinicia os serviços):
+## Pendências
 
-- api: `WEB_URL=https://magobox.com.br`, `GOOGLE_REDIRECT_URI=https://api.magobox.com.br/api/v1/integrations/google/callback`,
-  `INSTAGRAM_REDIRECT_URI` (idem, com o caminho atual), `PUBLIC_API_URL=https://api.magobox.com.br` (o Telegram usa para o webhook; sem ela vale o domínio do Railway), `WEBPUSH_SUBJECT=mailto:contato@magobox.com.br`. Não mexer em `API_URL`: é o endereço interno usado pelo Evolution.
-- web: `NEXT_PUBLIC_API_URL=https://api.magobox.com.br` e `NEXT_PUBLIC_SITE_URL=https://magobox.com.br` (precisam de novo build)
-
-Antes de trocar, cadastrar as novas URLs (senão o login quebra):
-
-- Google Cloud → Credenciais → cliente OAuth: URI de redirecionamento `https://api.magobox.com.br/api/v1/integrations/google/callback`
-  e origem JavaScript `https://magobox.com.br`; em "Tela de consentimento", domínio autorizado `magobox.com.br`
-- Meta (Instagram): URI de redirecionamento e domínios do app
-- Telegram: o webhook se registra sozinho no boot (usa `PUBLIC_API_URL`; reinicie a API depois de trocar)
-
-Manter os endereços `*.up.railway.app` até confirmar que tudo funciona no domínio novo.
+1. **Google Search Console**: verificar `magobox.com.br` como Domínio (TXT na zona), enviar `https://www.magobox.com.br/sitemap.xml` e pedir indexação da página inicial. O mesmo domínio verificado serve de "domínio autorizado" na tela de consentimento do Google Cloud (política de privacidade e termos em `https://www.magobox.com.br/privacidade` e `/termos`).
+2. **Instagram (Meta)**: cadastrar `https://api.magobox.com.br/api/v1/channels/instagram/callback` e os domínios do app; depois trocar `INSTAGRAM_REDIRECT_URI`.
+3. **Raiz sem prefixo**: só com DNS que aceite CNAME/ALIAS na raiz (Cloudflare gratuita, trocando os servidores de nome no Registro.br; antes é preciso desligar o DNSSEC lá). Decidido adiar; divulgar sempre `www.magobox.com.br`.
+4. Os endereços `*.up.railway.app` seguem funcionando (CORS aceita) até a migração completa.

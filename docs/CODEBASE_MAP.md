@@ -99,6 +99,9 @@ openclaw/
 | `assistant/email-watcher.service.ts` | Poll do Gmail (60 s) e aviso por WhatsApp |
 | `evolution/*` | Cliente HTTP do Evolution, `EvolutionError`, filtro 503 |
 | `instagram/*` | OAuth, token de 60 dias cifrado, envio (janela de 24 h), renovação a cada 6 h |
+| `assistant/channel-route.ts` | Canais do assistente (`whatsapp` \| `app` \| `telegram`): instância `"app"`/`"telegram"` no lugar do nome da Evolution, ordem de tentativa e escolha do canal (lógica pura) |
+| `app-chat/*` | Chat do assistente dentro do app: `AppChatService` (mensagens `AppMessage` cifradas com a chave do workspace, retenção `APP_CHAT_RETENTION_DAYS`=30, arquivos do assistente em `KvEntry` por 1 h), `AppChatGateway` (Socket.IO `/chat`, sala por usuário), `PushService` (Web Push, `WEBPUSH_*`), `AppChatController` (`/app-chat`: mensagens, `audio`, `file`, `files/:id`, `push`, `channel`; tudo `@Access("assistant")`) |
+| `telegram/*` | `TelegramService` (envio por HTTP, `setWebhook` no boot com `PUBLIC_API_URL`), `TelegramController` (`POST /channels/telegram/webhook` público com `X-Telegram-Bot-Api-Secret-Token`; `link`/`status` para vincular por `/start CÓDIGO`, válido 10 min), `telegram-format.ts` (marcação do WhatsApp → HTML). O cofre nunca passa por lá (sem E2E) |
 | `workers/*` | Normalizam payload para `IncomingMessage` e chamam `InboxService.processIncoming` |
 | `whatsapp/parse.ts`, `phone.ts` | Parse Baileys, nono dígito BR, LIDs |
 
@@ -107,6 +110,7 @@ openclaw/
 ### auth, users, workspace
 
 - `auth`: registro/login/perfil, JWT de 7 dias (`{sub, email}`), `@Access(service?)`, `@AdminOnly()`, `RateLimitGuard` por IP (contador no Postgres). O primeiro usuário vira ROOT/ACTIVE; os demais entram PENDING até aprovação.
+- **Login com Google:** `GET /integrations/google/login` (público) → Google (`openid email profile`, mesmo redirect do OAuth das contas, distinguido pelo `state`: `purpose: "google-login"`) → `callback` confere o `id_token` (aud/iss/email_verificado), acha ou cria a conta (`AuthService.registerFromGoogle`: PENDING, sem senha, mesmas regras do cadastro) e entrega um **ticket de uso único de 60 s** (`KvEntry glogin:<ticket>`) em `/auth/google?ticket=` → `POST /auth/google/exchange` devolve a sessão. O token nunca vai na URL.
 - `permissions.ts`: papéis ROOT/ADMIN/USER e serviços `inbox, contacts, channels, assistant, email, calendar, drive, vault, automations, api`. USER padrão: inbox, contacts, channels.
 - `users`: administração (ROOT/ADMIN), aprovação, remoção com limpeza de instâncias Evolution.
 - `workspace`: leitura/renomeação do workspace do usuário.
@@ -141,8 +145,11 @@ openclaw/
 - `middleware.ts`: matcher só `/dashboard/:path*`; confere presença do cookie `oc_token` (não valida o JWT).
 - `lib/api.ts`: cliente `fetch` tipado como `any`, injeta Bearer, trata 401 (logout) e `ACCOUNT_INACTIVE`. `lib/auth.ts`: token em `localStorage` + cookie espelho (sem HttpOnly).
 - `hooks/useMe.ts` (um `GET /auth/me` por componente), `hooks/useInboxSocket.ts` (Socket.IO, só websocket, callbacks em ref).
-- Páginas em `/dashboard`: inbox, channels, automations, users, vault (+ reset), settings, api; contacts é placeholder. Públicas: landing, auth, privacidade, termos, exclusao-de-dados.
-- Componentes: `layout/` (Sidebar, BottomNav, TopBar), `inbox/`, `channels/`, `vault/`, `brand/`. Não há design system compartilhado; estilos repetidos por página.
+- Páginas em `/dashboard`: **chat** (Assistente, tela inicial; `/dashboard` redireciona para o primeiro item liberado), inbox, channels, automations, users, vault (+ reset), settings, api, usage, notes; contacts é placeholder. Públicas: landing, auth (+ `auth/google`), privacidade, termos, exclusao-de-dados; `robots.ts` e `sitemap.ts` (canônico `www.magobox.com.br`, painel fora do Google).
+- Componentes: `layout/` (Sidebar com o `nav` e `desktopOnly`, `MobileMenu` = menu sanduíche do celular, TopBar, `PwaPrompt` = pede instalar o app/atalho e ligar notificações a cada login, `ThemeSync` = claro/escuro pelo aparelho, só no painel), `inbox/`, `channels/`, `vault/`, `brand/`. Não há design system compartilhado; estilos repetidos por página.
+- Tema: os `gray-*` do Tailwind são variáveis CSS (`globals.css`, `:root` noite e `:root.light` dia, escala invertida); `.light` fica no `<html>` só no painel. Cores de destaque claras têm override em `.light`.
+- PWA: `app/manifest.ts`, `public/sw.js` (push + página offline, sem cache de dados, servido sem cache), `lib/push.ts`. No iPhone o push só funciona com o app instalado.
+- Chat (`dashboard/chat/page.tsx`): `textarea` (não `input`, para o Android não mostrar a faixa de autopreenchimento), anexo (imagem/PDF até 15 MB), gravação de áudio (`MediaRecorder`, até 5 min), `Permissions-Policy` libera o microfone só para o próprio site.
 
 ## Fluxo de dados
 
@@ -191,6 +198,13 @@ Webhook → `InboundEvent` → worker → `InboxService.processIncoming` → `We
 3. `NEXT_PUBLIC_*` são build-args do `Dockerfile.web`; trocar a URL da API exige rebuild. `NEXT_PUBLIC_CONTACT_EMAIL` não está declarada como ARG.
 4. Deploy manual: `railway up --service api|web --detach`. Sem CI de testes. Sem backup do Postgres (obrigatório antes de 5 usuários ativos).
 5. Se `WEBHOOK_SECRET` estiver vazia, o webhook do WhatsApp fica sem autenticação.
+
+**Domínio e rede (03/10/2026)**
+- `magobox.com.br` (Registro.br, DNS `*.sec.dns.br` com DNSSEC): `app.` = painel e login, `www.` = site público, `api.` = API. A raiz sem prefixo não resolve (o Registro.br não aceita CNAME nela; a saída seria a Cloudflare). Passo a passo em `docs/DOMINIO_MAGOBOX.md`.
+- `API_URL` na API é o endereço **interno** do Railway (usado pela Evolution); nunca usar para o que o mundo externo precisa alcançar. O Telegram usa `PUBLIC_API_URL` (ou `RAILWAY_PUBLIC_DOMAIN`).
+- CORS e websockets aceitam `WEB_URL` + `WEB_ORIGINS` (lista separada por vírgula), ver `web-origins.ts`. `WEB_URL` é também o destino dos redirecionamentos (login com Google, link do cofre).
+- **Leitor de JSON:** `app.use(json())` no `main.ts` faz o Nest achar que já há um leitor global e pular o dele: sem o segundo `app.use`, todo POST chega com corpo vazio. Por isso tudo vive em `body-parsers.ts` (25 MB só em `BIG_BODY_PATHS`, e `req.rawBody` para a assinatura do Instagram), com teste em `test/body-parsers.spec.ts`.
+- O redirect do Google (`GOOGLE_REDIRECT_URI`) precisa estar cadastrado no Google Cloud, exatamente igual; o Instagram (`INSTAGRAM_REDIRECT_URI`) ainda usa o endereço do Railway (a Meta não tem a URL nova).
 
 **Assistente**
 6. `modules/ai/`, `common/` e `config/` estão vazios; a IA vive em `channels/assistant/`.
@@ -267,6 +281,10 @@ Webhook → `InboundEvent` → worker → `InboxService.processIncoming` → `We
 | Nova rota da API pública | `public-api.controller.ts`, `scopes.ts`, `permissions.ts` (`serviceForScope`), **`openapi.ts`**, `docs/api-publica.md` |
 | Novo evento de webhook | `webhooks.service.ts` (`WEBHOOK_EVENTS`) e o ponto de `emit` |
 | Nova condição/ação de automação | `automations/rules.ts` (validação), `automation-runner.service.ts` (execução), UI em `dashboard/automations/page.tsx` |
+| Mudar o chat do app (mensagem, áudio, arquivo) | `app-chat/app-chat.controller.ts`, `AssistantService.transcribeForApp`/`handleMedia`, tela `dashboard/chat/page.tsx`, `lib/api.ts` (`appChat`), `body-parsers.ts` (`BIG_BODY_PATHS`) |
+| Novo canal do assistente (como o Telegram) | `assistant/channel-route.ts`, `AssistantService.sendToUser`/`sendFileToOwner`, `commander.ts` (`pickChannel`), coluna em `User` sem `@unique` |
+| Mudar o menu do celular / itens só do computador | `layout/Sidebar.tsx` (`nav`, `desktopOnly`), `layout/MobileMenu.tsx` |
+| Mudar as cores do modo dia | `globals.css` (variáveis `--gray-*` e overrides `.light`), `layout/ThemeSync.tsx` |
 | Novo serviço/permissão | `auth/permissions.ts` (`SERVICES`, `ROLE_DEFAULTS`), `Sidebar.tsx` (`nav`) |
 | Mudar o cofre | `vault-crypto.ts` (puro), `vault.service.ts`, `test/vault-*.spec.ts`; ver gotchas 13 e 14 |
 | Novo campo no banco | `packages/database/prisma/schema.prisma` (aditivo, sem `@unique`), depois `pnpm --filter @openclaw/database db:generate` |
