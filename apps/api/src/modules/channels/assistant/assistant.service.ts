@@ -3,7 +3,10 @@ import { planOf } from "../../auth/plans";
 import { maxPdfPages, pdfPageCount } from "./media-limits";
 import { IntentService } from "./intent.service";
 import { pickTools } from "./tool-select";
-import { assertQuota, QUOTA_NOTICE, quotaHit, recordUsage, trackUser } from "./usage";
+import { assertQuota, currentInstance, QUOTA_NOTICE, quotaHit, recordUsage, trackUser } from "./usage";
+import { APP_INSTANCE, channelOfInstance, channelOrder, TELEGRAM_INSTANCE } from "./channel-route";
+import { AppChatService } from "../app-chat/app-chat.service";
+import { TelegramService } from "../telegram/telegram.service";
 import { ForbiddenException, Injectable, Logger } from "@nestjs/common";
 import { prisma } from "@openclaw/database";
 import { GoogleService } from "../../integrations/google/google.service";
@@ -14,9 +17,10 @@ import { toSpeech } from "./speech";
 import { suspiciousReasons } from "./security";
 import { StateService } from "../../state/state.service";
 import { Service } from "../../auth/permissions";
-import { assistantInstance, can, Commander, ECHO_TTL_MS, echoKey, workspaceCommander } from "./commander";
+import { assistantInstance, can, Commander, ECHO_TTL_MS, echoKey, telegramReady, workspaceCommander } from "./commander";
 import { WeatherService } from "./weather.service";
-import { looksLikeSharedSecret, SECRET_WIPE_MS } from "./vault-command";
+import { isVaultHome, isVaultLock, looksLikeSharedSecret, SECRET_WIPE_MS, vaultQuery } from "./vault-command";
+import { normalize } from "./voice";
 import { noteTerms, storageAccount } from "./notes";
 import { addSent, CLEAN_GIVE_UP_MS, IDLE_MENU_MS, idleKey, SENT_TTL_MS, sentKey, SentMessage } from "./chat-clean";
 import { EvolutionError, EvolutionService } from "../evolution/evolution.service";
@@ -291,6 +295,9 @@ export function toolAllowed(services: Service[], name: string) {
   return (Array.isArray(need) ? need : [need]).some((s) => services.includes(s));
 }
 
+/** Resposta no lugar de qualquer coisa do cofre quando o pedido veio pelo Telegram. */
+export const TELEGRAM_VAULT_NOTICE = "🔒 O cofre de senhas não funciona pelo Telegram: as conversas de lá não têm criptografia de ponta a ponta. Use o app MagoBox ou o WhatsApp.";
+
 // Quantos comandos separados por ";" uma chamada de voz aceita
 const MAX_VOICE_STEPS = 4;
 
@@ -307,18 +314,30 @@ export class AssistantService {
     private state: StateService,
     private weather?: WeatherService,
     private intents?: IntentService,
+    private appChat?: AppChatService,
+    private telegram?: TelegramService,
   ) {
     this.menu.setExecutor((ws, a) => this.execute(ws, a.name, a.args));
     this.menu.setFileSender((ws, f) => this.sendFileToOwner(ws, f));
     this.menu.setChatCleaner((ws, minAgeMs) => this.cleanChat(ws, minAgeMs));
   }
 
-  /** Manda um arquivo (base64) para o WhatsApp do dono do workspace, como documento. */
+  /** Manda um arquivo (base64) ao dono do workspace, pelo canal em que ele está conversando (ou o preferido), como documento. */
   private async sendFileToOwner(ws: string, f: { nome: string; mime: string; base64: string; caption?: string }) {
     const owner = await workspaceCommander(ws);
-    const instance = await assistantInstance(ws);
-    if (!owner || !instance) throw new Error("não achei o WhatsApp do dono para enviar o arquivo");
-    this.logger.log(`[AUDIT] ws=${ws} drive_file_sent name=${f.nome} mime=${f.mime}`);
+    const instance = currentInstance() ?? (await assistantInstance(ws, owner));
+    if (!owner || !instance) throw new Error("não achei um canal do dono para enviar o arquivo");
+    this.logger.log(`[AUDIT] ws=${ws} drive_file_sent name=${f.nome} mime=${f.mime} canal=${channelOfInstance(instance)}`);
+    const channel = channelOfInstance(instance);
+    if (channel === "app") {
+      await this.appChat!.deliver(owner, f.caption ?? `📎 ${f.nome}`, { file: { nome: f.nome, mime: f.mime, base64: f.base64 } });
+      return;
+    }
+    if (channel === "telegram") {
+      if (!this.telegram || !owner.telegramChatId) throw new Error("Telegram não vinculado");
+      await this.telegram.sendDocument(owner.telegramChatId, f.base64, f.nome, f.mime, f.caption);
+      return;
+    }
     const res = await this.evolution.sendDocument(instance, owner.phone, f.base64, f.nome, f.mime, f.caption);
     await this.markSent(res, { ws, instance });
   }
@@ -420,16 +439,46 @@ export class AssistantService {
 
   async sendToUser(c: Commander, instanceName: string, text: string, opts: { wipeAfterMs?: number } = {}) {
     const workspaceId = c.workspaceId;
-    const owner = c.phone;
+    const channel = channelOfInstance(instanceName);
 
-    // Modo carro: texto limpo e curto, que o Android Auto/CarPlay leem em voz alta (eles não tocam áudios)
-    if (await this.menu.isCar(workspaceId)) text = toSpeech(text);
-    const res = await this.evolution.sendText(instanceName, owner, text);
-    await this.markSent(res, { ws: workspaceId, instance: instanceName });
-    // Resposta com segredo: agenda o apagamento do chat (o AssistantSchedulerService cumpre)
-    if (opts.wipeAfterMs && res?.key?.id && res.key.remoteJid) {
-      await this.state.set(`wipe:${res.key.id}`, { due: Date.now() + opts.wipeAfterMs, instance: instanceName, key: { id: res.key.id, remoteJid: res.key.remoteJid, fromMe: true } }, 15 * 60_000);
+    // App: a mensagem é guardada (cifrada), chega em tempo real e, com o app fechado, por notificação
+    if (channel === "app") {
+      if (!this.appChat) throw new Error("canal do app indisponível");
+      await this.appChat.deliver(c, text, { wipeAfterMs: opts.wipeAfterMs });
+      return;
     }
+    // Telegram: o cofre nunca chega aqui (ver `blockedOnTelegram`), então não há segredo para apagar depois
+    if (channel === "telegram") {
+      if (!this.telegram || !c.telegramChatId) throw new Error("Telegram não vinculado");
+      await this.telegram.sendText(c.telegramChatId, text);
+      return;
+    }
+
+    // WhatsApp. Modo carro: texto limpo e curto, que o Android Auto/CarPlay leem em voz alta (eles não tocam áudios)
+    if (await this.menu.isCar(workspaceId)) text = toSpeech(text);
+    try {
+      const res = await this.evolution.sendText(instanceName, c.phone, text);
+      await this.markSent(res, { ws: workspaceId, instance: instanceName });
+      // Resposta com segredo: agenda o apagamento do chat (o AssistantSchedulerService cumpre)
+      if (opts.wipeAfterMs && res?.key?.id && res.key.remoteJid) {
+        await this.state.set(`wipe:${res.key.id}`, { due: Date.now() + opts.wipeAfterMs, instance: instanceName, key: { id: res.key.id, remoteJid: res.key.remoteJid, fromMe: true } }, 15 * 60_000);
+      }
+    } catch (e: any) {
+      // WhatsApp fora do ar ou bloqueado: a mesma mensagem segue pelo próximo canal do usuário (app ou Telegram), com aviso
+      const alt = this.fallbackInstance(c);
+      if (!alt || opts.wipeAfterMs) throw e;
+      this.logger.warn(`WhatsApp falhou para ${c.userId} (${String(e?.message ?? e).slice(0, 100)}); enviando por ${channelOfInstance(alt)}`);
+      await this.sendToUser(c, alt, `${text}\n\n_(O WhatsApp não respondeu; enviei por aqui.)_`);
+    }
+  }
+
+  /** Próximo canal do usuário quando o WhatsApp falha: segue a ordem de preferência, sem o WhatsApp. */
+  private fallbackInstance(c: Commander): string | null {
+    for (const ch of channelOrder(c.channel)) {
+      if (ch === "app" && this.appChat) return APP_INSTANCE;
+      if (ch === "telegram" && this.telegram && telegramReady() && c.telegramChatId) return TELEGRAM_INSTANCE;
+    }
+    return null;
   }
 
   /**
@@ -462,8 +511,11 @@ export class AssistantService {
   /** Baixa o áudio do WhatsApp e o envia ao modelo para virar texto (Gemini; Whisper como reserva). */
   async transcribe(instanceName: string, key: object): Promise<string> {
     const media = await this.evolution.getMediaBase64(instanceName, key);
-    const mime = media.mimetype || "audio/ogg";
-    const audio = Buffer.from(media.base64, "base64");
+    return this.transcribeBytes(Buffer.from(media.base64, "base64"), media.mimetype || "audio/ogg");
+  }
+
+  /** Transcreve um áudio que já temos em mãos (vem do app ou do Telegram, não da Evolution). */
+  async transcribeBytes(audio: Buffer, mime: string): Promise<string> {
 
     if (this.gemini.enabled()) {
       try {
@@ -477,7 +529,7 @@ export class AssistantService {
     const apiKey = process.env.OPENAI_API_KEY;
     if (!apiKey) throw new Error("Nenhum serviço de transcrição configurado");
     await assertQuota();
-    const ext = mime.includes("mp4") ? "mp4" : mime.includes("mpeg") ? "mp3" : "ogg";
+    const ext = mime.includes("mp4") ? "mp4" : mime.includes("mpeg") ? "mp3" : mime.includes("webm") ? "webm" : "ogg";
     const form = new FormData();
     form.append("file", new Blob([audio], { type: mime }), `audio.${ext}`);
     form.append("model", process.env.OPENAI_TRANSCRIBE_MODEL || "whisper-1");
@@ -503,10 +555,22 @@ export class AssistantService {
     await this.state.set(`wipe:${key.id}`, { due: Date.now(), instance, key: { id: key.id, remoteJid: key.remoteJid, fromMe: true } }, 15 * 60_000);
   }
 
+  /** Esta mensagem mexe no cofre (abrir, buscar senha, bloquear) ou é o código dele? No Telegram isso não é permitido. */
+  private async blockedOnTelegram(ws: string, text: string): Promise<boolean> {
+    const flat = normalize(text);
+    if (isVaultHome(flat) || isVaultLock(flat) || !!vaultQuery(flat)) return true;
+    return /^\d{4}$/.test(text.trim()) && (await this.menu.awaitingPin(ws));
+  }
+
   /** Devolve `redact: true` quando a mensagem tinha um código do cofre: o registro de entrada deve escondê-la. */
   async handle(c: Commander, instanceName: string, text: string, opts: { heard?: boolean; quoted?: string } = {}): Promise<{ redact: boolean }> {
     const workspaceId = c.workspaceId;
-    trackUser({ userId: c.userId, workspaceId, exempt: c.role === "ROOT" || c.role === "ADMIN", limitUsd: planOf(c.plan)?.aiUsd });
+    trackUser({ userId: c.userId, workspaceId, exempt: c.role === "ROOT" || c.role === "ADMIN", limitUsd: planOf(c.plan)?.aiUsd, instance: instanceName });
+    // Telegram não tem criptografia de ponta a ponta: o cofre de senhas e o código dele nunca passam por lá
+    if (channelOfInstance(instanceName) === "telegram" && (await this.blockedOnTelegram(workspaceId, text))) {
+      await this.sendToUser(c, instanceName, TELEGRAM_VAULT_NOTICE);
+      return { redact: false };
+    }
     let answer: string;
     try {
       answer = (await this.menu.respond(workspaceId, text, opts.quoted || undefined)) ?? (await this.think(c, text));
@@ -518,7 +582,9 @@ export class AssistantService {
     if (opts.heard && !(await this.menu.isCar(workspaceId))) answer = `🎙️ _"${text}"_\n\n${answer}`;
     const secret = await this.menu.takeSecret(workspaceId);
     const redact = await this.menu.takeRedact(workspaceId);
-    await this.sendToUser(c, instanceName, answer, secret ? { wipeAfterMs: SECRET_WIPE_MS } : {});
+    // Rede de segurança: se uma resposta com segredo escapou até aqui, ela não vai pelo Telegram
+    if (secret && channelOfInstance(instanceName) === "telegram") answer = TELEGRAM_VAULT_NOTICE;
+    await this.sendToUser(c, instanceName, answer, secret && channelOfInstance(instanceName) !== "telegram" ? { wipeAfterMs: SECRET_WIPE_MS } : {});
     await this.scheduleIdle(c, instanceName);
     return { redact };
   }
@@ -528,8 +594,13 @@ export class AssistantService {
    * lista para confirmar. Fora disso só orienta, sem baixar nada.
    */
   async handleAgendaMedia(c: Commander, instanceName: string, key: object, media: { mime: string; caption: string }) {
+    return this.handleMedia(c, instanceName, () => this.evolution.getMediaBase64(instanceName, key), media);
+  }
+
+  /** O mesmo tratamento de imagem/PDF para qualquer canal: `fetchMedia` traz o arquivo (da Evolution, do app ou do Telegram). */
+  async handleMedia(c: Commander, instanceName: string, fetchMedia: () => Promise<{ base64: string; mimetype?: string }>, media: { mime: string; caption: string }) {
     const workspaceId = c.workspaceId;
-    trackUser({ userId: c.userId, workspaceId, exempt: c.role === "ROOT" || c.role === "ADMIN", limitUsd: planOf(c.plan)?.aiUsd });
+    trackUser({ userId: c.userId, workspaceId, exempt: c.role === "ROOT" || c.role === "ADMIN", limitUsd: planOf(c.plan)?.aiUsd, instance: instanceName });
     const mode = await this.menu.agendaMediaIntent(workspaceId, media.caption);
     if (mode === "no") return;
     let answer: string;
@@ -541,7 +612,7 @@ export class AssistantService {
         await this.sendToUser(c, instanceName, "📝 Recebi o arquivo! Já estou lendo e criando a nota. Em breve confirmo o cadastro por aqui.").catch((e) => this.logger.warn(`Aviso de recebimento falhou: ${e.message}`));
       }
       try {
-        const m = await this.evolution.getMediaBase64(instanceName, key);
+        const m = await fetchMedia();
         const pages = /pdf/i.test(m.mimetype || media.mime) && m.base64.length * 0.75 <= MAX_MEDIA_BYTES ? pdfPageCount(Buffer.from(m.base64, "base64")) : 0;
         if (m.base64.length * 0.75 > MAX_MEDIA_BYTES) answer = "📎 Esse arquivo é grande demais para eu ler (limite de 15 MB). Mande um arquivo menor.";
         else if (pages > maxPdfPages(planOf(c.plan))) {

@@ -51,6 +51,9 @@ model User {
   services     String[]     @default([])
   // Plano comercial (aprendiz, mago, arquimago, teste); nulo = sem plano (valem os limites gerais do ambiente). Sem @unique de propósito.
   plan         String?
+  // Canal principal do assistente: whatsapp (padrão) | app | telegram. Sem @unique: a unicidade do Telegram é garantida no código.
+  assistantChannel String?
+  telegramChatId   String?
   approvedAt   DateTime?
   createdAt    DateTime     @default(now())
   updatedAt    DateTime     @updatedAt
@@ -62,6 +65,7 @@ model User {
   // Unicidade do telefone é garantida no código (users.service / auth.service): um índice único
   // numa coluna nova faz o `prisma db push` de produção parar pedindo --accept-data-loss
   @@index([phone])
+  @@index([telegramChatId])
 }
 
 model WorkspaceMember {
@@ -429,4 +433,36 @@ model AiUsage {
   @@id([userId, day, provider, model])
   @@index([day])
   @@index([workspaceId, day])
+}
+
+// ─── CANAL DO APP (chat do assistente dentro do MagoBox) ──────────
+
+// Mensagens do chat do app, cifradas em repouso (AES-256-GCM, chave derivada do workspace). Não é "ponta a ponta":
+// o servidor lê o texto para o assistente responder. IN = usuário → assistente; OUT = assistente → usuário.
+model AppMessage {
+  id          String    @id @default(cuid())
+  workspaceId String
+  userId      String
+  direction   String // IN | OUT
+  kind        String // TEXT | AUDIO | FILE | IMAGE
+  body        String // cifrado
+  meta        Json? // { fileId, fileName, mime, size, seconds }
+  // Mensagens com segredo (senha do cofre) somem sozinhas depois deste instante
+  expiresAt   DateTime?
+  createdAt   DateTime  @default(now())
+
+  @@index([userId, createdAt])
+  @@index([expiresAt])
+}
+
+// Assinatura de notificações do navegador (Web Push) de um usuário
+model PushSubscription {
+  id        String   @id @default(cuid())
+  userId    String
+  endpoint  String
+  p256dh    String
+  auth      String
+  createdAt DateTime @default(now())
+
+  @@index([userId])
 }

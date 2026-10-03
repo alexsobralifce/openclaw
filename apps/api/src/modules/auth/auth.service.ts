@@ -120,6 +120,7 @@ export class AuthService {
       platformRole: user.role,
       services: effectiveServices(user.role, user.services),
       plan: user.plan ?? null,
+      assistantChannel: user.assistantChannel ?? "whatsapp",
     };
   }
 

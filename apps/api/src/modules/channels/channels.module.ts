@@ -20,6 +20,12 @@ import { EvolutionModule } from "./evolution/evolution.module";
 import { AutomationsModule } from "../automations/automations.module";
 import { InboundService } from "./inbound/inbound.service";
 import { InstagramService } from "./instagram/instagram.service";
+import { TelegramService } from "./telegram/telegram.service";
+import { TelegramController } from "./telegram/telegram.controller";
+import { AppChatController } from "./app-chat/app-chat.controller";
+import { AppChatService } from "./app-chat/app-chat.service";
+import { AppChatGateway } from "./app-chat/app-chat.gateway";
+import { PushService } from "./app-chat/push.service";
 import { InstagramWorker } from "./workers/instagram.worker";
 
 @Module({
@@ -31,8 +37,8 @@ import { InstagramWorker } from "./workers/instagram.worker";
       inject: [ConfigService],
     }),
   ],
-  controllers: [ChannelsController, AssistantSettingsController],
-  providers: [ChannelsService, WhatsappWorker, InstagramWorker, InstagramService, InboundService, AssistantService, MenuService, MemoryService, GeminiService, IntentService, EmailWatcherService, WeatherService, AssistantSchedulerService],
+  controllers: [ChannelsController, AssistantSettingsController, TelegramController, AppChatController],
+  providers: [TelegramService, AppChatService, AppChatGateway, PushService, ChannelsService, WhatsappWorker, InstagramWorker, InstagramService, InboundService, AssistantService, MenuService, MemoryService, GeminiService, IntentService, EmailWatcherService, WeatherService, AssistantSchedulerService],
   exports: [ChannelsService, EvolutionModule, AssistantService],
 })
 export class ChannelsModule {}

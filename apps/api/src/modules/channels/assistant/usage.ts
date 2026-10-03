@@ -15,10 +15,15 @@ export interface UsageContext {
   exempt?: boolean;
   /** Teto de gasto de IA no mês, em US$, do plano do usuário; ausente = limite geral do ambiente. */
   limitUsd?: number;
+  /** Destino das respostas desta conversa (instância do WhatsApp, "app" ou "telegram"): arquivos seguem pelo mesmo canal. */
+  instance?: string;
   /** A cota foi atingida neste fluxo: quem responde ao usuário acrescenta o aviso. */
   quotaHit?: boolean;
 }
 const als = new AsyncLocalStorage<UsageContext>();
+
+/** Destino das respostas do fluxo atual, se houver. */
+export const currentInstance = () => als.getStore()?.instance;
 
 /** A partir daqui (e em tudo que este fluxo chamar), o consumo de IA é do usuário. */
 export const trackUser = (ctx: UsageContext) => als.enterWith(ctx);

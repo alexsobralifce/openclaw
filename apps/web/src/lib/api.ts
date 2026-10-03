@@ -90,7 +90,36 @@ export interface UsageReport {
   }[];
 }
 
+/** Mensagem do chat do assistente no app. */
+export interface ChatMessage {
+  id: string;
+  direction: "IN" | "OUT";
+  kind: string;
+  text: string;
+  meta: { fileId?: string; fileName?: string; mime?: string; size?: number } | null;
+  createdAt: string;
+}
+
 export const api = {
+  appChat: {
+    messages: (after?: string) => request<ChatMessage[]>(`/app-chat/messages${after ? `?after=${encodeURIComponent(after)}` : ""}`),
+    send: (text: string) => request<ChatMessage>("/app-chat/messages", { method: "POST", body: JSON.stringify({ text }) }),
+    setChannel: (channel: "whatsapp" | "app" | "telegram") => request<{ channel: string }>("/app-chat/channel", { method: "PUT", body: JSON.stringify({ channel }) }),
+    pushStatus: () => request<{ enabled: boolean; publicKey: string; subscribed: boolean }>("/app-chat/push"),
+    pushSubscribe: (sub: unknown) => request<any>("/app-chat/push", { method: "POST", body: JSON.stringify(sub) }),
+    pushUnsubscribe: (endpoint: string) => request<any>("/app-chat/push", { method: "DELETE", body: JSON.stringify({ endpoint }) }),
+    /** Baixa um arquivo enviado pelo assistente (precisa do token, então não dá para usar um link direto). */
+    file: async (id: string): Promise<Blob> => {
+      const res = await fetch(`${API}/api/v1/app-chat/files/${id}`, { headers: { Authorization: `Bearer ${localStorage.getItem("oc_token") ?? ""}` } });
+      if (!res.ok) throw new Error("Arquivo não encontrado ou expirado.");
+      return res.blob();
+    },
+  },
+  telegram: {
+    status: () => request<{ configured: boolean; linked: boolean }>("/channels/telegram/status"),
+    link: () => request<{ code: string; expiresInSeconds: number; bot: string; url: string | null }>("/channels/telegram/link", { method: "POST" }),
+    unlink: () => request<{ linked: boolean }>("/channels/telegram/link", { method: "DELETE" }),
+  },
   auth: {
     login: (email: string, password: string) =>
       request<{ accessToken: string; user: any }>("/auth/login", {

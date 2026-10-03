@@ -12,6 +12,8 @@ export interface UserInfo {
   /** ROOT | ADMIN | USER */
   platformRole?: string;
   services?: string[];
+  /** whatsapp | app | telegram */
+  assistantChannel?: string;
 }
 
 export function getToken(): string | null {

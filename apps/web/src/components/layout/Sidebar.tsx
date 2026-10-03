@@ -62,6 +62,16 @@ export const nav: { href: string; label: string; icon: React.ReactNode; service?
     ),
   },
   {
+    href: "/dashboard/chat",
+    label: "Assistente",
+    service: "assistant",
+    icon: (
+      <svg width="20" height="20" fill="none" viewBox="0 0 24 24">
+        <path d="M12 3l1.9 4.6L18.5 9l-4.6 1.4L12 15l-1.9-4.6L5.5 9l4.6-1.4L12 3zM18 15l.9 2.1L21 18l-2.1.9L18 21l-.9-2.1L15 18l2.1-.9L18 15z" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/>
+      </svg>
+    ),
+  },
+  {
     href: "/dashboard/vault",
     label: "Cofre",
     service: "vault",
