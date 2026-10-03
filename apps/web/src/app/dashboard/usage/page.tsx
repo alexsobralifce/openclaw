@@ -78,9 +78,9 @@ export default function UsagePage() {
             </div>
           </div>
           <p className="text-xs text-gray-500">
-            {data.monthlyLimit > 0
-              ? `Limite mensal por usuário: ${nf.format(data.monthlyLimit)} tokens (root e admin não têm limite). Ao passar, a IA para de responder para a pessoa até o mês seguinte; o menu continua.`
-              : "Sem limite mensal por usuário. Para definir, configure AI_MONTHLY_TOKEN_LIMIT no servidor."}
+            {data.monthlyLimitUsd > 0
+              ? `Limite mensal por usuário: ${usd(data.monthlyLimitUsd)} de gasto em IA, somando todos os provedores pelo preço de cada modelo (root e admin não têm limite). Ao passar, a IA para de responder para a pessoa até o mês seguinte; o menu continua. Modelo sem preço configurado conta pelo maior preço da tabela.`
+              : "Sem limite mensal por usuário. Para definir, configure AI_MONTHLY_USD_LIMIT no servidor, em dólares."}
           </p>
           {data.total.unpricedTokens > 0 && (
             <p className="text-xs text-amber-300/90">
@@ -113,6 +113,7 @@ export default function UsagePage() {
                   <th className="pb-2 pr-3 font-medium text-right">Chamadas</th>
                   <th className="pb-2 pr-3 font-medium text-right">Custo</th>
                   <th className="pb-2 pr-3 font-medium text-right">Projeção/mês</th>
+                  <th className="pb-2 pr-3 font-medium text-right">No mês</th>
                   <th className="pb-2 font-medium">Provedores</th>
                 </tr>
               </thead>
@@ -129,13 +130,19 @@ export default function UsagePage() {
                     <td className="py-2 pr-3 text-right tabular-nums">{nf.format(u.calls)}</td>
                     <td className="py-2 pr-3 text-right tabular-nums">{usd(u.costUsd)}{u.unpricedTokens > 0 && <span title="Parte do consumo sem preço configurado"> *</span>}</td>
                     <td className="py-2 pr-3 text-right tabular-nums">{usd(u.monthlyUsd)}</td>
+                    <td className="py-2 pr-3 text-right tabular-nums">
+                      {usd(u.monthUsd)}
+                      {data.monthlyLimitUsd > 0 && u.role !== "ROOT" && u.role !== "ADMIN" && u.userId !== "sistema" && (
+                        <span className={u.monthUsd >= data.monthlyLimitUsd ? "block text-xs text-red-300" : "block text-xs text-gray-500"}>{Math.round((u.monthUsd / data.monthlyLimitUsd) * 100)}% do limite</span>
+                      )}
+                    </td>
                     <td className="py-2 text-xs text-gray-400">
                       {Object.entries(u.byProvider).map(([p, v]) => `${PROVIDERS[p] ?? p}: ${nf.format(v.tokens)}`).join(" · ")}
                     </td>
                   </tr>
                 ))}
                 {data.users.length === 0 && (
-                  <tr><td colSpan={8} className="py-4 text-gray-500">Nenhum consumo registrado ainda. O contador começa a valer a partir do deploy.</td></tr>
+                  <tr><td colSpan={9} className="py-4 text-gray-500">Nenhum consumo registrado ainda. O contador começa a valer a partir do deploy.</td></tr>
                 )}
               </tbody>
             </table>

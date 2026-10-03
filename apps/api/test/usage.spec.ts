@@ -87,56 +87,84 @@ describe("contador de tokens", () => {
   });
 });
 
-describe("limite mensal por usuário", async () => {
-  const { assertQuota, QuotaExceededError, quotaHit, monthlyLimit, resetQuotaCache } = await import("../src/modules/channels/assistant/usage");
-  const agg = vi.fn();
-  (await import("@openclaw/database")).prisma.aiUsage.aggregate = agg as any;
-  const setup = (used: number, limit: string | undefined) => {
+describe("limite mensal por usuário, em dólar", async () => {
+  const { assertQuota, QuotaExceededError, quotaHit, monthlyLimitUsd, resetQuotaCache, limitCost, monthSpend } = await import("../src/modules/channels/assistant/usage");
+  const find = vi.fn();
+  (await import("@openclaw/database")).prisma.aiUsage.findMany = find as any;
+  const PRICES = '{"gemini-x":{"in":0.75,"out":3.75}}';
+  const setup = (rows: { model: string; inputTokens: number; outputTokens: number }[], limit: string | undefined) => {
     resetQuotaCache();
-    agg.mockReset();
-    agg.mockResolvedValue({ _sum: { inputTokens: used, outputTokens: 0 } });
-    if (limit === undefined) delete process.env.AI_MONTHLY_TOKEN_LIMIT;
-    else process.env.AI_MONTHLY_TOKEN_LIMIT = limit;
+    find.mockReset();
+    find.mockResolvedValue(rows);
+    process.env.AI_PRICES = PRICES;
+    if (limit === undefined) delete process.env.AI_MONTHLY_USD_LIMIT;
+    else process.env.AI_MONTHLY_USD_LIMIT = limit;
   };
 
   it("sem limite configurado nada é barrado (e nem consulta o banco)", async () => {
-    setup(999_999_999, undefined);
+    setup([{ model: "gemini-x", inputTokens: 999_000_000, outputTokens: 0 }], undefined);
     await runAs({ userId: "u1" }, () => expect(assertQuota()).resolves.toBeUndefined());
-    expect(agg).not.toHaveBeenCalled();
-    expect(monthlyLimit()).toBe(0);
+    expect(find).not.toHaveBeenCalled();
+    expect(monthlyLimitUsd()).toBe(0);
   });
 
-  it("passou do limite: barra e marca o fluxo para o aviso", async () => {
-    setup(1000, "1000");
+  it("o mesmo número de tokens pesa diferente: Gemini estoura o limite, gpt-4o-mini não", async () => {
+    // 2 milhões de tokens de entrada: Gemini = US$ 1,50; gpt-4o-mini = US$ 0,30. Limite de US$ 1.
+    setup([{ model: "gemini-x", inputTokens: 2_000_000, outputTokens: 0 }], "1");
     await runAs({ userId: "u1" }, async () => {
       await expect(assertQuota()).rejects.toBeInstanceOf(QuotaExceededError);
       expect(quotaHit()).toBe(true);
     });
-  });
-
-  it("abaixo do limite passa; root/admin (isento) e rotinas sem usuário nunca são barrados", async () => {
-    setup(10, "1000");
-    await runAs({ userId: "u1" }, async () => {
+    setup([{ model: "gpt-4o-mini", inputTokens: 2_000_000, outputTokens: 0 }], "1");
+    await runAs({ userId: "u2" }, async () => {
       await assertQuota();
       expect(quotaHit()).toBe(false);
     });
-    setup(5000, "1000");
+  });
+
+  it("a mensagem do limite sai em português, com o valor em dólar", async () => {
+    setup([{ model: "gemini-x", inputTokens: 10_000_000, outputTokens: 0 }], "4");
+    await runAs({ userId: "u1" }, () => expect(assertQuota()).rejects.toThrow("Limite mensal de uso de IA atingido (US$ 4,00)."));
+  });
+
+  it("modelo sem preço não vale zero: usa o maior preço da tabela; sem tabela, zero", () => {
+    const prices = loadPrices(PRICES);
+    expect(limitCost({ model: "desconhecido", inputTokens: 1_000_000, outputTokens: 1_000_000 }, prices)).toBeCloseTo(4.5, 6);
+    expect(limitCost({ model: "gpt-4o-mini", inputTokens: 1_000_000, outputTokens: 0 }, prices)).toBeCloseTo(0.15, 6);
+    expect(limitCost({ model: "x", inputTokens: 5, outputTokens: 5 }, {})).toBe(0);
+  });
+
+  it("root/admin (isento) e rotinas sem usuário nunca são barrados", async () => {
+    setup([{ model: "gemini-x", inputTokens: 99_000_000, outputTokens: 0 }], "1");
     await runAs({ userId: "root", exempt: true }, () => expect(assertQuota()).resolves.toBeUndefined());
     await expect(assertQuota()).resolves.toBeUndefined();
   });
 
   it("o que acabou de ser gasto conta na hora, sem esperar o cache", async () => {
-    setup(900, "1000");
-    await runAs({ userId: "u2" }, async () => {
-      await assertQuota();
-      recordUsage("openai", "m", { input: 80, output: 30 });
+    setup([{ model: "gemini-x", inputTokens: 1_000_000, outputTokens: 0 }], "1");
+    await runAs({ userId: "u3" }, async () => {
+      await assertQuota(); // US$ 0,75 de US$ 1
+      recordUsage("gemini", "gemini-x", { input: 100_000, output: 100_000 }); // + US$ 0,45
       await expect(assertQuota()).rejects.toBeInstanceOf(QuotaExceededError);
     });
   });
 
   it("se o banco falhar na consulta, deixa passar", async () => {
-    setup(0, "1000");
-    agg.mockRejectedValue(new Error("banco fora"));
-    await runAs({ userId: "u3" }, () => expect(assertQuota()).resolves.toBeUndefined());
+    setup([], "1");
+    find.mockRejectedValue(new Error("banco fora"));
+    await runAs({ userId: "u4" }, () => expect(assertQuota()).resolves.toBeUndefined());
+  });
+
+  it("monthSpend soma o gasto do mês por usuário", () => {
+    const m = monthSpend(
+      [
+        { userId: "a", provider: "g", model: "gemini-x", day: "2026-10-01", calls: 1, inputTokens: 1_000_000, outputTokens: 0 },
+        { userId: "a", provider: "o", model: "gpt-4o-mini", day: "2026-10-02", calls: 1, inputTokens: 1_000_000, outputTokens: 0 },
+        { userId: "b", provider: "o", model: "gpt-4o-mini", day: "2026-10-02", calls: 1, inputTokens: 0, outputTokens: 1_000_000 },
+      ],
+      loadPrices(PRICES),
+    );
+    expect(m.get("a")).toBeCloseTo(0.9, 6);
+    expect(m.get("b")).toBeCloseTo(0.6, 6);
   });
 });

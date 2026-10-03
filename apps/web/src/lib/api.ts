@@ -51,7 +51,7 @@ export interface UsageReport {
   since: string;
   total: { calls: number; inputTokens: number; outputTokens: number; totalTokens: number; costUsd: number; unpricedTokens: number };
   avgMonthlyUsd: number;
-  monthlyLimit: number;
+  monthlyLimitUsd: number;
   activeUsers: number;
   usdBrl: number | null;
   pricedModels: string[];
@@ -70,6 +70,7 @@ export interface UsageReport {
     costUsd: number;
     unpricedTokens: number;
     monthlyUsd: number;
+    monthUsd: number;
     status: string | null;
   }[];
 }

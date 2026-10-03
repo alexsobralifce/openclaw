@@ -44,7 +44,7 @@ export function recordUsage(provider: string, model: string, tokens: Tokens, fal
   const userId = ctx?.userId ?? SYSTEM_USER;
   const workspaceId = ctx?.workspaceId ?? fallbackWs ?? "";
   const day = dayStamp(at, TZ);
-  bumpMonth(userId, tokens.input + tokens.output);
+  bumpMonth(userId, limitCost({ model, inputTokens: tokens.input, outputTokens: tokens.output }, loadPrices()));
   void Promise.resolve()
     .then(() =>
       prisma.aiUsage.upsert({
@@ -83,6 +83,18 @@ export function costOf(r: { model: string; inputTokens: number; outputTokens: nu
   const key = Object.keys(prices).filter((k) => r.model === k || r.model.startsWith(`${k}-`)).sort((a, b) => b.length - a.length)[0];
   const p = key && prices[key];
   return p ? (r.inputTokens * p.in + r.outputTokens * p.out) / 1_000_000 : null;
+}
+
+/**
+ * Custo para o limite mensal: igual a `costOf`, mas modelo sem preço não vale zero (o limite ficaria cego a ele):
+ * usa o maior preço da tabela, em entrada e em saída. Sem nenhum preço configurado, devolve 0.
+ */
+export function limitCost(r: { model: string; inputTokens: number; outputTokens: number }, prices: Record<string, Price>): number {
+  const c = costOf(r, prices);
+  if (c !== null) return c;
+  const ps = Object.values(prices);
+  if (!ps.length) return 0;
+  return (r.inputTokens * Math.max(...ps.map((p) => p.in)) + r.outputTokens * Math.max(...ps.map((p) => p.out))) / 1_000_000;
 }
 
 export interface UsageRow {
@@ -142,17 +154,17 @@ export function rollup(rows: UsageRow[], prices: Record<string, Price> = {}, tod
   return { users: list, total, byDay: [...days].map(([day, tokens]) => ({ day, tokens })).sort((a, b) => a.day.localeCompare(b.day)) };
 }
 
-// ─── Limite mensal de tokens por usuário ─────────────────────────
+// ─── Limite mensal por usuário, em dólar ─────────────────────────
 
-/** Limite de tokens por usuário no mês (AI_MONTHLY_TOKEN_LIMIT); 0 ou vazio = sem limite. */
-export const monthlyLimit = () => {
-  const n = Math.trunc(Number(process.env.AI_MONTHLY_TOKEN_LIMIT));
+/** Limite de gasto de IA por usuário no mês, em US$ (AI_MONTHLY_USD_LIMIT); 0 ou vazio = sem limite. */
+export const monthlyLimitUsd = () => {
+  const n = Number(process.env.AI_MONTHLY_USD_LIMIT);
   return Number.isFinite(n) && n > 0 ? n : 0;
 };
 
 export class QuotaExceededError extends Error {
-  constructor(limit: number) {
-    super(`Limite mensal de uso de IA atingido (${limit.toLocaleString("pt-BR")} tokens).`);
+  constructor(limitUsd: number) {
+    super(`Limite mensal de uso de IA atingido (US$ ${limitUsd.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}).`);
   }
 }
 
@@ -162,18 +174,19 @@ export const QUOTA_NOTICE = "⚠️ *Você atingiu o limite mensal de uso de IA.
 /** O fluxo atual bateu na cota? */
 export const quotaHit = () => !!als.getStore()?.quotaHit;
 
-const monthCache = new Map<string, { at: number; tokens: number }>();
+const monthCache = new Map<string, { at: number; usd: number }>();
 const MONTH_CACHE_MS = 60_000;
 
-/** Tokens do usuário no mês corrente (cache de 1 min para não consultar o banco a cada chamada). */
-async function monthTokens(userId: string, at = new Date()): Promise<number> {
+/** Gasto do usuário no mês corrente, em US$ (cache de 1 min para não consultar o banco a cada chamada). */
+async function monthUsd(userId: string, at = new Date()): Promise<number> {
   const hit = monthCache.get(userId);
-  if (hit && Date.now() - hit.at < MONTH_CACHE_MS) return hit.tokens;
+  if (hit && Date.now() - hit.at < MONTH_CACHE_MS) return hit.usd;
   const first = `${dayStamp(at, TZ).slice(0, 7)}-01`;
-  const agg = await prisma.aiUsage.aggregate({ where: { userId, day: { gte: first } }, _sum: { inputTokens: true, outputTokens: true } });
-  const tokens = (agg._sum.inputTokens ?? 0) + (agg._sum.outputTokens ?? 0);
-  monthCache.set(userId, { at: Date.now(), tokens });
-  return tokens;
+  const rows = await prisma.aiUsage.findMany({ where: { userId, day: { gte: first } }, select: { model: true, inputTokens: true, outputTokens: true } });
+  const prices = loadPrices();
+  const usd = rows.reduce((sum, r) => sum + limitCost(r, prices), 0);
+  monthCache.set(userId, { at: Date.now(), usd });
+  return usd;
 }
 
 /**
@@ -181,12 +194,12 @@ async function monthTokens(userId: string, at = new Date()): Promise<number> {
  * automáticas) ou isento (root/admin), não faz nada. Se o banco falhar, deixa passar: contar nunca derruba o assistente.
  */
 export async function assertQuota(): Promise<void> {
-  const limit = monthlyLimit();
+  const limit = monthlyLimitUsd();
   const ctx = als.getStore();
   if (!limit || !ctx?.userId || ctx.exempt) return;
   let used = 0;
   try {
-    used = await monthTokens(ctx.userId);
+    used = await monthUsd(ctx.userId);
   } catch {
     return;
   }
@@ -197,9 +210,16 @@ export async function assertQuota(): Promise<void> {
 }
 
 /** Soma ao cache o que acabou de ser gasto, para a cota valer sem esperar o minuto do cache. */
-export function bumpMonth(userId: string, tokens: number): void {
+export function bumpMonth(userId: string, usd: number): void {
   const hit = monthCache.get(userId);
-  if (hit) hit.tokens += tokens;
+  if (hit) hit.usd += usd;
+}
+
+/** Gasto de cada usuário no mês corrente, para a página Consumo. */
+export function monthSpend(rows: UsageRow[], prices: Record<string, Price>): Map<string, number> {
+  const out = new Map<string, number>();
+  for (const r of rows) out.set(r.userId, (out.get(r.userId) ?? 0) + limitCost(r, prices));
+  return out;
 }
 
 export const resetQuotaCache = () => monthCache.clear();
