@@ -58,6 +58,7 @@ export default function ChatPage() {
     if (!t) return;
     setText("");
     setError("");
+    document.querySelector<HTMLTextAreaElement>('textarea[name="mensagem-assistente"]')?.style.removeProperty("height");
     try {
       add(await api.appChat.send(t));
     } catch (e: any) {
@@ -176,8 +177,29 @@ export default function ChatPage() {
 
       {error && <div className="mx-4 mb-2 text-sm rounded-lg px-3 py-2 bg-red-500/10 text-red-300">{error}</div>}
       <form onSubmit={(e) => { e.preventDefault(); void send(); }} className="flex gap-2 p-3 border-t border-gray-800">
-        <input value={text} onChange={(e) => setText(e.target.value)} maxLength={4000} placeholder="Escreva uma mensagem" aria-label="Mensagem para o assistente" autoComplete="off"
-          className="flex-1 bg-gray-900 border border-gray-800 rounded-lg px-3 py-2 text-sm text-gray-200 focus:outline-none focus:border-violet-500" />
+        {/* textarea em vez de input: o Chrome do Android não oferece senha/cartão/endereço (faixa branca acima do teclado) em área de texto */}
+        <textarea
+          value={text}
+          rows={1}
+          maxLength={4000}
+          name="mensagem-assistente"
+          enterKeyHint="send"
+          autoComplete="off"
+          placeholder="Escreva uma mensagem"
+          aria-label="Mensagem para o assistente"
+          onChange={(e) => {
+            setText(e.target.value);
+            e.target.style.height = "auto";
+            e.target.style.height = `${Math.min(e.target.scrollHeight, 128)}px`;
+          }}
+          onKeyDown={(e) => {
+            if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) {
+              e.preventDefault();
+              void send();
+            }
+          }}
+          className="flex-1 resize-none bg-gray-900 border border-gray-800 rounded-lg px-3 py-2 text-sm text-gray-200 focus:outline-none focus:border-violet-500"
+        />
         <button type="submit" disabled={!text.trim()} className="px-4 py-2 rounded-lg text-sm font-medium bg-violet-500 text-white disabled:opacity-40">Enviar</button>
       </form>
     </div>
