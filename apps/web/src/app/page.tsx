@@ -111,7 +111,7 @@ export default function Landing() {
           </nav>
           <div className="flex items-center gap-3">
             <Link href="/auth/login" className="hidden text-sm text-[#a49eaf] hover:text-white sm:block">Entrar</Link>
-            <Link href="/auth/register" className="rounded-lg bg-[#A78BFA] px-4 py-2 text-sm font-semibold text-[#1E1B4B] transition hover:bg-[#C4B5FD]">
+            <Link href="/auth/register" className="rounded-lg bg-[#FBBF24] px-4 py-2 text-sm font-semibold text-[#2E1065] transition hover:bg-[#FDE68A]">
               Testar grátis
             </Link>
           </div>
@@ -133,7 +133,7 @@ export default function Landing() {
               Um assistente que avisa de cada e-mail, mostra sua agenda e cuida das conversas dos clientes. Você só digita um número ou manda um áudio.
             </p>
             <div className="mt-9 flex flex-wrap items-center gap-4">
-              <Link href="/auth/register" className="rounded-xl bg-[#A78BFA] px-6 py-3.5 text-base font-semibold text-[#1E1B4B] transition hover:bg-[#C4B5FD]">
+              <Link href="/auth/register" className="rounded-xl bg-[#FBBF24] px-6 py-3.5 text-base font-semibold text-[#2E1065] transition hover:bg-[#FDE68A]">
                 Começar 7 dias grátis
               </Link>
               <a href="#como" className="rounded-xl border border-white/15 px-6 py-3.5 text-base font-medium text-white transition hover:bg-white/5">
@@ -256,7 +256,7 @@ Olá! Confirmo minha presença na reunião. Obrigado pelo convite.
                 </li>
               ))}
             </ul>
-            <Link href="/auth/register" className="mt-8 block rounded-xl bg-[#A78BFA] py-3.5 text-center text-base font-semibold text-[#1E1B4B] transition hover:bg-[#C4B5FD]">
+            <Link href="/auth/register" className="mt-8 block rounded-xl bg-[#FBBF24] py-3.5 text-center text-base font-semibold text-[#2E1065] transition hover:bg-[#FDE68A]">
               Começar 7 dias grátis
             </Link>
             <p className="mt-3 text-center text-xs text-[#868090]">Cancele antes do fim do teste e não paga nada.</p>
@@ -288,7 +288,7 @@ Olá! Confirmo minha presença na reunião. Obrigado pelo convite.
           <h2 className={`${H} text-balance text-3xl font-bold tracking-tight sm:text-4xl`}>
             Teste por 7 dias e veja quanto tempo você ganha.
           </h2>
-          <Link href="/auth/register" className="mt-8 inline-block rounded-xl bg-[#A78BFA] px-8 py-4 text-base font-semibold text-[#1E1B4B] transition hover:bg-[#C4B5FD]">
+          <Link href="/auth/register" className="mt-8 inline-block rounded-xl bg-[#FBBF24] px-8 py-4 text-base font-semibold text-[#2E1065] transition hover:bg-[#FDE68A]">
             Criar minha conta
           </Link>
         </div>
