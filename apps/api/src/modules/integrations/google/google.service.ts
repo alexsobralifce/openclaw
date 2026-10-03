@@ -130,11 +130,11 @@ export class GoogleService implements OnModuleInit {
   }
 
   /** Troca o código do login pelo e-mail da conta Google. O id_token vem direto do Google (TLS + segredo do app); ainda se confere o destinatário. */
-  async loginIdentity(code: string): Promise<{ email: string; verified: boolean }> {
+  async loginIdentity(code: string): Promise<{ email: string; verified: boolean; name: string }> {
     const t = await this.tokenRequest({ code, grant_type: "authorization_code", redirect_uri: this.redirectUri });
     const claims = JSON.parse(Buffer.from(String(t.id_token ?? "").split(".")[1] ?? "", "base64url").toString() || "{}");
     if (claims.aud !== this.clientId || !/^(https:\/\/)?accounts\.google\.com$/.test(claims.iss ?? "") || !claims.email) throw new Error("id_token do Google inválido");
-    return { email: String(claims.email).toLowerCase(), verified: claims.email_verified === true || claims.email_verified === "true" };
+    return { email: String(claims.email).toLowerCase(), verified: claims.email_verified === true || claims.email_verified === "true", name: String(claims.name ?? "") };
   }
 
   private async tokenRequest(params: Record<string, string>) {

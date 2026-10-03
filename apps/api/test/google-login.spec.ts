@@ -1,7 +1,20 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const users: any[] = [];
-vi.mock("@openclaw/database", () => ({ prisma: { user: { findUnique: async ({ where }: any) => users.find((u) => u.id === where.id) ?? null } } }));
+vi.mock("@openclaw/database", () => ({
+  prisma: {
+    user: {
+      findUnique: async ({ where }: any) => users.find((u) => u.id === where.id) ?? null,
+      findFirst: async ({ where }: any) => users.find((u) => u.email?.toLowerCase() === where.email?.equals?.toLowerCase()) ?? null,
+      count: async ({ where }: any = {}) => users.filter((u) => !where?.status || u.status === where.status).length,
+      create: async ({ data }: any) => {
+        const u = { id: `n${users.length}`, ...data, workspaces: [] };
+        users.push(u);
+        return u;
+      },
+    },
+  },
+}));
 
 import { AuthService } from "../src/modules/auth/auth.service";
 import { GoogleService } from "../src/modules/integrations/google/google.service";
@@ -33,6 +46,26 @@ describe("ticket do login com Google", () => {
   });
 });
 
+describe("conta nova pelo Google", () => {
+  beforeEach(() => users.splice(0));
+
+  it("fica pendente e sem senha quando já existe usuário", async () => {
+    users.push({ id: "root", status: "ACTIVE", email: "root@a.com" });
+    const u = await new AuthService(jwt as any, state as any).registerFromGoogle("novo@gmail.com", "Maria Silva");
+    expect(u).toMatchObject({ status: "PENDING", role: "USER", passwordHash: null, name: "Maria Silva" });
+  });
+
+  it("não duplica e-mail já cadastrado", async () => {
+    users.push({ id: "u", status: "ACTIVE", email: "Maria@gmail.com" });
+    await expect(new AuthService(jwt as any, state as any).registerFromGoogle("maria@gmail.com", "Maria")).rejects.toThrow("já cadastrado");
+  });
+
+  it("usa a parte do e-mail quando o Google não manda o nome", async () => {
+    users.push({ id: "root", status: "ACTIVE", email: "root@a.com" });
+    expect((await new AuthService(jwt as any, state as any).registerFromGoogle("joao@gmail.com", "")).name).toBe("joao");
+  });
+});
+
 describe("identidade do Google", () => {
   const idToken = (claims: object) => `h.${Buffer.from(JSON.stringify(claims)).toString("base64url")}.s`;
   const mockToken = (claims: object) => vi.stubGlobal("fetch", vi.fn(async () => ({ ok: true, json: async () => ({ id_token: idToken(claims) }) })));
@@ -44,7 +77,7 @@ describe("identidade do Google", () => {
 
   it("devolve e-mail em minúsculas e se foi verificado", async () => {
     mockToken({ aud: "cid", iss: "https://accounts.google.com", email: "Ana@Gmail.com", email_verified: true });
-    expect(await new GoogleService().loginIdentity("c")).toEqual({ email: "ana@gmail.com", verified: true });
+    expect(await new GoogleService().loginIdentity("c")).toEqual({ email: "ana@gmail.com", verified: true, name: "" });
     mockToken({ aud: "cid", iss: "accounts.google.com", email: "b@gmail.com" });
     expect((await new GoogleService().loginIdentity("c")).verified).toBe(false);
   });

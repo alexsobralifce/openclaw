@@ -25,6 +25,19 @@ export class AuthService {
    * os demais ficam pendentes até um ROOT/ADMIN aprovar e liberar os serviços.
    */
   async register(email: string, name: string, password: string, workspaceName: string) {
+    const passwordHash = await bcrypt.hash(password, 12);
+    const user = await this.createAccount(email, name, passwordHash, workspaceName);
+    if (user.status !== "ACTIVE") return { pending: true, message: statusMessage(user.status) };
+    return this.buildResponse(user);
+  }
+
+  /** Conta nova de quem entrou com o Google (sem senha): mesmas regras do cadastro, então fica pendente até o administrador aprovar. */
+  async registerFromGoogle(email: string, name: string) {
+    const display = name.trim().slice(0, 80) || email.split("@")[0];
+    return this.createAccount(email, display, null, `Espaço de ${display.split(" ")[0]}`);
+  }
+
+  private async createAccount(email: string, name: string, passwordHash: string | null, workspaceName: string) {
     // O primeiro usuário (root) sempre pode se cadastrar; depois, há um teto de pendentes
     if ((await prisma.user.count()) > 0 && (await prisma.user.count({ where: { status: "PENDING" } })) >= MAX_PENDING) {
       throw new ServiceUnavailableException("Cadastros temporariamente indisponíveis. Fale com o administrador.");
@@ -32,7 +45,6 @@ export class AuthService {
     const existing = await prisma.user.findFirst({ where: { email: { equals: email, mode: "insensitive" } } });
     if (existing) throw new ConflictException("Email já cadastrado");
 
-    const passwordHash = await bcrypt.hash(password, 12);
     const slug = workspaceName
       .toLowerCase()
       .normalize("NFD")
@@ -44,7 +56,7 @@ export class AuthService {
     const uniqueSlug = `${slug}-${Date.now().toString(36)}`;
     const first = (await prisma.user.count()) === 0;
 
-    const user = await prisma.user.create({
+    return prisma.user.create({
       data: {
         email,
         name,
@@ -61,9 +73,6 @@ export class AuthService {
       },
       include: { workspaces: { include: { workspace: true } } },
     });
-
-    if (user.status !== "ACTIVE") return { pending: true, message: statusMessage(user.status) };
-    return this.buildResponse(user);
   }
 
   async login(email: string, password: string) {
