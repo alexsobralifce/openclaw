@@ -22,6 +22,15 @@ function pcmToWav(pcm: Buffer, sampleRate = 24000): Buffer {
   return Buffer.concat([header, pcm]);
 }
 
+/**
+ * Nível de "pensamento" das leituras (GEMINI_THINKING_LEVEL): "low" por padrão, que corta o custo de saída sem perder qualidade
+ * em transcrever e extrair. Não usa "minimal", que o 3.8 Flash recusa. "off" não envia nada (o modelo decide).
+ */
+export function thinkingConfig(): { thinkingConfig?: { thinkingLevel: string } } {
+  const raw = (process.env.GEMINI_THINKING_LEVEL ?? "low").trim().toLowerCase();
+  return ["low", "medium", "high"].includes(raw) ? { thinkingConfig: { thinkingLevel: raw } } : {};
+}
+
 @Injectable()
 export class GeminiService {
   enabled() {
@@ -31,12 +40,13 @@ export class GeminiService {
   private async call(model: string, body: object, timeoutMs = 30_000, retries = 2): Promise<any> {
     await assertQuota();
     let lastErr = "";
+    let payload: any = body;
     for (let attempt = 0; attempt <= retries; attempt++) {
       // Esta chave só é aceita na URL; nunca registrar a URL em logs.
       const res = await fetch(`${BASE}/${model}:generateContent?key=${process.env.GEMINI_API_KEY}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(body),
+        body: JSON.stringify(payload),
         signal: AbortSignal.timeout(timeoutMs),
       });
       if (res.ok) {
@@ -45,6 +55,13 @@ export class GeminiService {
         return data;
       }
       lastErr = `Gemini ${res.status}: ${(await res.text()).slice(0, 200)}`;
+      // Modelo que não aceita o nível de pensamento (ou outro parâmetro dele): repete sem esse ajuste, em vez de falhar a leitura
+      if (res.status === 400 && payload.generationConfig?.thinkingConfig) {
+        const { thinkingConfig: _drop, ...rest } = payload.generationConfig;
+        payload = { ...payload, generationConfig: rest };
+        attempt--; // não conta como tentativa: o pedido mudou
+        continue;
+      }
       // 503/429: alta demanda, tenta de novo
       if (res.status !== 503 && res.status !== 429) break;
       await new Promise((r) => setTimeout(r, 800 * (attempt + 1)));
@@ -64,6 +81,7 @@ export class GeminiService {
           ],
         },
       ],
+      generationConfig: thinkingConfig(),
     };
     // Resposta rápida ou nada: se o Gemini demorar, quem chamou usa outro serviço (Whisper).
     const models = [process.env.GEMINI_MODEL || "gemini-3.8-flash", ...(process.env.GEMINI_FALLBACK_MODEL ? [process.env.GEMINI_FALLBACK_MODEL] : [])];
@@ -89,7 +107,7 @@ export class GeminiService {
     if (input.text) parts.push({ text: `Texto enviado:\n${input.text}` });
     if (input.urls?.length) parts.push({ text: `Links para ler:\n${input.urls.join("\n")}` });
     for (const m of input.media ?? []) parts.push({ inline_data: { mime_type: m.mime.split(";")[0].trim(), data: m.base64 } });
-    const body: any = { contents: [{ parts }], ...(input.urls?.length ? { tools: [{ url_context: {} }] } : {}) };
+    const body: any = { contents: [{ parts }], generationConfig: thinkingConfig(), ...(input.urls?.length ? { tools: [{ url_context: {} }] } : {}) };
     const models = [process.env.GEMINI_MODEL || "gemini-3.8-flash", ...(process.env.GEMINI_FALLBACK_MODEL ? [process.env.GEMINI_FALLBACK_MODEL] : [])];
     let lastErr: any;
     for (const model of models) {

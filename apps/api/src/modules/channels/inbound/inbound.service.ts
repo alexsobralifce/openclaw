@@ -1,3 +1,4 @@
+import { fmtDuration, maxAudioSeconds } from "../assistant/media-limits";
 import { QUOTA_NOTICE, quotaHit, trackUser } from "../assistant/usage";
 import { Injectable, Logger, OnModuleDestroy, OnModuleInit } from "@nestjs/common";
 import { prisma, Prisma } from "@openclaw/database";
@@ -7,7 +8,7 @@ import { WhatsappWorker } from "../workers/whatsapp.worker";
 import { InstagramWorker } from "../workers/instagram.worker";
 import { InstagramEvent, parseInstagramWebhook } from "../instagram/parse";
 import { AutomationRunner } from "../../automations/automation-runner.service";
-import { agendaMedia, commandText, isVoiceOrAudio, locationOf, quotedText, redactText } from "../whatsapp/parse";
+import { agendaMedia, audioSeconds, commandText, isVoiceOrAudio, locationOf, quotedText, redactText } from "../whatsapp/parse";
 import { isGroupOrBroadcast, phoneFromJid, samePhone, senderPhone } from "../whatsapp/phone";
 
 // Retentativas: 5 s, 30 s, 2 min, 10 min, 1 h (depois disso o evento fica FAILED para inspeção)
@@ -166,6 +167,12 @@ export class InboundService implements OnModuleInit, OnModuleDestroy {
         // Esperando o código do cofre: áudio não serve (iria para a transcrição de terceiros). Nada é baixado nem enviado.
         if (await this.assistant.awaitingPin(commander.workspaceId)) {
           await this.assistant.sendToUser(commander, instance, "🔢 Por segurança, digite o código de 4 dígitos por *texto*, não por áudio.");
+          return;
+        }
+        // Áudio muito longo custa caro para transcrever: pede um recado mais curto, sem baixar nada
+        const secs = audioSeconds(data.message);
+        if (secs && secs > maxAudioSeconds()) {
+          await this.assistant.sendToUser(commander, instance, `🎙️ Esse áudio tem ${fmtDuration(secs)}, mais que o limite de ${fmtDuration(maxAudioSeconds())}. Pode mandar em partes menores, ou escrever?`);
           return;
         }
         try {

@@ -1,4 +1,6 @@
 import { chatCompletion } from "./openai-chat";
+import { maxPdfPages, pdfPageCount } from "./media-limits";
+import { selectToolNames } from "./tool-select";
 import { assertQuota, QUOTA_NOTICE, quotaHit, recordUsage, trackUser } from "./usage";
 import { ForbiddenException, Injectable, Logger } from "@nestjs/common";
 import { prisma } from "@openclaw/database";
@@ -22,7 +24,7 @@ import { addMute, loadMute, removeMute, saveMute, senderAddress } from "./email-
 
 const TZ = process.env.ASSISTANT_TZ || "America/Fortaleza";
 
-const TOOLS = [
+export const TOOLS = [
   {
     type: "function",
     function: {
@@ -532,8 +534,11 @@ export class AssistantService {
       }
       try {
         const m = await this.evolution.getMediaBase64(instanceName, key);
+        const pages = /pdf/i.test(m.mimetype || media.mime) && m.base64.length * 0.75 <= MAX_MEDIA_BYTES ? pdfPageCount(Buffer.from(m.base64, "base64")) : 0;
         if (m.base64.length * 0.75 > MAX_MEDIA_BYTES) answer = "📎 Esse arquivo é grande demais para eu ler (limite de 15 MB). Mande um arquivo menor.";
-        else {
+        else if (pages > maxPdfPages()) {
+          answer = `📄 Esse PDF tem cerca de ${pages} páginas, mais que o limite de ${maxPdfPages()}. Mande só as páginas que interessam, ou divida o arquivo em partes.`;
+        } else {
           const src = { text: media.caption || undefined, media: [{ mime: m.mimetype || media.mime, base64: m.base64 }] };
           answer = mode === "note" ? await this.menu.noteIngest(workspaceId, src) : await this.menu.agendaIngest(workspaceId, src);
         }
@@ -569,8 +574,10 @@ export class AssistantService {
     let tainted = false;
     let flagged = false;
 
+    // Só as ferramentas do assunto do pedido (corta ~1/3 do custo); sem assunto reconhecido, vão todas
+    const picked = selectToolNames(text);
     for (let i = 0; i < MAX_ROUNDS; i++) {
-      const data: any = await chatCompletion({ messages, tools: TOOLS.filter((t) => toolAllowed(c.services, t.function.name)) }, { apiKey, ws: workspaceId });
+      const data: any = await chatCompletion({ messages, tools: TOOLS.filter((t) => toolAllowed(c.services, t.function.name) && (!picked || picked.has(t.function.name))) }, { apiKey, ws: workspaceId });
       const msg = data.choices[0].message;
       messages.push(msg);
       if (!msg.tool_calls?.length) {

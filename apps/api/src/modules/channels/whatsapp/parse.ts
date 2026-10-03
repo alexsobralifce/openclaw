@@ -91,6 +91,12 @@ export function isVoiceOrAudio(message: any): boolean {
   return !!unwrap(message)?.audioMessage;
 }
 
+/** Duração do áudio em segundos, quando o WhatsApp informa; nulo para qualquer outra mensagem. */
+export function audioSeconds(message: any): number | null {
+  const n = Number(unwrap(message)?.audioMessage?.seconds);
+  return Number.isFinite(n) && n > 0 ? n : null;
+}
+
 /** Imagem ou PDF enviado ao assistente (para ler compromissos), com a legenda; nulo para qualquer outra mensagem. */
 export function agendaMedia(message: any): { mime: string; caption: string } | null {
   const m = unwrap(message);
