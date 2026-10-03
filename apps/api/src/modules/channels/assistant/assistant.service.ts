@@ -6,7 +6,7 @@ import { IntentService } from "./intent.service";
 import { pickTools } from "./tool-select";
 import { assertQuota, currentInstance, QUOTA_NOTICE, quotaHit, recordUsage, trackUser } from "./usage";
 import { APP_INSTANCE, channelOfInstance, channelOrder, TELEGRAM_INSTANCE } from "./channel-route";
-import { AppChatService } from "../app-chat/app-chat.service";
+import { AppChatService, DriveListItem } from "../app-chat/app-chat.service";
 import { TelegramService } from "../telegram/telegram.service";
 import { ForbiddenException, Injectable, Logger } from "@nestjs/common";
 import { prisma } from "@openclaw/database";
@@ -443,14 +443,14 @@ export class AssistantService {
     }
   }
 
-  async sendToUser(c: Commander, instanceName: string, text: string, opts: { wipeAfterMs?: number } = {}) {
+  async sendToUser(c: Commander, instanceName: string, text: string, opts: { wipeAfterMs?: number; files?: DriveListItem[] } = {}) {
     const workspaceId = c.workspaceId;
     const channel = channelOfInstance(instanceName);
 
     // App: a mensagem é guardada (cifrada), chega em tempo real e, com o app fechado, por notificação
     if (channel === "app") {
       if (!this.appChat) throw new Error("canal do app indisponível");
-      await this.appChat.deliver(c, text, { wipeAfterMs: opts.wipeAfterMs });
+      await this.appChat.deliver(c, text, { wipeAfterMs: opts.wipeAfterMs, files: opts.files });
       return;
     }
     // Telegram: o cofre nunca chega aqui (ver `blockedOnTelegram`), então não há segredo para apagar depois
@@ -621,7 +621,9 @@ export class AssistantService {
     const redact = await this.menu.takeRedact(workspaceId);
     // Rede de segurança: se uma resposta com segredo escapou até aqui, ela não vai pelo Telegram
     if (secret && channelOfInstance(instanceName) === "telegram") answer = TELEGRAM_VAULT_NOTICE;
-    await this.sendToUser(c, instanceName, answer, secret && channelOfInstance(instanceName) !== "telegram" ? { wipeAfterMs: SECRET_WIPE_MS } : {});
+    // Lista de arquivos do Drive montada nesta resposta: o app mostra um botão de baixar em cada um (WhatsApp e Telegram ignoram)
+    const files = (await this.menu.takeDriveList?.(workspaceId)) ?? [];
+    await this.sendToUser(c, instanceName, answer, { ...(secret && channelOfInstance(instanceName) !== "telegram" ? { wipeAfterMs: SECRET_WIPE_MS } : {}), ...(files.length ? { files } : {}) });
     // Memória da conversa: nunca o cofre, segredo, código ou erro, e escolhas de menu ("1") não contam
     if (!secret && !redact && !failed && worthKeeping(text) && !this.touchesVault(text)) {
       await this.conv.remember(c.userId, workspaceId, text, plainAnswer).catch((e) => this.logger.warn(`Guardar a conversa falhou: ${e.message}`));

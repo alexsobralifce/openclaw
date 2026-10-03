@@ -90,13 +90,22 @@ export interface UsageReport {
   }[];
 }
 
+/** Arquivo de uma lista do Drive mostrada no chat (cada um tem o botão de baixar). */
+export interface ChatListedFile {
+  id: string;
+  account: string;
+  nome: string;
+  tipo: string;
+  tamanho: number;
+}
+
 /** Mensagem do chat do assistente no app. */
 export interface ChatMessage {
   id: string;
   direction: "IN" | "OUT";
   kind: string;
   text: string;
-  meta: { fileId?: string; fileName?: string; mime?: string; size?: number } | null;
+  meta: { fileId?: string; fileName?: string; mime?: string; size?: number; files?: ChatListedFile[] } | null;
   createdAt: string;
 }
 
@@ -110,6 +119,15 @@ export const api = {
     pushStatus: () => request<{ enabled: boolean; publicKey: string; subscribed: boolean }>("/app-chat/push"),
     pushSubscribe: (sub: unknown) => request<any>("/app-chat/push", { method: "POST", body: JSON.stringify(sub) }),
     pushUnsubscribe: (endpoint: string) => request<any>("/app-chat/push", { method: "DELETE", body: JSON.stringify({ endpoint }) }),
+    /** Baixa um arquivo da lista do Drive, direto da conta do usuário. Se for grande demais, o erro traz o link do Drive em `link`. */
+    driveFile: async (id: string, account: string): Promise<Blob> => {
+      const res = await fetch(`${API}/api/v1/app-chat/drive/${encodeURIComponent(id)}?account=${encodeURIComponent(account)}`, { headers: { Authorization: `Bearer ${localStorage.getItem("oc_token") ?? ""}` } });
+      if (!res.ok) {
+        const err: any = await res.json().catch(() => ({}));
+        throw Object.assign(new Error(err.message || "Não consegui baixar o arquivo."), { link: typeof err.link === "string" ? err.link : null });
+      }
+      return res.blob();
+    },
     /** Baixa um arquivo enviado pelo assistente (precisa do token, então não dá para usar um link direto). */
     file: async (id: string): Promise<Blob> => {
       const res = await fetch(`${API}/api/v1/app-chat/files/${id}`, { headers: { Authorization: `Bearer ${localStorage.getItem("oc_token") ?? ""}` } });

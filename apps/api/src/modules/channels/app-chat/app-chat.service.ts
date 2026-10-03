@@ -17,6 +17,17 @@ export const retentionDays = () => {
 export const FILE_TTL_MS = 60 * 60_000;
 export const MAX_FILE_BYTES = 12 * 1024 * 1024;
 
+/** Arquivo de uma lista do Drive mostrada no chat: o app baixa na hora, direto do Drive (sem guardar cópia). */
+export interface DriveListItem {
+  id: string;
+  account: string;
+  nome: string;
+  tipo: string;
+  tamanho: number;
+}
+
+const MAX_LISTED_FILES = 8;
+
 export interface ChatView {
   id: string;
   direction: "IN" | "OUT";
@@ -58,7 +69,7 @@ export class AppChatService {
   }
 
   /** Mensagem do assistente para o usuário: guarda, entrega em tempo real e, se o app estiver fechado, avisa por notificação. */
-  async deliver(c: Commander, text: string, opts: { wipeAfterMs?: number; file?: { nome: string; mime: string; base64: string } } = {}): Promise<ChatView> {
+  async deliver(c: Commander, text: string, opts: { wipeAfterMs?: number; file?: { nome: string; mime: string; base64: string }; files?: DriveListItem[] } = {}): Promise<ChatView> {
     let kind = "TEXT";
     let meta: Record<string, unknown> | undefined;
     if (opts.file) {
@@ -71,6 +82,9 @@ export class AppChatService {
         kind = "FILE";
         meta = { fileId, fileName: opts.file.nome, mime: opts.file.mime, size };
       }
+    }
+    if (!opts.file && opts.files?.length) {
+      meta = { files: opts.files.slice(0, MAX_LISTED_FILES).map((f) => ({ id: f.id.slice(0, 100), account: f.account.slice(0, 120), nome: f.nome.slice(0, 120), tipo: f.tipo.slice(0, 80), tamanho: f.tamanho })) };
     }
     const view = await this.store(c, "OUT", kind, text, meta, opts.wipeAfterMs ? new Date(Date.now() + opts.wipeAfterMs) : undefined);
     this.gateway.emit(c.userId, "chat:typing", { on: false });

@@ -4,6 +4,7 @@ import { Access } from "../../auth/access";
 import { AssistantService, MAX_MEDIA_BYTES } from "../assistant/assistant.service";
 import { APP_INSTANCE, isChannelKind } from "../assistant/channel-route";
 import { commanderForUser } from "../assistant/commander";
+import { GoogleService } from "../../integrations/google/google.service";
 import { AppChatService } from "./app-chat.service";
 import { PushService } from "./push.service";
 
@@ -16,7 +17,7 @@ const bytesOf = (base64: unknown) => (typeof base64 === "string" ? Math.floor(ba
 @Access("assistant")
 @Controller("app-chat")
 export class AppChatController {
-  constructor(private chat: AppChatService, private push: PushService, private assistant: AssistantService) {}
+  constructor(private chat: AppChatService, private push: PushService, private assistant: AssistantService, private google: GoogleService) {}
 
   private async commander(req: any) {
     const c = await commanderForUser(req.user.id);
@@ -100,6 +101,28 @@ export class AppChatController {
     if (!f) throw new NotFoundException("Arquivo não encontrado ou expirado.");
     res.set({ "Content-Type": f.mime, "Content-Disposition": `attachment; filename*=UTF-8''${encodeURIComponent(f.nome)}`, "X-Content-Type-Options": "nosniff" });
     res.send(f.bytes);
+  }
+
+  /**
+   * Baixar um arquivo da lista do Drive: busca na hora, na conta Google do próprio usuário (nada fica guardado, então não expira).
+   * Só vale para contas vinculadas ao workspace dele; o que passa do limite devolve o link do Drive.
+   */
+  @Get("drive/:id")
+  async driveDownload(@Request() req: any, @Param("id") id: string, @Query("account") account: string | undefined, @Res() res: any) {
+    const c = await this.commander(req);
+    if (!/^[\w-]{10,100}$/.test(id)) throw new BadRequestException("Arquivo inválido.");
+    const accounts: string[] = await this.google.listAccounts(c.workspaceId);
+    const acc = account ? accounts.find((a) => a === account) : accounts[0];
+    if (!acc) throw new NotFoundException("Conta do Google não encontrada.");
+    let f: Awaited<ReturnType<GoogleService["driveFile"]>>;
+    try {
+      f = await this.google.driveFile(c.workspaceId, id, acc);
+    } catch (e: any) {
+      throw new NotFoundException(String(e?.message ?? "Não consegui abrir o arquivo no Drive.").slice(0, 200));
+    }
+    if (!f.base64) return res.status(422).json({ message: `Não consegui baixar ${f.nome}: ${f.motivo ?? "arquivo grande demais"}.`, link: f.link ?? null });
+    res.set({ "Content-Type": f.mime || "application/octet-stream", "Content-Disposition": `attachment; filename*=UTF-8''${encodeURIComponent(f.nome)}`, "X-Content-Type-Options": "nosniff", "Cache-Control": "private, no-store" });
+    res.send(Buffer.from(f.base64, "base64"));
   }
 
   @Get("push")

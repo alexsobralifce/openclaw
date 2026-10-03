@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { io } from "socket.io-client";
-import { api, type ChatMessage } from "@/lib/api";
+import { api, type ChatListedFile, type ChatMessage } from "@/lib/api";
 import { useMe } from "@/hooks/useMe";
 import { disablePush, enablePush } from "@/lib/push";
 import { parseWaMarkup, type WaSeg } from "@/lib/wa-markup";
@@ -49,6 +49,7 @@ export default function ChatPage() {
   const [error, setError] = useState("");
   const [panel, setPanel] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [downloading, setDownloading] = useState<string | null>(null);
   const [recSeconds, setRecSeconds] = useState<number | null>(null); // null = não está gravando
   const [tg, setTg] = useState<{ configured: boolean; linked: boolean } | null>(null);
   const [tgLink, setTgLink] = useState<{ code: string; url: string | null; bot: string } | null>(null);
@@ -179,16 +180,33 @@ export default function ChatPage() {
     }
   }
 
+  function saveBlob(blob: Blob, name: string) {
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = name;
+    a.click();
+    URL.revokeObjectURL(a.href);
+  }
+
   async function download(m: ChatMessage) {
     try {
-      const blob = await api.appChat.file(m.meta!.fileId!);
-      const a = document.createElement("a");
-      a.href = URL.createObjectURL(blob);
-      a.download = m.meta?.fileName || "arquivo";
-      a.click();
-      URL.revokeObjectURL(a.href);
+      saveBlob(await api.appChat.file(m.meta!.fileId!), m.meta?.fileName || "arquivo");
     } catch (e: any) {
       setError(e.message);
+    }
+  }
+
+  /** Item da lista do Drive: baixa na hora. Arquivo grande demais abre o Drive em outra aba. */
+  async function downloadListed(f: ChatListedFile) {
+    setError("");
+    setDownloading(f.id);
+    try {
+      saveBlob(await api.appChat.driveFile(f.id, f.account), f.nome);
+    } catch (e: any) {
+      if (e.link) window.open(e.link, "_blank", "noopener");
+      setError(e.message);
+    } finally {
+      setDownloading(null);
     }
   }
 
@@ -295,6 +313,22 @@ export default function ChatPage() {
                     <svg width="22" height="22" fill="none" viewBox="0 0 24 24" aria-hidden className="flex-shrink-0"><path d="M12 3v12m0 0-4-4m4 4 4-4M5 21h14" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" /></svg>
                   </button>
                 )
+              )}
+              {!!m.meta?.files?.length && (
+                <div className="mt-1.5 space-y-1">
+                  {m.meta.files.map((f, i) => (
+                    <button key={f.id} onClick={() => void downloadListed(f)} disabled={downloading === f.id} aria-label={`Baixar ${f.nome}`}
+                      className="flex w-full items-center gap-2 rounded-xl bg-black/20 px-2.5 py-1.5 text-left active:bg-black/30 disabled:opacity-60">
+                      <span className="w-5 flex-shrink-0 text-center text-xs font-semibold opacity-70" aria-hidden>{i + 1}</span>
+                      <span aria-hidden>{fileEmoji(f.tipo)}</span>
+                      <span className="min-w-0 flex-1">
+                        <span className="block truncate text-sm">{f.nome}</span>
+                        {fileSizeLabel(f.tamanho) && <span className="block text-[11px] opacity-70">{downloading === f.id ? "Baixando…" : fileSizeLabel(f.tamanho)}</span>}
+                      </span>
+                      <svg width="20" height="20" fill="none" viewBox="0 0 24 24" aria-hidden className="flex-shrink-0"><path d="M12 3v12m0 0-4-4m4 4 4-4M5 21h14" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" /></svg>
+                    </button>
+                  ))}
+                </div>
               )}
               <span className="block text-right text-[10px] opacity-60 mt-0.5">{new Date(m.createdAt).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}</span>
             </div>

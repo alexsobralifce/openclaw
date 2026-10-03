@@ -12,6 +12,7 @@ import { weatherDetail, weatherLines } from "./weather";
 import { isLocationQuery, isWeatherQuery, loadLocation, parseCityCommand, saveLocation, UserLocation } from "./location";
 import { todayItems, when as routineWhen } from "./routine";
 import { AssistantConfig, configKey, fmtInterval, IDLE_MENU_MS, intervalProblem, parseInterval, PRESETS } from "./chat-clean";
+import type { DriveListItem } from "../app-chat/app-chat.service";
 import { driveQueryFrom, fileIcon, fmtSize, looksLikeDriveRequest, looksLikeMediaRequest, parseDriveQuery, rankFiles, sanitizeAlternates } from "./drive";
 import { suspiciousReasons } from "./security";
 import { contactQuery, looksLikeContactsRefresh } from "./contacts";
@@ -102,6 +103,9 @@ export class MenuService {
     private vault?: VaultService,
     private intents?: IntentService,
   ) {}
+
+  /** Última lista de arquivos montada por workspace, à espera de ser entregue junto com a resposta. */
+  private readonly driveShown = new Map<string, any[]>();
 
   setExecutor(fn: (ws: string, action: { name: string; args: any }) => Promise<any>) {
     this.executor = fn;
@@ -1049,6 +1053,8 @@ export class MenuService {
     }
     await this.set(ws, "drive", { items, query });
     if (items.length === 1 && !fuzzy) return this.driveSend(ws, items[0]);
+    // Lista mostrada: no app, cada item ganha o próprio botão de baixar (o handle pega isto ao enviar a resposta)
+    this.driveShown.set(ws, items);
     // Vários (ou só parecidos): o Jev vê se algum é claramente o pedido; se for, já envia e deixa os outros para corrigir pelo número
     const best = items.length > 1 ? await this.intents?.pickFile(query, items) : null;
     if (best !== null && best !== undefined && items[best]) {
@@ -1120,7 +1126,16 @@ export class MenuService {
    * (sem isto o "2" cairia no menu principal, onde 2 é a agenda).
    */
   async rememberDriveResults(ws: string, items: any[], query: string): Promise<void> {
-    if (items.length) await this.set(ws, "drive", { items, query });
+    if (!items.length) return;
+    await this.set(ws, "drive", { items, query });
+    this.driveShown.set(ws, items);
+  }
+
+  /** Arquivos da lista que acabou de ser montada (e esquece): o app mostra um botão de baixar em cada um. */
+  takeDriveList(ws: string): DriveListItem[] {
+    const items = this.driveShown.get(ws) ?? [];
+    this.driveShown.delete(ws);
+    return items.map((f: any) => ({ id: String(f.id), account: String(f.account ?? ""), nome: String(f.nome ?? ""), tipo: String(f.tipo ?? ""), tamanho: Number(f.tamanho) || 0 }));
   }
 
   /** Assunto de nota pelo nome: a busca por texto primeiro; se não achar, o Jev escolhe entre os existentes ("contratos" para "contrato do joão"). */
