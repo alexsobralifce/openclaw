@@ -1,5 +1,6 @@
 import { Injectable, Logger } from "@nestjs/common";
-import { TypeSafeClient, choice } from "@typesafe-ai/sdk";
+import { TypeSafeClient, choice, noul } from "@typesafe-ai/sdk";
+import { DomainJudgment, GROUP_IDS, groupQuestion } from "./tool-select";
 
 /** O que o dono quer com a mensagem, entre os pedidos que o menu atende sozinho (sem chamar o GPT). */
 export type Intent = "agenda_add" | "drive_file" | "note_add" | "other";
@@ -50,6 +51,23 @@ export class IntentService {
       return { intent, confidence };
     } catch (e: any) {
       this.logger.warn(`Jev indisponível, usando regras: ${e.message}`);
+      return null;
+    }
+  }
+
+  /**
+   * Para quais assuntos (e-mail, agenda, notas...) a mensagem serve? Uma pergunta Sim/Não por assunto, todas na mesma chamada
+   * (rodam em paralelo). Sem chave, com erro ou com demora devolve null e a IA livre recebe todas as ferramentas.
+   */
+  async toolDomains(text: string): Promise<DomainJudgment[] | null> {
+    if (!this.enabled()) return null;
+    try {
+      this.client ??= new TypeSafeClient({ timeout: TIMEOUT_MS, retry: { maxRetries: 0 } });
+      const questions: any = Object.fromEntries(GROUP_IDS.map((id) => [id, noul(groupQuestion(id))]));
+      const { answers } = (await this.client.systemOne({ state: { mensagem: text.slice(0, 1_500) }, questions })) as any;
+      return GROUP_IDS.map((id) => ({ id, p: Number(answers[id]?.noul) })).filter((x) => Number.isFinite(x.p));
+    } catch (e: any) {
+      this.logger.warn(`Jev indisponível para escolher ferramentas, vão todas: ${e.message}`);
       return null;
     }
   }
