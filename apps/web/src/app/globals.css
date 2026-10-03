@@ -2,6 +2,26 @@
 @tailwind components;
 @tailwind utilities;
 
+/* ── Tema ─────────────────────────────────────────────────────────────────
+   Noite (padrão) e dia trocam só os canais da paleta de cinzas, que o painel inteiro usa. No dia a escala é invertida
+   (o gray-950 de fundo vira o claro, o gray-200 de texto vira o escuro); o gray-500, no meio, serve nos dois.
+   A classe `light` vai no <html> só dentro do painel (ver ThemeToggle); landing e login ficam sempre escuros. */
+:root {
+  color-scheme: dark;
+  --gray-50: 247 245 252; --gray-100: 238 235 247; --gray-200: 221 217 236; --gray-300: 196 191 220; --gray-400: 156 150 188; --gray-500: 110 103 148;
+  --gray-600: 77 67 128; --gray-700: 53 44 99; --gray-800: 35 27 73; --gray-900: 21 16 51; --gray-950: 11 7 32;
+}
+:root.light {
+  color-scheme: light;
+  --gray-50: 11 7 32; --gray-100: 21 16 51; --gray-200: 35 27 73; --gray-300: 53 44 99; --gray-400: 77 67 128; --gray-500: 110 103 148;
+  --gray-600: 156 150 188; --gray-700: 196 191 220; --gray-800: 221 217 236; --gray-900: 238 235 247; --gray-950: 247 245 252;
+}
+/* Cores de destaque claras demais para fundo claro */
+.light .text-violet-300, .light .text-violet-400 { color: #6d28d9; }
+.light .text-red-200, .light .text-red-300, .light .text-red-400 { color: #b91c1c; }
+.light .text-amber-200, .light .text-amber-300, .light .text-amber-400 { color: #92400e; }
+.light .text-green-300, .light .text-green-400, .light .text-emerald-400 { color: #15803d; }
+
 /* ── Celular ─────────────────────────────────────────────────────────────── */
 html {
   -webkit-text-size-adjust: 100%;

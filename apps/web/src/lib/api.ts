@@ -104,6 +104,8 @@ export const api = {
   appChat: {
     messages: (after?: string) => request<ChatMessage[]>(`/app-chat/messages${after ? `?after=${encodeURIComponent(after)}` : ""}`),
     send: (text: string) => request<ChatMessage>("/app-chat/messages", { method: "POST", body: JSON.stringify({ text }) }),
+    sendAudio: (body: { base64: string; mime: string; seconds: number }) => request<ChatMessage>("/app-chat/audio", { method: "POST", body: JSON.stringify(body) }),
+    sendFile: (body: { base64: string; mime: string; name: string; caption?: string }) => request<ChatMessage>("/app-chat/file", { method: "POST", body: JSON.stringify(body) }),
     setChannel: (channel: "whatsapp" | "app" | "telegram") => request<{ channel: string }>("/app-chat/channel", { method: "PUT", body: JSON.stringify({ channel }) }),
     pushStatus: () => request<{ enabled: boolean; publicKey: string; subscribed: boolean }>("/app-chat/push"),
     pushSubscribe: (sub: unknown) => request<any>("/app-chat/push", { method: "POST", body: JSON.stringify(sub) }),

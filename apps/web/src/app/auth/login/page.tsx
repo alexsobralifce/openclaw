@@ -27,7 +27,7 @@ export default function LoginPage() {
       const { accessToken, user } = await api.auth.login(form.email, form.password);
       setToken(accessToken);
       setUser(user);
-      router.push("/dashboard/inbox");
+      router.push("/dashboard");
     } catch (err: any) {
       setError(err.message || "Erro ao fazer login");
     } finally {

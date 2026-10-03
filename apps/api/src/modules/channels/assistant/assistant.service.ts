@@ -1,6 +1,6 @@
 import { chatCompletion } from "./openai-chat";
 import { planOf } from "../../auth/plans";
-import { maxPdfPages, pdfPageCount } from "./media-limits";
+import { fmtDuration, maxAudioSeconds, maxPdfPages, pdfPageCount } from "./media-limits";
 import { IntentService } from "./intent.service";
 import { pickTools } from "./tool-select";
 import { assertQuota, currentInstance, QUOTA_NOTICE, quotaHit, recordUsage, trackUser } from "./usage";
@@ -262,7 +262,7 @@ const EXTERNAL = new Set(["gmail_search", "gmail_read", "list_conversations", "d
 // Mudam preferências do dono: não valem depois de ler texto de terceiros no mesmo comando
 const PREFERENCE_TOOLS = new Set(["remember", "email_no_interest", "routine_set", "routine_remove", "set_location", "note_add"]);
 const MAX_PENDING = 3;
-const MAX_MEDIA_BYTES = 15 * 1024 * 1024;
+export const MAX_MEDIA_BYTES = 15 * 1024 * 1024;
 const MAX_ROUNDS = 6;
 
 // Serviço que o usuário precisa ter liberado para cada ferramenta (sem entrada = sempre disponível)
@@ -542,6 +542,23 @@ export class AssistantService {
     if (!res.ok) throw new Error(`Transcrição ${res.status}: ${(await res.text()).slice(0, 200)}`);
     recordUsage("whisper", process.env.OPENAI_TRANSCRIBE_MODEL || "whisper-1", { input: 0, output: 0 });
     return ((await res.json()) as any).text?.trim() ?? "";
+  }
+
+  /** Áudio gravado no app: vale o que vale no WhatsApp (nada de áudio para o código do cofre, teto de duração do plano). Devolve o texto ou o aviso a mostrar. */
+  async transcribeForApp(c: Commander, audio: Buffer, mime: string, seconds: number): Promise<{ text?: string; notice?: string }> {
+    trackUser({ userId: c.userId, workspaceId: c.workspaceId, exempt: c.role === "ROOT" || c.role === "ADMIN", limitUsd: planOf(c.plan)?.aiUsd, instance: APP_INSTANCE });
+    if (await this.awaitingPin(c.workspaceId)) return { notice: "🔢 Por segurança, digite o código de 4 dígitos por *texto*, não por áudio." };
+    const plan = planOf(c.plan);
+    if (seconds > maxAudioSeconds(plan)) {
+      return { notice: `🎙️ Esse áudio tem ${fmtDuration(seconds)}, mais que o limite de ${fmtDuration(maxAudioSeconds(plan))}${plan ? ` do plano ${plan.name}` : ""}. Pode mandar em partes menores, ou escrever?` };
+    }
+    try {
+      const text = await this.transcribeBytes(audio, mime);
+      if (text) return { text };
+    } catch (e: any) {
+      this.logger.error(`Transcrição do app falhou: ${e.message}`);
+    }
+    return { notice: quotaHit() ? `Não consegui ouvir o áudio.\n\n${QUOTA_NOTICE}` : "Não consegui entender o áudio. Pode tentar de novo ou escrever?" };
   }
 
   /** O assistente está esperando o código de 4 dígitos do cofre? Nesse caso o áudio não é aceito (iria para a transcrição). */

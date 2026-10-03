@@ -2,7 +2,7 @@ import "reflect-metadata";
 import { Body, Controller, Post, Req, ValidationPipe } from "@nestjs/common";
 import { Test } from "@nestjs/testing";
 import { describe, expect, it } from "vitest";
-import { configureBodyParsers, WHATSAPP_WEBHOOK_PATH } from "../src/body-parsers";
+import { BIG_BODY_PATHS, configureBodyParsers, WHATSAPP_WEBHOOK_PATH } from "../src/body-parsers";
 
 @Controller("x")
 class EchoController {
@@ -53,6 +53,7 @@ describe("leitores de corpo da API", () => {
     expect((await post(`${base}/x`, big)).status).toBe(413);
     await app.close();
     expect(WHATSAPP_WEBHOOK_PATH).toBe("/api/v1/channels/webhooks/whatsapp");
+    expect(BIG_BODY_PATHS).toEqual(expect.arrayContaining(["/api/v1/app-chat/audio", "/api/v1/app-chat/file"]));
   });
 
   it("JSON inválido dá 400", async () => {

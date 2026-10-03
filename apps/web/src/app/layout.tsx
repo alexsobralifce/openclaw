@@ -31,7 +31,11 @@ export const viewport: Viewport = {
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="pt-BR">
+    <html lang="pt-BR" suppressHydrationWarning>
+      <head>
+        {/* Tema salvo aplicado antes da primeira pintura; só vale no painel (ver ThemeToggle) */}
+        <script dangerouslySetInnerHTML={{ __html: "try{if(localStorage.getItem('oc_theme')==='light'&&location.pathname.indexOf('/dashboard')===0)document.documentElement.classList.add('light')}catch(e){}" }} />
+      </head>
       <body>{children}</body>
     </html>
   );

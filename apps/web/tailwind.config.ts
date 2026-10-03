@@ -7,19 +7,8 @@ const config: Config = {
   theme: {
     extend: {
       colors: {
-        gray: {
-          50: "#F7F5FC",
-          100: "#EEEBF7",
-          200: "#DDD9EC",
-          300: "#C4BFDC",
-          400: "#9C96BC",
-          500: "#6E6794",
-          600: "#4D4380",
-          700: "#352C63",
-          800: "#231B49",
-          900: "#151033",
-          950: "#0B0720",
-        },
+        // Os valores ficam em globals.css (:root = noite, :root.light = dia); aqui só o nome, com suporte a /opacidade
+        gray: Object.fromEntries([50, 100, 200, 300, 400, 500, 600, 700, 800, 900, 950].map((n) => [n, `rgb(var(--gray-${n}) / <alpha-value>)`])),
       },
     },
   },

@@ -6,8 +6,18 @@ import { clearToken } from "@/lib/auth";
 import { hasService, isAdmin, useMe } from "@/hooks/useMe";
 import { Logo } from "@/components/brand/Logo";
 
-// service: serviço que precisa estar liberado para o item aparecer; admin: só ROOT/ADMIN
-export const nav: { href: string; label: string; icon: React.ReactNode; service?: string; admin?: boolean; root?: boolean }[] = [
+// service: serviço que precisa estar liberado para o item aparecer; admin: só ROOT/ADMIN; desktopOnly: não aparece no menu do celular
+export const nav: { href: string; label: string; icon: React.ReactNode; service?: string; admin?: boolean; root?: boolean; desktopOnly?: boolean }[] = [
+  {
+    href: "/dashboard/chat",
+    label: "Assistente",
+    service: "assistant",
+    icon: (
+      <svg width="20" height="20" fill="none" viewBox="0 0 24 24">
+        <path d="M12 3l1.9 4.6L18.5 9l-4.6 1.4L12 15l-1.9-4.6L5.5 9l4.6-1.4L12 3zM18 15l.9 2.1L21 18l-2.1.9L18 21l-.9-2.1L15 18l2.1-.9L18 15z" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/>
+      </svg>
+    ),
+  },
   {
     href: "/dashboard/inbox",
     label: "Inbox",
@@ -62,16 +72,6 @@ export const nav: { href: string; label: string; icon: React.ReactNode; service?
     ),
   },
   {
-    href: "/dashboard/chat",
-    label: "Assistente",
-    service: "assistant",
-    icon: (
-      <svg width="20" height="20" fill="none" viewBox="0 0 24 24">
-        <path d="M12 3l1.9 4.6L18.5 9l-4.6 1.4L12 15l-1.9-4.6L5.5 9l4.6-1.4L12 3zM18 15l.9 2.1L21 18l-2.1.9L18 21l-.9-2.1L15 18l2.1-.9L18 15z" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/>
-      </svg>
-    ),
-  },
-  {
     href: "/dashboard/vault",
     label: "Cofre",
     service: "vault",
@@ -83,7 +83,18 @@ export const nav: { href: string; label: string; icon: React.ReactNode; service?
     ),
   },
   {
+    href: "/dashboard/settings",
+    label: "Config.",
+    icon: (
+      <svg width="20" height="20" fill="none" viewBox="0 0 24 24">
+        <circle cx="12" cy="12" r="3" stroke="currentColor" strokeWidth="1.8"/>
+        <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" stroke="currentColor" strokeWidth="1.8"/>
+      </svg>
+    ),
+  },
+  {
     href: "/dashboard/api",
+    desktopOnly: true,
     label: "API",
     service: "api",
     icon: (
@@ -94,6 +105,7 @@ export const nav: { href: string; label: string; icon: React.ReactNode; service?
   },
   {
     href: "/dashboard/users",
+    desktopOnly: true,
     label: "Usuários",
     admin: true,
     icon: (
@@ -105,21 +117,12 @@ export const nav: { href: string; label: string; icon: React.ReactNode; service?
   },
   {
     href: "/dashboard/usage",
+    desktopOnly: true,
     label: "Consumo",
     root: true,
     icon: (
       <svg width="20" height="20" fill="none" viewBox="0 0 24 24">
         <path d="M18 20V10M12 20V4M6 20v-6" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
-      </svg>
-    ),
-  },
-  {
-    href: "/dashboard/settings",
-    label: "Config.",
-    icon: (
-      <svg width="20" height="20" fill="none" viewBox="0 0 24 24">
-        <circle cx="12" cy="12" r="3" stroke="currentColor" strokeWidth="1.8"/>
-        <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" stroke="currentColor" strokeWidth="1.8"/>
       </svg>
     ),
   },
@@ -145,7 +148,7 @@ export function Sidebar() {
     <aside className="hidden md:flex w-[220px] flex-shrink-0 flex-col border-r border-gray-800 bg-gray-900">
       {/* Logo */}
       <div className="h-14 flex items-center px-5 border-b border-gray-800">
-        <Logo size={30} textClassName="font-bold text-lg tracking-tight text-white" />
+        <Logo size={30} textClassName="font-bold text-lg tracking-tight text-gray-50" />
       </div>
 
       {/* Workspace badge */}

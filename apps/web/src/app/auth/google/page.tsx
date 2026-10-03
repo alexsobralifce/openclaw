@@ -23,7 +23,7 @@ export default function GoogleLoginPage() {
       .then(({ accessToken, user }) => {
         setToken(accessToken);
         setUser(user);
-        router.replace("/dashboard/inbox");
+        router.replace("/dashboard");
       })
       .catch((e) => setError(e.message || "Não foi possível entrar com o Google."));
   }, [router]);

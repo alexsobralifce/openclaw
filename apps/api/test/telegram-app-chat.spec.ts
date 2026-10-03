@@ -110,6 +110,61 @@ describe("webhook do Telegram", () => {
   });
 });
 
+describe("áudio e arquivo no chat do app", () => {
+  const b64 = (n: number) => Buffer.alloc(n, 1).toString("base64");
+  const setup = () => {
+    users.push({ id: "u1", status: "ACTIVE", name: "Ana", role: "USER", services: ["assistant"], plan: null, workspaces: [{ workspaceId: "w1" }] });
+    const stored: string[] = [];
+    const chat = { store: vi.fn(async (_c: any, _d: string, _k: string, text: string) => (stored.push(text), { id: "m1" })), deliver: vi.fn(), typing: vi.fn(), redact: vi.fn() };
+    const assistant = {
+      transcribeForApp: vi.fn(async () => ({ text: "agenda de hoje" })),
+      handle: vi.fn(async () => ({ redact: false })),
+      handleMedia: vi.fn(async () => undefined),
+    };
+    return { ctrl: new AppChatController(chat as any, {} as any, assistant as any), chat, assistant, stored };
+  };
+  const req = { user: { id: "u1" } };
+  beforeEach(() => users.splice(0));
+
+  it("áudio: transcreve, guarda o texto e manda ao assistente como falado", async () => {
+    const { ctrl, assistant, stored } = setup();
+    await ctrl.audio(req, { base64: b64(1000), mime: "audio/webm;codecs=opus", seconds: 5 });
+    expect(assistant.transcribeForApp).toHaveBeenCalledWith(expect.objectContaining({ userId: "u1" }), expect.any(Buffer), "audio/webm", 5);
+    expect(stored).toEqual(["🎙️ agenda de hoje"]);
+    await flush();
+    expect(assistant.handle).toHaveBeenCalledWith(expect.anything(), "app", "agenda de hoje", { heard: true });
+  });
+
+  it("áudio: quando não dá para transcrever, mostra o aviso e não chama o assistente", async () => {
+    const { ctrl, assistant, chat } = setup();
+    assistant.transcribeForApp.mockResolvedValueOnce({ notice: "Esse áudio tem 6 min" } as any);
+    await ctrl.audio(req, { base64: b64(1000), mime: "audio/mp4", seconds: 400 });
+    expect(chat.deliver).toHaveBeenCalledWith(expect.anything(), "Esse áudio tem 6 min");
+    expect(assistant.handle).not.toHaveBeenCalled();
+  });
+
+  it("áudio: recusa formato errado, vazio e grande demais", async () => {
+    const { ctrl } = setup();
+    await expect(ctrl.audio(req, { base64: b64(10), mime: "text/plain" })).rejects.toThrow("Formato");
+    await expect(ctrl.audio(req, { base64: "", mime: "audio/webm" })).rejects.toThrow("vazio");
+    await expect(ctrl.audio(req, { base64: b64(16 * 1024 * 1024), mime: "audio/webm" })).rejects.toThrow("grande");
+  });
+
+  it("arquivo: só imagem ou PDF, e o assistente lê com a legenda", async () => {
+    const { ctrl, assistant, stored } = setup();
+    await expect(ctrl.file(req, { base64: b64(10), mime: "application/zip", name: "a.zip" })).rejects.toThrow("imagem");
+    await ctrl.file(req, { base64: b64(1000), mime: "application/pdf", name: "convite<script>.pdf", caption: "nota" });
+    expect(stored[0]).toBe("📎 convitescript.pdf\nnota");
+    await flush();
+    expect(assistant.handleMedia).toHaveBeenCalledWith(expect.anything(), "app", expect.any(Function), { mime: "application/pdf", caption: "nota" });
+  });
+
+  it("arquivo: recusa o que passa de 15 MB", async () => {
+    const { ctrl } = setup();
+    await expect(ctrl.file(req, { base64: b64(16 * 1024 * 1024), mime: "image/png", name: "x.png" })).rejects.toThrow("grande");
+  });
+});
+
 describe("chat do app", () => {
   it("recusa canal inválido", async () => {
     const ctrl = new AppChatController({} as any, {} as any, {} as any);

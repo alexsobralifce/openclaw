@@ -1,13 +1,16 @@
 import { BadRequestException, Body, Controller, Delete, ForbiddenException, Get, NotFoundException, Param, Post, Put, Query, Request, Res } from "@nestjs/common";
 import { prisma } from "@openclaw/database";
 import { Access } from "../../auth/access";
-import { AssistantService } from "../assistant/assistant.service";
+import { AssistantService, MAX_MEDIA_BYTES } from "../assistant/assistant.service";
 import { APP_INSTANCE, isChannelKind } from "../assistant/channel-route";
 import { commanderForUser } from "../assistant/commander";
 import { AppChatService } from "./app-chat.service";
 import { PushService } from "./push.service";
 
 const MAX_TEXT = 4000;
+const FILE_MIMES = /^(image\/(jpeg|png|webp|gif|heic|heif)|application\/pdf)$/;
+
+const bytesOf = (base64: unknown) => (typeof base64 === "string" ? Math.floor(base64.length * 0.75) : 0);
 
 /** Chat do assistente dentro do app: histórico, envio, arquivos, notificações e escolha do canal principal. */
 @Access("assistant")
@@ -45,8 +48,54 @@ export class AppChatController {
     return msg;
   }
 
+  /** Áudio gravado no app: vira texto (como no WhatsApp) e segue o mesmo caminho da mensagem escrita. */
+  @Post("audio")
+  async audio(@Request() req: any, @Body() body: { base64?: string; mime?: string; seconds?: number }) {
+    const c = await this.commander(req);
+    const mime = String(body?.mime ?? "").split(";")[0].trim().toLowerCase();
+    const size = bytesOf(body?.base64);
+    if (!/^audio\//.test(mime) && mime !== "video/webm") throw new BadRequestException("Formato de áudio não aceito.");
+    if (!size) throw new BadRequestException("Áudio vazio.");
+    if (size > MAX_MEDIA_BYTES) throw new BadRequestException("Áudio grande demais (limite de 15 MB).");
+    const seconds = Math.max(0, Math.min(Number(body?.seconds) || 0, 3600));
+    this.chat.typing(c.userId, true);
+    const heard = await this.assistant.transcribeForApp(c, Buffer.from(body.base64!, "base64"), mime, seconds);
+    if (!heard.text) {
+      const msg = await this.chat.store(c, "IN", "TEXT", "🎙️ Áudio");
+      await this.chat.deliver(c, heard.notice ?? "Não consegui entender o áudio.");
+      return msg;
+    }
+    const msg = await this.chat.store(c, "IN", "TEXT", `🎙️ ${heard.text}`);
+    void this.assistant
+      .handle(c, APP_INSTANCE, heard.text, { heard: true })
+      .then((r) => (r?.redact ? this.chat.redact(msg.id, c) : undefined))
+      .catch(() => undefined)
+      .finally(() => this.chat.typing(c.userId, false));
+    return msg;
+  }
+
+  /** Imagem ou PDF (convite, cartaz, nota): o assistente lê como faz no WhatsApp. O arquivo não é guardado. */
+  @Post("file")
+  async file(@Request() req: any, @Body() body: { base64?: string; mime?: string; name?: string; caption?: string }) {
+    const c = await this.commander(req);
+    const mime = String(body?.mime ?? "").toLowerCase();
+    const size = bytesOf(body?.base64);
+    if (!FILE_MIMES.test(mime)) throw new BadRequestException("Envie uma imagem (JPG, PNG, WebP) ou um PDF.");
+    if (!size) throw new BadRequestException("Arquivo vazio.");
+    if (size > MAX_MEDIA_BYTES) throw new BadRequestException("Arquivo grande demais (limite de 15 MB).");
+    const name = String(body?.name ?? "arquivo").replace(/[\u0000-\u001f\u007f<>]/g, "").slice(0, 100) || "arquivo";
+    const caption = typeof body?.caption === "string" ? body.caption.trim().slice(0, 500) : "";
+    const msg = await this.chat.store(c, "IN", "TEXT", `📎 ${name}${caption ? `\n${caption}` : ""}`);
+    this.chat.typing(c.userId, true);
+    void this.assistant
+      .handleMedia(c, APP_INSTANCE, async () => ({ base64: body.base64!, mimetype: mime }), { mime, caption })
+      .catch(() => undefined)
+      .finally(() => this.chat.typing(c.userId, false));
+    return msg;
+  }
+
   @Get("files/:id")
-  async file(@Request() req: any, @Param("id") id: string, @Res() res: any) {
+  async download(@Request() req: any, @Param("id") id: string, @Res() res: any) {
     const f = await this.chat.file(req.user.id, id);
     if (!f) throw new NotFoundException("Arquivo não encontrado ou expirado.");
     res.set({ "Content-Type": f.mime, "Content-Disposition": `attachment; filename*=UTF-8''${encodeURIComponent(f.nome)}`, "X-Content-Type-Options": "nosniff" });
