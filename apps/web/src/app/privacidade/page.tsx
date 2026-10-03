@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 
-export const metadata: Metadata = { title: "Política de Privacidade — Assist.IA" };
+export const metadata: Metadata = { title: "Política de Privacidade — MagoBox" };
 
 const CONTACT = process.env.NEXT_PUBLIC_CONTACT_EMAIL || "o contato de suporte informado pela empresa que atende você";
 
@@ -14,9 +14,9 @@ export default function PrivacyPage() {
       <p className="text-gray-500">Última atualização: 3 de outubro de 2026</p>
 
       <section className="space-y-2">
-        <h2 className={h2}>O que é o Assist.IA</h2>
+        <h2 className={h2}>O que é o MagoBox</h2>
         <p>
-          O Assist.IA é uma plataforma com duas partes: (1) uma caixa de entrada que reúne as mensagens que empresas recebem em canais como WhatsApp e
+          O MagoBox é uma plataforma com duas partes: (1) uma caixa de entrada que reúne as mensagens que empresas recebem em canais como WhatsApp e
           Instagram, e (2) um assistente pessoal, usado pelo WhatsApp e pelo painel, que ajuda o próprio usuário com e-mails, agenda, arquivos, notas,
           contatos e um cofre de senhas. Esta política explica quais dados tratamos, para quê, e como você controla tudo isso.
         </p>
@@ -47,7 +47,7 @@ export default function PrivacyPage() {
           <li><strong>Google Agenda:</strong> consultar seus compromissos e criar eventos, depois de você confirmar.</li>
           <li>
             <strong>Google Drive</strong> (leitura de arquivos e criação dos arquivos do próprio app): procurar e enviar a você arquivos que você pedir, e
-            gravar suas notas e contatos na pasta <em>Assist.IA</em> do seu Drive. O Assist.IA não apaga arquivos do seu Drive e só altera os arquivos que ele mesmo criou.
+            gravar suas notas e contatos na pasta <em>Assist.IA</em> do seu Drive. O MagoBox não apaga arquivos do seu Drive e só altera os arquivos que ele mesmo criou.
           </li>
           <li>
             <strong>Contatos</strong> (somente leitura): consultar telefone e e-mail de pessoas a seu pedido. Os contatos são copiados para arquivos de
@@ -64,7 +64,7 @@ export default function PrivacyPage() {
           <a className={link} href="https://developers.google.com/terms/api-services-user-data-policy" target="_blank" rel="noreferrer">
             Política de Dados do Usuário dos Serviços de API do Google
           </a>
-          , incluindo os requisitos de Uso Limitado. (Assist.IA&apos;s use and transfer to any other app of information received from Google APIs will adhere to
+          , incluindo os requisitos de Uso Limitado. (MagoBox&apos;s use and transfer to any other app of information received from Google APIs will adhere to
           the Google API Services User Data Policy, including the Limited Use requirements.)
         </p>
         <p>
@@ -77,7 +77,7 @@ export default function PrivacyPage() {
       <section className="space-y-2">
         <h2 className={h2}>Dados do Instagram</h2>
         <p>
-          Quando uma empresa conecta sua conta profissional do Instagram, ela autoriza o Assist.IA, pelo login oficial do Instagram, a ler e responder as
+          Quando uma empresa conecta sua conta profissional do Instagram, ela autoriza o MagoBox, pelo login oficial do Instagram, a ler e responder as
           mensagens diretas dessa conta. Tratamos apenas:
         </p>
         <ul className="list-disc pl-6 space-y-1">
@@ -130,7 +130,7 @@ export default function PrivacyPage() {
         <h2 className={h2}>Seus direitos e como revogar o acesso</h2>
         <p>
           Você pode pedir acesso, correção, portabilidade e exclusão dos seus dados, e revogar consentimentos, conforme a Lei Geral de Proteção de Dados (LGPD).
-          Para revogar o acesso ao Google, desconecte a conta em <strong>Canais</strong> no painel ou remova o Assist.IA em{" "}
+          Para revogar o acesso ao Google, desconecte a conta em <strong>Canais</strong> no painel ou remova o MagoBox em{" "}
           <a className={link} href="https://myaccount.google.com/permissions" target="_blank" rel="noreferrer">myaccount.google.com/permissions</a>.
           Veja como pedir a exclusão em <a className={link} href="/exclusao-de-dados">Exclusão de dados</a>. O uso do serviço também
           segue os <a className={link} href="/termos">Termos de Serviço</a>.

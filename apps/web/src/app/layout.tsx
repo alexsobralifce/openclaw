@@ -7,17 +7,17 @@ const site = process.env.NEXT_PUBLIC_SITE_URL;
 
 export const metadata: Metadata = {
   metadataBase: site ? new URL(site) : undefined,
-  applicationName: "Assist.IA",
-  title: { default: "Assist.IA — sua secretária virtual no WhatsApp", template: "%s | Assist.IA" },
+  applicationName: "MagoBox",
+  title: { default: "MagoBox — sua secretária virtual no WhatsApp", template: "%s | MagoBox" },
   description: "Sua secretária virtual: e-mail, agenda, Drive, senhas e clientes, no WhatsApp e no app. Por texto, áudio, foto ou link.",
-  appleWebApp: { capable: true, title: "Assist.IA", statusBarStyle: "black-translucent" },
+  appleWebApp: { capable: true, title: "MagoBox", statusBarStyle: "black-translucent" },
   openGraph: {
     type: "website",
-    siteName: "Assist.IA",
+    siteName: "MagoBox",
     locale: "pt_BR",
-    title: "Assist.IA — sua secretária virtual no WhatsApp",
+    title: "MagoBox — sua secretária virtual no WhatsApp",
     description: "E-mail, agenda, Drive e senhas. Por texto, áudio, foto ou link.",
-    ...(site ? { images: [{ url: "/brand/assistia-og.png", width: 1200, height: 630, alt: "Assist.IA" }] } : {}),
+    ...(site ? { images: [{ url: "/brand/assistia-og.png", width: 1200, height: 630, alt: "MagoBox" }] } : {}),
   },
   twitter: { card: "summary_large_image" },
 };

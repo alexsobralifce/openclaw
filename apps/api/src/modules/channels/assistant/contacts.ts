@@ -73,7 +73,7 @@ export function groupByLetter(contacts: Contact[]): Map<string, Contact[]> {
 }
 
 export function renderLetterFile(letter: string, contacts: Contact[], day: string, title = "Contatos"): string {
-  const head = `# ${title} — ${letter}\n\n<!-- Gerado automaticamente pelo Assist.IA em ${day}. Edições neste arquivo são sobrescritas na próxima atualização; para anotar algo, use uma nota normal. -->\n`;
+  const head = `# ${title} — ${letter}\n\n<!-- Gerado automaticamente pelo MagoBox em ${day}. Edições neste arquivo são sobrescritas na próxima atualização; para anotar algo, use uma nota normal. -->\n`;
   if (!contacts.length) return `${head}\n_Nenhum contato com esta inicial._\n`;
   const blocks = contacts.map((c) =>
     [`## ${c.nome}`, ...c.telefones.map((t) => `- 📞 ${t}`), ...c.emails.map((e) => `- ✉️ ${e}`), ...(c.empresa ? [`- 🏢 ${c.empresa}`] : [])].join("\n"),

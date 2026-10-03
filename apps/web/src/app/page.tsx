@@ -7,7 +7,7 @@ const display = Bricolage_Grotesque({ subsets: ["latin"], variable: "--font-disp
 const body = DM_Sans({ subsets: ["latin"], variable: "--font-body" });
 
 export const metadata: Metadata = {
-  title: "Assist.IA — sua secretária virtual no WhatsApp",
+  title: "MagoBox — sua secretária virtual no WhatsApp",
   description:
     "Um assistente no WhatsApp que avisa de cada e-mail, mostra sua agenda e cuida dos seus clientes. Você só digita um número ou manda um áudio. 7 dias grátis.",
 };
@@ -102,7 +102,7 @@ export default function Landing() {
       {/* Nav */}
       <header className="sticky top-0 z-30 border-b border-white/5 bg-[#070b0a]/85 backdrop-blur">
         <div className="mx-auto flex h-16 max-w-6xl items-center justify-between px-5">
-          <Link href="/" aria-label="Assist.IA — início"><Logo size={36} textClassName={`${H} text-xl font-bold tracking-tight text-white`} /></Link>
+          <Link href="/" aria-label="MagoBox — início"><Logo size={36} textClassName={`${H} text-xl font-bold tracking-tight text-white`} /></Link>
           <nav className="hidden items-center gap-8 text-sm text-[#9db0a9] md:flex">
             <a href="#vantagens" className="hover:text-white">Vantagens</a>
             <a href="#como" className="hover:text-white">Como funciona</a>
@@ -142,9 +142,9 @@ export default function Landing() {
             </div>
           </div>
 
-          <Phone label="Assistente Assist.IA">
+          <Phone label="Assistente MagoBox">
             <Bubble from="me">oi</Bubble>
-            <Bubble from="bot">{`🌤️ *Boa tarde! Sou o Assist.IA*
+            <Bubble from="bot">{`🌤️ *Boa tarde! Sou o MagoBox*
 O que vamos ver agora?
 ━━━━━━━━━━━━━━
 1️⃣ 📧 E-mails
@@ -208,7 +208,7 @@ O que vamos ver agora?
             </ol>
           </div>
 
-          <Phone label="Assistente Assist.IA">
+          <Phone label="Assistente MagoBox">
             <Bubble from="bot">{`📩 *Novo e-mail*
 ━━━━━━━━━━━━━━
 👤 *De:* Prefeitura Municipal
@@ -297,7 +297,7 @@ Olá! Confirmo minha presença na reunião. Obrigado pelo convite.
       <footer className="border-t border-white/5 py-8">
         <div className="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-3 px-5 text-sm text-[#7f918b]">
           <Logo size={26} textClassName={`${H} text-base font-bold tracking-tight text-white`} />
-          <span>© 2026 Assist.IA. Todos os direitos reservados.</span>
+          <span>© 2026 MagoBox. Todos os direitos reservados.</span>
           <span className="flex gap-5">
             <Link href="/auth/login" className="hover:text-white">Entrar</Link>
             <Link href="/auth/register" className="hover:text-white">Criar conta</Link>

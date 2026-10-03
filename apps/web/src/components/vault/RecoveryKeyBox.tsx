@@ -21,7 +21,7 @@ export function RecoveryKeyBox({ keyText, onDone }: { keyText: string; onDone: (
   }
 
   function download() {
-    const blob = new Blob([`Chave de recuperação do cofre de senhas (Assist.IA)\n\n${keyText}\n\nGuarde este arquivo fora do computador principal (gerenciador offline, papel em local seguro). Quem tiver esta chave e acesso ao seu e-mail pode redefinir a senha mestra do cofre.\n`], { type: "text/plain" });
+    const blob = new Blob([`Chave de recuperação do cofre de senhas (MagoBox)\n\n${keyText}\n\nGuarde este arquivo fora do computador principal (gerenciador offline, papel em local seguro). Quem tiver esta chave e acesso ao seu e-mail pode redefinir a senha mestra do cofre.\n`], { type: "text/plain" });
     const a = document.createElement("a");
     a.href = URL.createObjectURL(blob);
     a.download = "chave-de-recuperacao-cofre.txt";

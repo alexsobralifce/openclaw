@@ -82,7 +82,7 @@ describe("arquivo da letra", () => {
   it("tem aviso de gerado automaticamente e um bloco por pessoa", () => {
     const md = renderLetterFile("M", cs, "2026-10-01");
     expect(md).toContain("# Contatos — M");
-    expect(md).toContain("Gerado automaticamente pelo Assist.IA em 2026-10-01");
+    expect(md).toContain("Gerado automaticamente pelo MagoBox em 2026-10-01");
     expect(md).toContain("## Marcos Silva\n- 📞 (85) 99999-0000\n- 📞 (85) 3222-1111\n- ✉️ marcos@empresa.com\n- 🏢 IFCE");
   });
   it("ler de volta devolve os mesmos contatos", () => {

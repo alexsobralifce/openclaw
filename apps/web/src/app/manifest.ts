@@ -1,11 +1,11 @@
 import type { MetadataRoute } from "next";
 
-// Faz o Assist.IA instalável no celular (Adicionar à tela inicial), com nome e ícone próprios.
+// Faz o MagoBox instalável no celular (Adicionar à tela inicial), com nome e ícone próprios.
 export default function manifest(): MetadataRoute.Manifest {
   return {
     id: "/",
-    name: "Assist.IA — sua secretária virtual",
-    short_name: "Assist.IA",
+    name: "MagoBox — sua secretária virtual",
+    short_name: "MagoBox",
     description: "Sua secretária virtual: e-mail, agenda, Drive, senhas e clientes, no WhatsApp e no app.",
     lang: "pt-BR",
     start_url: "/dashboard",

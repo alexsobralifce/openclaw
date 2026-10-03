@@ -857,7 +857,7 @@ export class MenuService {
     const { labels } = await this.setMain(ws);
     const h = Number(new Date().toLocaleString("en-GB", { timeZone: TZ, hour: "2-digit", hour12: false }));
     const [icon, saud] = h < 12 ? ["☀️", "Bom dia"] : h < 18 ? ["🌤️", "Boa tarde"] : ["🌙", "Boa noite"];
-    const title = greet ? `${saud}! Sou o Assist.IA` : "Menu principal";
+    const title = greet ? `${saud}! Sou o MagoBox` : "Menu principal";
     const items = labels.map((l, i) => `${key(i + 1)} ${l.icon} ${l.label}${l.sub ? `\n     _${l.sub}_` : ""}`);
     return [head(greet ? icon : "🏠", title, "O que vamos ver agora?"), ...(await this.contextLines(ws, greet)), items.join("\n"), foot("Responda com o número, escreva ou mande um áudio 🎙️"), "🚗 _Vai dirigir? Diga *modo carro* e eu respondo em texto para o carro ler em voz alta._"].join("\n");
   }

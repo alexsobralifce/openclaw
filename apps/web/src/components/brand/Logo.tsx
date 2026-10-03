@@ -1,4 +1,4 @@
-// Marca Assist.IA: balão de conversa com um "A" cuja barra é uma faísca de IA.
+// Marca MagoBox: balão de conversa com um "A" cuja barra é uma faísca de IA.
 // O desenho é o mesmo de src/app/icon.svg e public/brand/*.svg (mantenha os três iguais).
 
 export function LogoMark({ size = 32, className = "" }: { size?: number; className?: string }) {
@@ -18,7 +18,7 @@ export function LogoMark({ size = 32, className = "" }: { size?: number; classNa
   );
 }
 
-/** Ícone + nome. `textClassName` controla tamanho e fonte do nome; ".IA" sempre em verde-água. */
+/** Ícone + nome. `textClassName` controla tamanho e fonte do nome; "Box" sempre em verde-água. */
 export function Logo({
   size = 32,
   showText = true,
@@ -35,7 +35,7 @@ export function Logo({
       <LogoMark size={size} />
       {showText && (
         <span className={textClassName}>
-          Assist<span className="text-teal-400">.IA</span>
+          Mago<span className="text-teal-400">Box</span>
         </span>
       )}
     </span>

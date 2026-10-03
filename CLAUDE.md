@@ -2,7 +2,7 @@
 
 ## Codebase Overview
 
-Assist.IA (repositório `openclaw`): plataforma de inbox multi-tenant (WhatsApp via Evolution API e Instagram) com um assistente pessoal por WhatsApp (e-mail, agenda, Drive, cofre de senhas, clima). Postgres guarda também estado, filas e cache (não há Redis em uso). Comentários, mensagens e logs em pt-BR.
+MagoBox (repositório `openclaw`): plataforma de inbox multi-tenant (WhatsApp via Evolution API e Instagram) com um assistente pessoal por WhatsApp (e-mail, agenda, Drive, cofre de senhas, clima). Postgres guarda também estado, filas e cache (não há Redis em uso). Comentários, mensagens e logs em pt-BR.
 
 **Stack**: pnpm 12.6 + Turborepo, NestJS 10 (`apps/api`), Next.js 15 / React 19 / Tailwind 3 (`apps/web`), Prisma 6 (`packages/database`), Vitest, Railway.
 **Estrutura**: `apps/api/src/modules/*` (channels é o maior; o assistente vive em `channels/assistant/`), `apps/web/src`, `packages/{database,types}`, `docs/`.

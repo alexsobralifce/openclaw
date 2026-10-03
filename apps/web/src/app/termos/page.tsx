@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 
-export const metadata: Metadata = { title: "Termos de Serviço — Assist.IA" };
+export const metadata: Metadata = { title: "Termos de Serviço — MagoBox" };
 
 const CONTACT = process.env.NEXT_PUBLIC_CONTACT_EMAIL || "o contato de suporte informado pela empresa que atende você";
 
@@ -13,7 +13,7 @@ export default function TermsPage() {
       <section className="space-y-2">
         <h2 className="text-base font-semibold text-gray-200">1. O serviço</h2>
         <p>
-          O Assist.IA é uma plataforma de atendimento que reúne, em uma caixa de entrada, as mensagens que uma empresa recebe em canais como WhatsApp,
+          O MagoBox é uma plataforma de atendimento que reúne, em uma caixa de entrada, as mensagens que uma empresa recebe em canais como WhatsApp,
           e-mail e Instagram, e permite que a equipe responda, organize conversas e automatize tarefas. Inclui também um assistente pessoal, usado pelo
           WhatsApp e pelo painel, que ajuda o usuário com e-mails, agenda, arquivos, notas, contatos e um cofre de senhas. Ao criar uma conta ou conectar um canal, você
           concorda com estes termos.
@@ -72,7 +72,7 @@ export default function TermsPage() {
       <section className="space-y-2">
         <h2 className="text-base font-semibold text-gray-200">7. Canais de terceiros</h2>
         <p>
-          O Assist.IA depende de serviços de terceiros (como a API do Instagram e o WhatsApp). Eles têm regras próprias, podem mudar ou ficar
+          O MagoBox depende de serviços de terceiros (como a API do Instagram e o WhatsApp). Eles têm regras próprias, podem mudar ou ficar
           indisponíveis, e podem suspender contas. Não controlamos esses serviços e não garantimos que estarão sempre disponíveis. Você pode
           desconectar um canal a qualquer momento, em Canais.
         </p>
