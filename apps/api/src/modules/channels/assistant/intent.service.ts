@@ -23,6 +23,16 @@ const QUESTION = choice("O que o dono da secretária virtual quer fazer com esta
   other: "Qualquer outra coisa: perguntar algo, ver a agenda, e-mails, clima, conversar, mandar e-mail, cofre de senhas, procurar o que já foi anotado.",
 });
 
+interface PickKind {
+  id: string;
+  noun: string;
+  question: string;
+}
+const PICK_RULES = "Considere erro de digitação, falta de acento, palavras a mais ou a menos (artista, sufixo como Jr, extensão do arquivo) e apelido. Se mais de um servir igualmente, ou na dúvida, responda nenhum.";
+const PERSON: PickKind = { id: "pessoa", noun: "a pessoa pedida", question: "Qual destes contatos é a pessoa que o dono da secretária procura?" };
+const FILE: PickKind = { id: "arquivo", noun: "o arquivo pedido", question: "Qual destes arquivos do Google Drive (música, documento, planilha, foto...) é o que o dono pediu pelo nome ou descrição?" };
+const TOPIC: PickKind = { id: "assunto", noun: "o assunto pedido", question: "Qual destes assuntos de nota é o que o dono quer abrir?" };
+
 /** Só aceita a resposta do Jev quando ele está seguro; "other" nunca desvia o fluxo. */
 export function acceptIntent(r: IntentResult | null, wanted: Exclude<Intent, "other">, min = MIN_CONFIDENCE): boolean {
   return !!r && r.intent === wanted && r.confidence >= min;
@@ -78,27 +88,43 @@ export class IntentService {
   }
 
   /**
-   * Qual destes contatos é a pessoa que o dono pediu? O Jev escolhe com confiança (ou "nenhum"), para grafias e apelidos que a busca
-   * por texto não pega. Devolve o índice do candidato, ou null (sem chave, com erro, demora, dúvida ou "nenhum").
+   * Qual destes é o que o dono pediu? O Jev escolhe com confiança (ou "nenhum"), para grafias, apelidos e nomes incompletos que a busca
+   * por texto não pega. Só vão ao Jev o pedido e os NOMES dos candidatos (nada de e-mail, telefone ou conteúdo). Devolve o índice do
+   * candidato, ou null (sem chave, com erro, demora, dúvida, mais de um que sirva ou "nenhum").
    */
-  async pickPerson(query: string, candidates: { nome: string; email?: string }[]): Promise<number | null> {
-    if (!this.enabled() || !candidates.length) return null;
+  private async pickOne(what: PickKind, query: string, labels: string[]): Promise<number | null> {
+    if (!this.enabled() || !labels.length) return null;
     try {
       this.client ??= new TypeSafeClient({ timeout: TIMEOUT_MS, retry: { maxRetries: 0 } });
-      const options: Record<string, string> = Object.fromEntries(candidates.slice(0, 8).map((c, i) => [`c${i}`, `${c.nome}${c.email ? ` (${c.email})` : ""}`]));
-      options.nenhum = "Nenhum destes é a pessoa pedida.";
-      const question = choice("Qual destes contatos é a pessoa que o dono da secretária procura? Considere erro de digitação, sobrenome ou sufixo a mais ou a menos (Jr, Filho) e apelido; na dúvida, nenhum.", options as any);
-      const res = (await this.client.systemOne({ state: { pedido: query.slice(0, 100) }, questions: { pessoa: question } })) as any;
+      const options: Record<string, string> = Object.fromEntries(labels.slice(0, 8).map((l, i) => [`c${i}`, l.slice(0, 90)]));
+      options.nenhum = `Nenhum destes é claramente ${what.noun}.`;
+      const question = choice(`${what.question} ${PICK_RULES}`, options as any);
+      const res = (await this.client.systemOne({ state: { pedido: query.slice(0, 100) }, questions: { escolha: question } })) as any;
       this.count(res);
-      const { choice: pick, confidence } = res.answers.pessoa;
-      // Sem o nome pedido nem os candidatos: só o suficiente para calibrar o limiar.
-      this.logger.log(`Jev (pessoa): ${pick === "nenhum" ? "nenhum" : "um candidato"} (confiança ${Number(confidence).toFixed(2)}, ${candidates.length} candidatos)`);
+      const { choice: pick, confidence } = res.answers.escolha;
+      // Sem o pedido nem os candidatos: só o suficiente para calibrar o limiar.
+      this.logger.log(`Jev (${what.id}): ${pick === "nenhum" ? "nenhum" : "um candidato"} (confiança ${Number(confidence).toFixed(2)}, ${labels.length} candidatos)`);
       const i = /^c(\d+)$/.exec(String(pick));
       return i && confidence >= MIN_CONFIDENCE ? Number(i[1]) : null;
     } catch (e: any) {
-      this.logger.warn(`Jev indisponível para escolher o contato: ${e.message}`);
+      this.logger.warn(`Jev indisponível para escolher (${what.id}): ${e.message}`);
       return null;
     }
+  }
+
+  /** Contato (só o nome vai ao Jev). */
+  pickPerson(query: string, candidates: { nome: string }[]) {
+    return this.pickOne(PERSON, query, candidates.map((c) => c.nome));
+  }
+
+  /** Arquivo do Drive (música, documento, planilha...): só os nomes dos arquivos vão ao Jev. */
+  pickFile(query: string, files: { nome: string }[]) {
+    return this.pickOne(FILE, query, files.map((f) => f.nome));
+  }
+
+  /** Assunto de nota entre os existentes. */
+  pickNoteTopic(query: string, topics: { name: string }[]) {
+    return this.pickOne(TOPIC, query, topics.map((t) => t.name));
   }
 
   /** Conta a chamada ao Jev no consumo do usuário (o SDK devolve o uso em tokens). Sem preço configurado, os tokens contam pelo maior preço da tabela. */

@@ -323,7 +323,7 @@ export class AssistantService {
     this.conv = new ConversationMemory(this.state);
     this.menu.setExecutor((ws, a) => this.execute(ws, a.name, a.args));
     // `?.`: os dublês de teste do GoogleService são parciais
-    this.google.setPersonPicker?.(async (query, candidates) => (await this.intents?.pickPerson(query, candidates.map((c) => ({ nome: c.nome, email: c.emails[0] })))) ?? null);
+    this.google.setPersonPicker?.(async (query, candidates) => (await this.intents?.pickPerson(query, candidates)) ?? null);
     this.menu.setFileSender((ws, f) => this.sendFileToOwner(ws, f));
     this.menu.setChatCleaner((ws, minAgeMs) => this.cleanChat(ws, minAgeMs));
   }

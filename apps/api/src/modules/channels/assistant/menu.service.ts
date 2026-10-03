@@ -368,7 +368,7 @@ export class MenuService {
       }
       case "notes_input": {
         if (n === 0) return this.mainMenu(ws, false);
-        const topic = n !== null ? d.topics?.[n - 1] : pickTopic<{ id: string; name: string }>(d.topics ?? [], text);
+        const topic = n !== null ? d.topics?.[n - 1] : await this.topicByName<{ id: string; name: string }>(d.topics ?? [], text);
         if (topic) return this.notesTopicView(ws, topic);
         return n !== null ? this.invalid() : this.notesEntry(ws);
       }
@@ -1049,6 +1049,14 @@ export class MenuService {
     }
     await this.set(ws, "drive", { items, query });
     if (items.length === 1 && !fuzzy) return this.driveSend(ws, items[0]);
+    // Vários (ou só parecidos): o Jev vê se algum é claramente o pedido; se for, já envia e deixa os outros para corrigir pelo número
+    const best = items.length > 1 ? await this.intents?.pickFile(query, items) : null;
+    if (best !== null && best !== undefined && items[best]) {
+      const sent = await this.driveSend(ws, items[best]);
+      const others = items.map((f, i) => ({ f, i })).filter((x) => x.i !== best).slice(0, 5);
+      const rows = others.map(({ f, i }) => `${key(i + 1)} ${fileIcon(f.tipo)} *${short(f.nome, 45)}*`);
+      return [sent, others.length ? `🔁 _Não era esse? Responda com o número:_\n${rows.join("\n")}` : ""].filter(Boolean).join("\n");
+    }
     const multi = accounts.length > 1;
     const rows = items.map((f, i) => `${key(i + 1)} ${fileIcon(f.tipo)} *${short(f.nome, 45)}*\n     _${[this.fmtDate(f.modificado), fmtSize(f.tamanho), multi ? accountLabel(f.account) : ""].filter(Boolean).join(" · ")}_`);
     const title = fuzzy ? "Não achei igual, mas parecem com o que você descreveu" : `Achei ${items.length} arquivos`;
@@ -1105,6 +1113,14 @@ export class MenuService {
       DIV,
       cancel,
     ].join("\n");
+  }
+
+  /** Assunto de nota pelo nome: a busca por texto primeiro; se não achar, o Jev escolhe entre os existentes ("contratos" para "contrato do joão"). */
+  private async topicByName<T extends { name: string }>(topics: T[], wanted: string): Promise<T | undefined> {
+    const exact = pickTopic(topics, wanted);
+    if (exact || topics.length < 2) return exact;
+    const i = await this.intents?.pickNoteTopic(wanted, topics);
+    return i !== null && i !== undefined ? topics[i] : undefined;
   }
 
   /** O que foi dito no passo "para" não é um endereço: tenta achar o contato pelo nome. */
@@ -1288,7 +1304,7 @@ export class MenuService {
       failure = `⚠️ _Não consegui listar seus assuntos agora: ${short(e.message, 120)}_`;
     }
     if (wanted) {
-      const topic = pickTopic(topics, wanted);
+      const topic = await this.topicByName(topics, wanted);
       if (topic) return this.notesTopicView(ws, topic);
     }
     await this.set(ws, "notes_input", { topics });

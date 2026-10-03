@@ -44,19 +44,20 @@ describe("Jev escolhe a pessoa", () => {
   afterEach(() => {
     delete process.env.TYPESAFE_API_KEY;
   });
-  const cands = [{ nome: "Arnaud Silva", email: "arnaud@x.com" }, { nome: "Arnaldo Pereira" }];
+  const cands = [{ nome: "Arnaud Silva", email: "arnaud@x.com" } as any, { nome: "Arnaldo Pereira" }];
 
   it("devolve o índice do candidato quando está seguro", async () => {
-    systemOne.mockResolvedValue({ answers: { pessoa: { choice: "c0", confidence: 0.93 } } });
+    systemOne.mockResolvedValue({ answers: { escolha: { choice: "c0", confidence: 0.93 } } });
     expect(await new IntentService().pickPerson("arnoud jr", cands)).toBe(0);
     const sent = systemOne.mock.calls[0][0];
     expect(sent.state).toEqual({ pedido: "arnoud jr" });
-    expect(sent.questions.pessoa.criteria).toMatchObject({ c0: "Arnaud Silva (arnaud@x.com)", c1: "Arnaldo Pereira", nenhum: expect.any(String) });
+    expect(JSON.stringify(sent)).not.toContain("arnaud@x.com"); // e-mail de contato nunca vai ao Jev
+    expect(sent.questions.escolha.criteria).toMatchObject({ c0: "Arnaud Silva", c1: "Arnaldo Pereira", nenhum: expect.any(String) });
   });
   it("na dúvida, 'nenhum', erro ou sem chave: não escolhe ninguém", async () => {
-    systemOne.mockResolvedValue({ answers: { pessoa: { choice: "c1", confidence: 0.6 } } });
+    systemOne.mockResolvedValue({ answers: { escolha: { choice: "c1", confidence: 0.6 } } });
     expect(await new IntentService().pickPerson("arnoud", cands)).toBeNull();
-    systemOne.mockResolvedValue({ answers: { pessoa: { choice: "nenhum", confidence: 0.97 } } });
+    systemOne.mockResolvedValue({ answers: { escolha: { choice: "nenhum", confidence: 0.97 } } });
     expect(await new IntentService().pickPerson("arnoud", cands)).toBeNull();
     systemOne.mockRejectedValue(new Error("timeout"));
     expect(await new IntentService().pickPerson("arnoud", cands)).toBeNull();
@@ -66,9 +67,9 @@ describe("Jev escolhe a pessoa", () => {
     expect(systemOne).not.toHaveBeenCalled();
   });
   it("manda no máximo 8 candidatos", async () => {
-    systemOne.mockResolvedValue({ answers: { pessoa: { choice: "nenhum", confidence: 0.9 } } });
+    systemOne.mockResolvedValue({ answers: { escolha: { choice: "nenhum", confidence: 0.9 } } });
     await new IntentService().pickPerson("x", Array.from({ length: 20 }, (_, i) => ({ nome: `Fulano ${i}` })));
-    expect(Object.keys(systemOne.mock.calls[0][0].questions.pessoa.criteria)).toHaveLength(9);
+    expect(Object.keys(systemOne.mock.calls[0][0].questions.escolha.criteria)).toHaveLength(9);
   });
 });
 
