@@ -17,13 +17,13 @@ export const metadata: Metadata = {
     locale: "pt_BR",
     title: "MagoBox — sua secretária virtual no WhatsApp",
     description: "E-mail, agenda, Drive e senhas. Por texto, áudio, foto ou link.",
-    ...(site ? { images: [{ url: "/brand/assistia-og.png", width: 1200, height: 630, alt: "MagoBox" }] } : {}),
+    ...(site ? { images: [{ url: "/brand/magobox-og.png", width: 1200, height: 630, alt: "MagoBox" }] } : {}),
   },
   twitter: { card: "summary_large_image" },
 };
 
 export const viewport: Viewport = {
-  themeColor: "#0f766e",
+  themeColor: "#6D28D9",
   width: "device-width",
   initialScale: 1,
   viewportFit: "cover",

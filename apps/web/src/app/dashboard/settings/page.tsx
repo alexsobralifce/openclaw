@@ -6,7 +6,7 @@ import { setUser } from "@/lib/auth";
 import { useMe } from "@/hooks/useMe";
 
 const card = "bg-gray-900 border border-gray-800 rounded-xl p-4";
-const input = "w-full bg-gray-950 border border-gray-700 rounded-lg px-3 py-2 text-sm text-gray-200 placeholder-gray-600 focus:outline-none focus:border-teal-500";
+const input = "w-full bg-gray-950 border border-gray-700 rounded-lg px-3 py-2 text-sm text-gray-200 placeholder-gray-600 focus:outline-none focus:border-violet-500";
 const btn = "px-3 py-1.5 rounded-lg text-xs font-medium transition-colors";
 
 export default function SettingsPage() {
@@ -73,7 +73,7 @@ export default function SettingsPage() {
 
       <form onSubmit={save} className={`${card} space-y-3`}>
         {msg && (
-          <div className={`px-3 py-2 rounded-lg text-xs border ${msg.ok ? "bg-teal-500/10 border-teal-500/30 text-teal-300" : "bg-red-500/10 border-red-500/30 text-red-300"}`}>
+          <div className={`px-3 py-2 rounded-lg text-xs border ${msg.ok ? "bg-violet-500/10 border-violet-500/30 text-violet-300" : "bg-red-500/10 border-red-500/30 text-red-300"}`}>
             {msg.text}
           </div>
         )}
@@ -88,7 +88,7 @@ export default function SettingsPage() {
             Mensagens deste número para o WhatsApp conectado em Canais viram comandos do assistente (e-mails, agenda, conversas).
           </span>
         </label>
-        <button disabled={saving} className={`${btn} bg-teal-500 text-white hover:bg-teal-400 disabled:opacity-40`}>
+        <button disabled={saving} className={`${btn} bg-violet-500 text-white hover:bg-violet-400 disabled:opacity-40`}>
           {saving ? "Salvando..." : "Salvar"}
         </button>
       </form>
@@ -100,7 +100,7 @@ export default function SettingsPage() {
         ) : (
           <div className="flex flex-wrap gap-1.5">
             {services.map((s) => (
-              <span key={s} className="text-[11px] px-2 py-1 rounded-md bg-teal-500/10 text-teal-300">{catalog[s] ?? s}</span>
+              <span key={s} className="text-[11px] px-2 py-1 rounded-md bg-violet-500/10 text-violet-300">{catalog[s] ?? s}</span>
             ))}
           </div>
         )}
@@ -122,7 +122,7 @@ export default function SettingsPage() {
                   <label className={`flex items-center gap-2 text-sm ${it.locked ? "text-gray-500" : "text-gray-200 cursor-pointer"}`}>
                     <input
                       type="checkbox"
-                      className="accent-teal-500"
+                      className="accent-violet-500"
                       checked={!it.hidden}
                       disabled={it.locked}
                       onChange={(e) => setMenu(menu.map((m) => (m.id === it.id ? { ...m, hidden: !e.target.checked } : m)))}
@@ -135,9 +135,9 @@ export default function SettingsPage() {
               ))}
             </ul>
           )}
-          {menuMsg && <p className={`text-xs ${menuMsg.ok ? "text-teal-400" : "text-red-400"}`}>{menuMsg.text}</p>}
+          {menuMsg && <p className={`text-xs ${menuMsg.ok ? "text-violet-400" : "text-red-400"}`}>{menuMsg.text}</p>}
           {menu !== null && (
-            <button type="button" onClick={saveMenu} disabled={menuSaving} className={`${btn} bg-teal-600 hover:bg-teal-500 text-white disabled:opacity-50`}>
+            <button type="button" onClick={saveMenu} disabled={menuSaving} className={`${btn} bg-violet-600 hover:bg-violet-500 text-white disabled:opacity-50`}>
               {menuSaving ? "Salvando..." : "Salvar menu"}
             </button>
           )}

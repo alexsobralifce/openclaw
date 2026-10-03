@@ -141,7 +141,7 @@ export function Sidebar() {
       {/* Workspace badge */}
       <div className="px-3 pt-3 pb-1">
         <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-gray-800 cursor-pointer hover:bg-gray-700 transition-colors">
-          <div className="w-6 h-6 rounded-md bg-teal-500 flex items-center justify-center text-xs font-bold text-white flex-shrink-0">
+          <div className="w-6 h-6 rounded-md bg-violet-500 flex items-center justify-center text-xs font-bold text-white flex-shrink-0">
             {(me?.workspaceName ?? "W").charAt(0).toUpperCase()}
           </div>
           <div className="min-w-0">
@@ -161,11 +161,11 @@ export function Sidebar() {
               href={item.href}
               className={`flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
                 active
-                  ? "bg-teal-500/15 text-teal-400"
+                  ? "bg-violet-500/15 text-violet-400"
                   : "text-gray-400 hover:text-gray-200 hover:bg-gray-800"
               }`}
             >
-              <span className={active ? "text-teal-400" : "text-gray-500"}>{item.icon}</span>
+              <span className={active ? "text-violet-400" : "text-gray-500"}>{item.icon}</span>
               {item.label}
             </Link>
           );
@@ -178,7 +178,7 @@ export function Sidebar() {
           href="/comandos.html"
           target="_blank"
           rel="noopener"
-          className="w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm text-gray-500 hover:text-teal-400 hover:bg-gray-800 transition-colors"
+          className="w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm text-gray-500 hover:text-violet-400 hover:bg-gray-800 transition-colors"
         >
           <svg width="16" height="16" fill="none" viewBox="0 0 24 24">
             <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20V3H6.5A2.5 2.5 0 0 0 4 5.5v14ZM4 19.5A2.5 2.5 0 0 0 6.5 22H20v-5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
@@ -189,7 +189,7 @@ export function Sidebar() {
           href="/api-publica.html"
           target="_blank"
           rel="noopener"
-          className="w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm text-gray-500 hover:text-teal-400 hover:bg-gray-800 transition-colors"
+          className="w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm text-gray-500 hover:text-violet-400 hover:bg-gray-800 transition-colors"
         >
           <svg width="16" height="16" fill="none" viewBox="0 0 24 24">
             <path d="M16 18l6-6-6-6M8 6l-6 6 6 6" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>

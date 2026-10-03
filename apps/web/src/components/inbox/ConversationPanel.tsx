@@ -112,7 +112,7 @@ export function ConversationPanel({ conversationId }: Props) {
 
   if (!data) return (
     <div className="flex-1 flex items-center justify-center bg-gray-950">
-      <div className="w-5 h-5 border-2 border-teal-500 border-t-transparent rounded-full animate-spin" />
+      <div className="w-5 h-5 border-2 border-violet-500 border-t-transparent rounded-full animate-spin" />
     </div>
   );
 
@@ -191,7 +191,7 @@ export function ConversationPanel({ conversationId }: Props) {
             {status !== "RESOLVED" && (
               <button
                 onClick={() => updateStatus("RESOLVED")}
-                className="px-3 py-1.5 rounded-lg text-xs font-medium bg-teal-500/10 text-teal-400 hover:bg-teal-500/20 transition-colors"
+                className="px-3 py-1.5 rounded-lg text-xs font-medium bg-violet-500/10 text-violet-400 hover:bg-violet-500/20 transition-colors"
               >
                 Resolver
               </button>
@@ -221,7 +221,7 @@ export function ConversationPanel({ conversationId }: Props) {
                   <div
                     className={`max-w-[85%] md:max-w-[70%] px-4 py-2.5 rounded-2xl text-sm leading-relaxed ${
                       out
-                        ? `bg-teal-600 text-white rounded-br-sm ${optimistic ? "opacity-70" : ""}`
+                        ? `bg-violet-600 text-white rounded-br-sm ${optimistic ? "opacity-70" : ""}`
                         : "bg-gray-800 text-gray-200 rounded-bl-sm"
                     }`}
                   >
@@ -241,7 +241,7 @@ export function ConversationPanel({ conversationId }: Props) {
         <div className="flex-shrink-0 border-t border-gray-800 bg-gray-900 p-3">
           {sendError && <p className="mb-2 text-xs text-red-400">{sendError}</p>}
           <div className="flex items-end gap-2">
-            <div className="flex-1 bg-gray-800 rounded-xl border border-gray-700 focus-within:border-teal-500/50 transition-colors">
+            <div className="flex-1 bg-gray-800 rounded-xl border border-gray-700 focus-within:border-violet-500/50 transition-colors">
               <textarea
                 value={text}
                 onChange={(e) => setText(e.target.value)}
@@ -260,7 +260,7 @@ export function ConversationPanel({ conversationId }: Props) {
             <button
               onClick={send}
               disabled={!text.trim() || sending || status === "RESOLVED"}
-              className="w-10 h-10 rounded-xl bg-teal-500 flex items-center justify-center text-white disabled:opacity-40 disabled:cursor-not-allowed hover:bg-teal-400 transition-colors flex-shrink-0"
+              className="w-10 h-10 rounded-xl bg-violet-500 flex items-center justify-center text-white disabled:opacity-40 disabled:cursor-not-allowed hover:bg-violet-400 transition-colors flex-shrink-0"
             >
               {sending ? (
                 <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
@@ -274,7 +274,7 @@ export function ConversationPanel({ conversationId }: Props) {
           </div>
           {status === "RESOLVED" && (
             <p className="text-xs text-gray-600 mt-2 text-center">
-              Conversa resolvida. <button onClick={() => updateStatus("OPEN")} className="text-teal-400 hover:underline">Reabrir</button> para continuar.
+              Conversa resolvida. <button onClick={() => updateStatus("OPEN")} className="text-violet-400 hover:underline">Reabrir</button> para continuar.
             </p>
           )}
         </div>
@@ -309,7 +309,7 @@ export function ConversationPanel({ conversationId }: Props) {
             <textarea
               placeholder="Adicionar nota..."
               rows={3}
-              className="w-full bg-gray-800 rounded-lg px-3 py-2 text-xs text-gray-300 placeholder-gray-600 resize-none outline-none border border-gray-700 focus:border-teal-500/50 transition-colors"
+              className="w-full bg-gray-800 rounded-lg px-3 py-2 text-xs text-gray-300 placeholder-gray-600 resize-none outline-none border border-gray-700 focus:border-violet-500/50 transition-colors"
             />
           </Section>
         </div>

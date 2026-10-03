@@ -57,8 +57,8 @@ export function BottomNav() {
               {rest.map((item) => {
                 const active = pathname.startsWith(item.href);
                 return (
-                  <Link key={item.href} href={item.href} className={`${rowClass} ${active ? "text-teal-400" : ""}`}>
-                    <span className={active ? "text-teal-400" : "text-gray-500"}>{item.icon}</span>
+                  <Link key={item.href} href={item.href} className={`${rowClass} ${active ? "text-violet-400" : ""}`}>
+                    <span className={active ? "text-violet-400" : "text-gray-500"}>{item.icon}</span>
                     {item.label}
                   </Link>
                 );
@@ -85,7 +85,7 @@ export function BottomNav() {
               key={item.href}
               href={item.href}
               aria-current={active ? "page" : undefined}
-              className={`flex-1 flex flex-col items-center justify-center gap-0.5 min-h-14 text-[11px] font-medium ${active ? "text-teal-400" : "text-gray-500 active:text-gray-300"}`}
+              className={`flex-1 flex flex-col items-center justify-center gap-0.5 min-h-14 text-[11px] font-medium ${active ? "text-violet-400" : "text-gray-500 active:text-gray-300"}`}
             >
               {item.icon}
               {item.label}
@@ -96,7 +96,7 @@ export function BottomNav() {
           onClick={() => setOpen((o) => !o)}
           aria-expanded={open}
           aria-haspopup="dialog"
-          className={`flex-1 flex flex-col items-center justify-center gap-0.5 min-h-14 text-[11px] font-medium ${moreActive || open ? "text-teal-400" : "text-gray-500 active:text-gray-300"}`}
+          className={`flex-1 flex flex-col items-center justify-center gap-0.5 min-h-14 text-[11px] font-medium ${moreActive || open ? "text-violet-400" : "text-gray-500 active:text-gray-300"}`}
         >
           <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" aria-hidden>
             <circle cx="5" cy="12" r="1.8" /><circle cx="12" cy="12" r="1.8" /><circle cx="19" cy="12" r="1.8" />

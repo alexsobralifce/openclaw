@@ -68,7 +68,7 @@ export default function RegisterPage() {
               value={form.workspaceName}
               onChange={set("workspaceName")}
               placeholder="Minha Empresa"
-              className="w-full bg-gray-800 border border-gray-700 rounded-lg px-4 py-2.5 text-sm text-gray-200 placeholder-gray-600 outline-none focus:border-teal-500/60 transition-colors"
+              className="w-full bg-gray-800 border border-gray-700 rounded-lg px-4 py-2.5 text-sm text-gray-200 placeholder-gray-600 outline-none focus:border-violet-500/60 transition-colors"
             />
           </div>
 
@@ -79,7 +79,7 @@ export default function RegisterPage() {
               value={form.name}
               onChange={set("name")}
               placeholder="João Silva"
-              className="w-full bg-gray-800 border border-gray-700 rounded-lg px-4 py-2.5 text-sm text-gray-200 placeholder-gray-600 outline-none focus:border-teal-500/60 transition-colors"
+              className="w-full bg-gray-800 border border-gray-700 rounded-lg px-4 py-2.5 text-sm text-gray-200 placeholder-gray-600 outline-none focus:border-violet-500/60 transition-colors"
             />
           </div>
 
@@ -91,7 +91,7 @@ export default function RegisterPage() {
               value={form.email}
               onChange={set("email")}
               placeholder="seu@email.com"
-              className="w-full bg-gray-800 border border-gray-700 rounded-lg px-4 py-2.5 text-sm text-gray-200 placeholder-gray-600 outline-none focus:border-teal-500/60 transition-colors"
+              className="w-full bg-gray-800 border border-gray-700 rounded-lg px-4 py-2.5 text-sm text-gray-200 placeholder-gray-600 outline-none focus:border-violet-500/60 transition-colors"
             />
           </div>
 
@@ -104,14 +104,14 @@ export default function RegisterPage() {
               value={form.password}
               onChange={set("password")}
               placeholder="mínimo 8 caracteres"
-              className="w-full bg-gray-800 border border-gray-700 rounded-lg px-4 py-2.5 text-sm text-gray-200 placeholder-gray-600 outline-none focus:border-teal-500/60 transition-colors"
+              className="w-full bg-gray-800 border border-gray-700 rounded-lg px-4 py-2.5 text-sm text-gray-200 placeholder-gray-600 outline-none focus:border-violet-500/60 transition-colors"
             />
           </div>
 
           <button
             type="submit"
             disabled={loading}
-            className="w-full bg-teal-500 hover:bg-teal-400 disabled:opacity-50 disabled:cursor-not-allowed text-white font-semibold py-2.5 rounded-lg text-sm transition-colors"
+            className="w-full bg-violet-500 hover:bg-violet-400 disabled:opacity-50 disabled:cursor-not-allowed text-white font-semibold py-2.5 rounded-lg text-sm transition-colors"
           >
             {loading ? "Criando..." : "Criar workspace"}
           </button>
@@ -121,7 +121,7 @@ export default function RegisterPage() {
 
         <p className="text-center text-xs text-gray-600 mt-4">
           Já tem conta?{" "}
-          <Link href="/auth/login" className="text-teal-400 hover:text-teal-300 transition-colors">
+          <Link href="/auth/login" className="text-violet-400 hover:text-violet-300 transition-colors">
             Entrar
           </Link>
         </p>

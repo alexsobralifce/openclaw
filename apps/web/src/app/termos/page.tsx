@@ -46,7 +46,7 @@ export default function TermsPage() {
           <li>O assistente usa inteligência artificial e pode errar: confira o que ele lê, resume ou redige antes de agir com base nisso.</li>
           <li>Ações sensíveis, como enviar e-mail, criar evento ou responder um cliente, só acontecem depois da sua confirmação. Você é responsável por confirmá-las.</li>
           <li>Não guarde senhas em notas nem as peça ao assistente; para isso existe o cofre de senhas do painel. O assistente recusa notas que contenham senhas.</li>
-          <li>Seus pedidos e arquivos são enviados a provedores de IA para serem processados, como descrito na <a className="text-teal-400 underline" href="/privacidade">Política de Privacidade</a>.</li>
+          <li>Seus pedidos e arquivos são enviados a provedores de IA para serem processados, como descrito na <a className="text-violet-400 underline" href="/privacidade">Política de Privacidade</a>.</li>
         </ul>
       </section>
 
@@ -81,8 +81,8 @@ export default function TermsPage() {
       <section className="space-y-2">
         <h2 className="text-base font-semibold text-gray-200">8. Dados e privacidade</h2>
         <p>
-          O tratamento de dados está descrito na <a className="text-teal-400 underline" href="/privacidade">Política de Privacidade</a>. Para pedir a
-          exclusão de dados, veja <a className="text-teal-400 underline" href="/exclusao-de-dados">Exclusão de dados</a>.
+          O tratamento de dados está descrito na <a className="text-violet-400 underline" href="/privacidade">Política de Privacidade</a>. Para pedir a
+          exclusão de dados, veja <a className="text-violet-400 underline" href="/exclusao-de-dados">Exclusão de dados</a>.
         </p>
       </section>
 

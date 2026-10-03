@@ -13,7 +13,7 @@ export default function DataDeletionPage() {
         <h2 className="text-base font-semibold text-gray-200">Se você usa o assistente e conectou sua conta Google</h2>
         <ol className="list-decimal pl-6 space-y-1">
           <li>Entre no MagoBox e abra <strong>Canais</strong>; remova a conta Google. O token de acesso é apagado e o MagoBox deixa de acessar seu Gmail, Agenda, Drive e Contatos.</li>
-          <li>Opcionalmente, remova o MagoBox também em <a className="text-teal-400 underline" href="https://myaccount.google.com/permissions" target="_blank" rel="noreferrer">myaccount.google.com/permissions</a>.</li>
+          <li>Opcionalmente, remova o MagoBox também em <a className="text-violet-400 underline" href="https://myaccount.google.com/permissions" target="_blank" rel="noreferrer">myaccount.google.com/permissions</a>.</li>
           <li>As notas e os contatos criados na pasta <em>Assist.IA</em> do seu Google Drive são seus: apague a pasta no Drive se quiser removê-los.</li>
           <li>Para apagar também sua conta, o histórico do assistente, a memória, a rotina e o cofre de senhas guardados conosco, peça a exclusão por e-mail (abaixo), do endereço cadastrado na conta. Atendemos em até 30 dias.</li>
         </ol>

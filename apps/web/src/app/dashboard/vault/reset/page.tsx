@@ -7,7 +7,7 @@ import { api } from "@/lib/api";
 import { RecoveryKeyBox } from "@/components/vault/RecoveryKeyBox";
 
 const card = "bg-gray-900 border border-gray-800 rounded-xl p-4";
-const input = "w-full bg-gray-950 border border-gray-700 rounded-lg px-3 py-2 text-sm text-gray-200 placeholder-gray-600 focus:outline-none focus:border-teal-500";
+const input = "w-full bg-gray-950 border border-gray-700 rounded-lg px-3 py-2 text-sm text-gray-200 placeholder-gray-600 focus:outline-none focus:border-violet-500";
 const btn = "px-3 py-1.5 rounded-lg text-xs font-medium transition-colors disabled:opacity-40";
 
 export default function ResetPage() {
@@ -62,15 +62,15 @@ function Reset() {
   if (done) {
     return (
       <div className="p-6 max-w-xl space-y-4">
-        <div className="px-3 py-2 rounded-lg text-xs border bg-teal-500/10 border-teal-500/30 text-teal-300">Senha mestra redefinida. Desbloqueie o cofre com a nova senha.</div>
-        <Link href="/dashboard/vault" className={`${btn} inline-block bg-teal-500 text-white hover:bg-teal-400`}>Ir para o cofre</Link>
+        <div className="px-3 py-2 rounded-lg text-xs border bg-violet-500/10 border-violet-500/30 text-violet-300">Senha mestra redefinida. Desbloqueie o cofre com a nova senha.</div>
+        <Link href="/dashboard/vault" className={`${btn} inline-block bg-violet-500 text-white hover:bg-violet-400`}>Ir para o cofre</Link>
       </div>
     );
   }
   if (newKey) {
     return (
       <div className="p-6 max-w-xl space-y-4">
-        <div className="px-3 py-2 rounded-lg text-xs border bg-teal-500/10 border-teal-500/30 text-teal-300">
+        <div className="px-3 py-2 rounded-lg text-xs border bg-violet-500/10 border-violet-500/30 text-violet-300">
           {mode === "key" ? "Nova senha mestra definida e suas senhas foram mantidas." : "Cofre novo e vazio criado com a nova senha mestra."} A chave de recuperação anterior deixou de valer: guarde esta nova.
         </div>
         <RecoveryKeyBox keyText={newKey} onDone={() => setDone(true)} />
@@ -93,7 +93,7 @@ function Reset() {
       ) : (
         <form onSubmit={submit} className={`${card} space-y-3`}>
           <div className="flex gap-2">
-            <button type="button" onClick={() => setMode("key")} className={`${btn} ${mode === "key" ? "bg-teal-500 text-white" : "bg-gray-800 text-gray-300"}`}>Tenho a chave de recuperação</button>
+            <button type="button" onClick={() => setMode("key")} className={`${btn} ${mode === "key" ? "bg-violet-500 text-white" : "bg-gray-800 text-gray-300"}`}>Tenho a chave de recuperação</button>
             <button type="button" onClick={() => setMode("empty")} className={`${btn} ${mode === "empty" ? "bg-red-500/80 text-white" : "bg-gray-800 text-gray-300"}`}>Não tenho a chave</button>
           </div>
 
@@ -124,7 +124,7 @@ function Reset() {
             <span className="block text-[11px] text-gray-500 mb-1">Repita a nova senha mestra</span>
             <input type="password" required autoComplete="new-password" className={input} value={pw2} onChange={(e) => setPw2(e.target.value)} />
           </label>
-          <button disabled={busy} className={`${btn} ${mode === "key" ? "bg-teal-500 hover:bg-teal-400" : "bg-red-500 hover:bg-red-400"} text-white`}>
+          <button disabled={busy} className={`${btn} ${mode === "key" ? "bg-violet-500 hover:bg-violet-400" : "bg-red-500 hover:bg-red-400"} text-white`}>
             {busy ? "Aguarde..." : mode === "key" ? "Redefinir mantendo minhas senhas" : "Apagar o cofre antigo e recomeçar"}
           </button>
         </form>

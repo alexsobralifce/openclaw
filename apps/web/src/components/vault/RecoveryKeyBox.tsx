@@ -36,7 +36,7 @@ export function RecoveryKeyBox({ keyText, onDone }: { keyText: string; onDone: (
         Se você esquecer a senha mestra, é esta chave (junto com o link enviado ao seu e-mail) que permite criar outra <b>sem perder as senhas guardadas</b>.
         Ela aparece <b>só agora</b> e não fica gravada em lugar nenhum do sistema.
       </p>
-      <p className="font-mono text-lg tracking-wider text-teal-300 break-all select-all bg-gray-950 border border-gray-800 rounded-lg px-3 py-3">{keyText}</p>
+      <p className="font-mono text-lg tracking-wider text-violet-300 break-all select-all bg-gray-950 border border-gray-800 rounded-lg px-3 py-3">{keyText}</p>
       <div className="flex flex-wrap gap-2">
         <button onClick={copy} className={`${btn} bg-gray-800 text-gray-300 hover:bg-gray-700`}>{copied ? "Copiada (limpo em 30 s)" : "Copiar"}</button>
         <button onClick={download} className={`${btn} bg-gray-800 text-gray-300 hover:bg-gray-700`}>Baixar .txt</button>
@@ -46,7 +46,7 @@ export function RecoveryKeyBox({ keyText, onDone }: { keyText: string; onDone: (
         <input type="checkbox" className="mt-0.5" checked={saved} onChange={(e) => setSaved(e.target.checked)} />
         <span>Guardei a chave de recuperação em um local seguro.</span>
       </label>
-      <button disabled={!saved} onClick={onDone} className={`${btn} bg-teal-500 text-white hover:bg-teal-400`}>Continuar</button>
+      <button disabled={!saved} onClick={onDone} className={`${btn} bg-violet-500 text-white hover:bg-violet-400`}>Continuar</button>
     </div>
   );
 }

@@ -36,7 +36,7 @@ export default function UsagePage() {
         </div>
         <div className="flex gap-2">
           {PERIODS.map((p) => (
-            <button key={p} onClick={() => setDays(p)} className={`${btn} ${days === p ? "bg-teal-500 text-white" : "bg-gray-800 text-gray-300 hover:bg-gray-700"}`}>{p} dias</button>
+            <button key={p} onClick={() => setDays(p)} className={`${btn} ${days === p ? "bg-violet-500 text-white" : "bg-gray-800 text-gray-300 hover:bg-gray-700"}`}>{p} dias</button>
           ))}
         </div>
       </div>
@@ -95,7 +95,7 @@ export default function UsagePage() {
             ) : (
               <div className="flex items-end gap-1 h-28" role="img" aria-label="Tokens por dia">
                 {data.byDay.map((d) => (
-                  <div key={d.day} title={`${d.day}: ${nf.format(d.tokens)} tokens`} className="flex-1 min-w-[3px] bg-teal-500/70 rounded-t" style={{ height: `${Math.max(3, (d.tokens / max) * 100)}%` }} />
+                  <div key={d.day} title={`${d.day}: ${nf.format(d.tokens)} tokens`} className="flex-1 min-w-[3px] bg-violet-500/70 rounded-t" style={{ height: `${Math.max(3, (d.tokens / max) * 100)}%` }} />
                 ))}
               </div>
             )}

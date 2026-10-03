@@ -4,9 +4,9 @@ import { useCallback, useEffect, useState } from "react";
 import { api, type NoteTopic } from "@/lib/api";
 
 const card = "bg-gray-900 border border-gray-800 rounded-xl p-4";
-const input = "w-full bg-gray-950 border border-gray-700 rounded-lg px-3 py-2 text-sm text-gray-200 placeholder-gray-600 focus:outline-none focus:border-teal-500";
+const input = "w-full bg-gray-950 border border-gray-700 rounded-lg px-3 py-2 text-sm text-gray-200 placeholder-gray-600 focus:outline-none focus:border-violet-500";
 const btn = "px-3 py-1.5 rounded-lg text-xs font-medium transition-colors disabled:opacity-40";
-const primary = `${btn} bg-teal-500 text-white hover:bg-teal-400`;
+const primary = `${btn} bg-violet-500 text-white hover:bg-violet-400`;
 const ghost = `${btn} bg-gray-800 text-gray-300 hover:bg-gray-700`;
 
 type Open = { name: string; topic: string; content: string; link?: string };
@@ -70,7 +70,7 @@ export default function NotesPage() {
         <p className="text-sm text-gray-500 mt-1">Organizadas por assunto no seu Drive (pasta Assist.IA/Notas). Pelo WhatsApp, mande um PDF ou foto e eu crio a nota.</p>
       </div>
 
-      {msg && <div className={`text-sm rounded-lg px-3 py-2 ${msg.ok ? "bg-teal-500/10 text-teal-300" : "bg-red-500/10 text-red-300"}`}>{msg.text}</div>}
+      {msg && <div className={`text-sm rounded-lg px-3 py-2 ${msg.ok ? "bg-violet-500/10 text-violet-300" : "bg-red-500/10 text-red-300"}`}>{msg.text}</div>}
 
       <div className={`${card} space-y-3`}>
         <h2 className="text-sm font-medium text-gray-300">Nova nota</h2>

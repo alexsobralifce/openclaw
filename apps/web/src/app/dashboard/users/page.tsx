@@ -5,14 +5,14 @@ import { api } from "@/lib/api";
 import { isAdmin, useMe } from "@/hooks/useMe";
 
 const card = "bg-gray-900 border border-gray-800 rounded-xl p-4";
-const input = "w-full bg-gray-950 border border-gray-700 rounded-lg px-3 py-2 text-sm text-gray-200 placeholder-gray-600 focus:outline-none focus:border-teal-500";
+const input = "w-full bg-gray-950 border border-gray-700 rounded-lg px-3 py-2 text-sm text-gray-200 placeholder-gray-600 focus:outline-none focus:border-violet-500";
 const btn = "px-3 py-1.5 rounded-lg text-xs font-medium transition-colors";
 const fmt = (d?: string) => (d ? new Date(d).toLocaleDateString("pt-BR") : "");
 
 const ROLE_LABEL: Record<string, string> = { ROOT: "Root", ADMIN: "Administrador", USER: "Usuário" };
 const STATUS: Record<string, { label: string; cls: string }> = {
   PENDING: { label: "Aguardando aprovação", cls: "bg-amber-500/15 text-amber-300" },
-  ACTIVE: { label: "Ativo", cls: "bg-teal-500/15 text-teal-300" },
+  ACTIVE: { label: "Ativo", cls: "bg-violet-500/15 text-violet-300" },
   DISABLED: { label: "Desativado", cls: "bg-red-500/15 text-red-300" },
 };
 const FILTERS = [
@@ -60,7 +60,7 @@ export default function UsersPage() {
             Aprove cadastros, defina o nível e os serviços de cada conta. Cada usuário tem o próprio workspace; você não vê o conteúdo dele.
           </p>
         </div>
-        <button onClick={() => setCreating((v) => !v)} className={`${btn} bg-teal-500 text-white hover:bg-teal-400 shrink-0`}>
+        <button onClick={() => setCreating((v) => !v)} className={`${btn} bg-violet-500 text-white hover:bg-violet-400 shrink-0`}>
           {creating ? "Fechar" : "Novo usuário"}
         </button>
       </div>
@@ -73,7 +73,7 @@ export default function UsersPage() {
           <button
             key={f.key}
             onClick={() => setFilter(f.key)}
-            className={`${btn} border ${filter === f.key ? "border-teal-500 text-teal-300 bg-teal-500/10" : "border-gray-700 text-gray-400 hover:bg-gray-800"}`}
+            className={`${btn} border ${filter === f.key ? "border-violet-500 text-violet-300 bg-violet-500/10" : "border-gray-700 text-gray-400 hover:bg-gray-800"}`}
           >
             {f.label}
             {f.key === "PENDING" && pendingCount > 0 && <span className="ml-1.5 px-1.5 rounded-full bg-amber-500 text-gray-950 text-[10px] font-bold">{pendingCount}</span>}
@@ -140,7 +140,7 @@ function UserRow({ user, me, catalog, onChange, onError }: { user: any; me: any;
     <div className={`${card} space-y-3 ${user.status === "DISABLED" ? "opacity-70" : ""}`}>
       <div className="flex items-start gap-3">
         <label className={`flex items-center gap-2 pt-0.5 ${locked ? "opacity-40" : "cursor-pointer"}`} title="Aprovado / ativo">
-          <input type="checkbox" disabled={locked || saving} checked={user.status === "ACTIVE"} onChange={(e) => setActive(e.target.checked)} className="accent-teal-500 w-4 h-4" />
+          <input type="checkbox" disabled={locked || saving} checked={user.status === "ACTIVE"} onChange={(e) => setActive(e.target.checked)} className="accent-violet-500 w-4 h-4" />
         </label>
         <div className="flex-1 min-w-0">
           <p className="text-sm font-semibold text-gray-200">
@@ -180,25 +180,25 @@ function UserRow({ user, me, catalog, onChange, onError }: { user: any; me: any;
           <div>
             <div className="flex items-center justify-between mb-1.5">
               <span className="text-[11px] text-gray-500">Serviços liberados</span>
-              <button onClick={() => setServices(catalog.defaults[role] ?? [])} className="text-[11px] text-teal-400 hover:underline">
+              <button onClick={() => setServices(catalog.defaults[role] ?? [])} className="text-[11px] text-violet-400 hover:underline">
                 usar padrão do nível
               </button>
             </div>
             <div className="grid sm:grid-cols-2 gap-x-4 gap-y-1.5">
               {Object.entries(catalog.services as Record<string, string>).map(([key, label]) => (
                 <label key={key} className="flex items-center gap-2 text-xs text-gray-300 cursor-pointer">
-                  <input type="checkbox" checked={services.includes(key)} onChange={() => toggle(key)} className="accent-teal-500" />
+                  <input type="checkbox" checked={services.includes(key)} onChange={() => toggle(key)} className="accent-violet-500" />
                   {label}
                 </label>
               ))}
             </div>
           </div>
           <div className="flex gap-2">
-            <button disabled={!dirty || saving} onClick={() => save()} className={`${btn} bg-teal-500 text-white hover:bg-teal-400 disabled:opacity-40`}>
+            <button disabled={!dirty || saving} onClick={() => save()} className={`${btn} bg-violet-500 text-white hover:bg-violet-400 disabled:opacity-40`}>
               {saving ? "Salvando..." : "Salvar alterações"}
             </button>
             {user.status === "PENDING" && (
-              <button disabled={saving} onClick={() => setActive(true)} className={`${btn} border border-teal-500/50 text-teal-300 hover:bg-teal-500/10`}>
+              <button disabled={saving} onClick={() => setActive(true)} className={`${btn} border border-violet-500/50 text-violet-300 hover:bg-violet-500/10`}>
                 Aprovar com estes serviços
               </button>
             )}
@@ -252,12 +252,12 @@ function CreateUser({ catalog, canAdmin, onDone }: { catalog: any; canAdmin: boo
       <div className="grid sm:grid-cols-2 gap-x-4 gap-y-1.5">
         {Object.entries(catalog.services as Record<string, string>).map(([key, label]) => (
           <label key={key} className="flex items-center gap-2 text-xs text-gray-300 cursor-pointer">
-            <input type="checkbox" checked={services.includes(key)} onChange={() => toggle(key)} className="accent-teal-500" />
+            <input type="checkbox" checked={services.includes(key)} onChange={() => toggle(key)} className="accent-violet-500" />
             {label}
           </label>
         ))}
       </div>
-      <button type="submit" className={`${btn} bg-teal-500 text-white hover:bg-teal-400`}>Criar usuário</button>
+      <button type="submit" className={`${btn} bg-violet-500 text-white hover:bg-violet-400`}>Criar usuário</button>
     </form>
   );
 }

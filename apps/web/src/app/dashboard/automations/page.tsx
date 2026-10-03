@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { api } from "@/lib/api";
 
 const card = "bg-gray-900 border border-gray-800 rounded-xl p-4";
-const input = "w-full bg-gray-950 border border-gray-700 rounded-lg px-3 py-2 text-sm text-gray-200 placeholder-gray-600 focus:outline-none focus:border-teal-500";
+const input = "w-full bg-gray-950 border border-gray-700 rounded-lg px-3 py-2 text-sm text-gray-200 placeholder-gray-600 focus:outline-none focus:border-violet-500";
 const btn = "px-3 py-1.5 rounded-lg text-xs font-medium transition-colors";
 const fmt = (d?: string) => (d ? new Date(d).toLocaleString("pt-BR") : "nunca");
 
@@ -119,7 +119,7 @@ export default function AutomationsPage() {
             {PRESETS.map((p) => (
               <button key={p.label} onClick={() => setEditing({ ...p })} className={`${btn} border border-gray-700 text-gray-300 hover:bg-gray-800`}>{p.label}</button>
             ))}
-            <button onClick={() => setEditing({ name: "", event: "message.received", conditions: [], actions: [{ type: "send_message", text: "" }], cooldown: 0 })} className={`${btn} bg-teal-500 text-white hover:bg-teal-400`}>
+            <button onClick={() => setEditing({ name: "", event: "message.received", conditions: [], actions: [{ type: "send_message", text: "" }], cooldown: 0 })} className={`${btn} bg-violet-500 text-white hover:bg-violet-400`}>
               Em branco
             </button>
           </div>
@@ -133,7 +133,7 @@ export default function AutomationsPage() {
             <button
               onClick={() => toggle(a)}
               aria-label={a.isActive ? "Desativar" : "Ativar"}
-              className={`mt-0.5 w-9 h-5 rounded-full relative shrink-0 transition-colors ${a.isActive ? "bg-teal-500" : "bg-gray-700"}`}
+              className={`mt-0.5 w-9 h-5 rounded-full relative shrink-0 transition-colors ${a.isActive ? "bg-violet-500" : "bg-gray-700"}`}
             >
               <span className={`absolute top-0.5 w-4 h-4 rounded-full bg-white transition-all ${a.isActive ? "left-[18px]" : "left-0.5"}`} />
             </button>
@@ -219,7 +219,7 @@ function Editor({ initial, onCancel, onSaved }: { initial: any; onCancel: () => 
                 <div className="flex flex-wrap gap-3">
                   {Object.entries(TYPES).map(([t, l]) => (
                     <label key={t} className="flex items-center gap-1.5 text-xs text-gray-300">
-                      <input type="checkbox" className="accent-teal-500" checked={c.value.includes(t)} onChange={() => setCond(i, { value: c.value.includes(t) ? c.value.filter((x: string) => x !== t) : [...c.value, t] })} />
+                      <input type="checkbox" className="accent-violet-500" checked={c.value.includes(t)} onChange={() => setCond(i, { value: c.value.includes(t) ? c.value.filter((x: string) => x !== t) : [...c.value, t] })} />
                       {l}
                     </label>
                   ))}
@@ -229,7 +229,7 @@ function Editor({ initial, onCancel, onSaved }: { initial: any; onCancel: () => 
                 <div className="flex flex-wrap items-center gap-2">
                   {DAYS.map((d, n) => (
                     <label key={d} className="flex items-center gap-1 text-xs text-gray-300">
-                      <input type="checkbox" className="accent-teal-500" checked={c.value.days.includes(n)} onChange={() => setCond(i, { value: { ...c.value, days: c.value.days.includes(n) ? c.value.days.filter((x: number) => x !== n) : [...c.value.days, n].sort() } })} />
+                      <input type="checkbox" className="accent-violet-500" checked={c.value.days.includes(n)} onChange={() => setCond(i, { value: { ...c.value, days: c.value.days.includes(n) ? c.value.days.filter((x: number) => x !== n) : [...c.value.days, n].sort() } })} />
                       {d}
                     </label>
                   ))}
@@ -242,7 +242,7 @@ function Editor({ initial, onCancel, onSaved }: { initial: any; onCancel: () => 
             <button onClick={() => setConds((l) => l.filter((_, j) => j !== i))} className={`${btn} text-gray-500 hover:text-red-400`}>✕</button>
           </div>
         ))}
-        <button onClick={() => setConds((l) => [...l, { field: "message.body", op: "contains", value: "" }])} className="text-xs text-teal-400 hover:underline">+ condição</button>
+        <button onClick={() => setConds((l) => [...l, { field: "message.body", op: "contains", value: "" }])} className="text-xs text-violet-400 hover:underline">+ condição</button>
       </div>
 
       <div className="space-y-2">
@@ -276,7 +276,7 @@ function Editor({ initial, onCancel, onSaved }: { initial: any; onCancel: () => 
             {acts.length > 1 && <button onClick={() => setActs((l) => l.filter((_, j) => j !== i))} className={`${btn} text-gray-500 hover:text-red-400`}>✕</button>}
           </div>
         ))}
-        <button onClick={() => setActs((l) => [...l, { type: "send_message", text: "" }])} className="text-xs text-teal-400 hover:underline">+ ação</button>
+        <button onClick={() => setActs((l) => [...l, { type: "send_message", text: "" }])} className="text-xs text-violet-400 hover:underline">+ ação</button>
       </div>
 
       <div>
@@ -288,7 +288,7 @@ function Editor({ initial, onCancel, onSaved }: { initial: any; onCancel: () => 
       </div>
 
       <div className="flex gap-2">
-        <button onClick={save} disabled={!name.trim()} className={`${btn} bg-teal-500 text-white hover:bg-teal-400 disabled:opacity-40`}>Salvar</button>
+        <button onClick={save} disabled={!name.trim()} className={`${btn} bg-violet-500 text-white hover:bg-violet-400 disabled:opacity-40`}>Salvar</button>
         <button onClick={onCancel} className={`${btn} border border-gray-700 text-gray-300 hover:bg-gray-800`}>Cancelar</button>
       </div>
     </div>

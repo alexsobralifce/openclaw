@@ -5,7 +5,7 @@ export const metadata: Metadata = { title: "Política de Privacidade — MagoBox
 const CONTACT = process.env.NEXT_PUBLIC_CONTACT_EMAIL || "o contato de suporte informado pela empresa que atende você";
 
 const h2 = "text-base font-semibold text-gray-200";
-const link = "text-teal-400 underline";
+const link = "text-violet-400 underline";
 
 export default function PrivacyPage() {
   return (

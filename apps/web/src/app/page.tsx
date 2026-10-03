@@ -12,7 +12,7 @@ export const metadata: Metadata = {
     "Um assistente no WhatsApp que avisa de cada e-mail, mostra sua agenda e cuida dos seus clientes. Você só digita um número ou manda um áudio. 7 dias grátis.",
 };
 
-const TEAL = "text-[#2dd4bf]";
+const TEAL = "text-[#A78BFA]";
 const H = "font-[family-name:var(--font-display)]";
 
 function Icon({ d }: { d: string }) {
@@ -81,10 +81,10 @@ function Bubble({ from, children }: { from: "me" | "bot"; children: string }) {
 
 function Phone({ children, label }: { children: React.ReactNode; label: string }) {
   return (
-    <div className="mx-auto w-full max-w-[320px] rounded-[2.2rem] border border-white/10 bg-[#0b141a] p-2 shadow-[0_30px_80px_-20px_rgba(45,212,191,0.25)]">
+    <div className="mx-auto w-full max-w-[320px] rounded-[2.2rem] border border-white/10 bg-[#0b141a] p-2 shadow-[0_30px_80px_-20px_rgba(167,139,250,0.25)]">
       <div className="overflow-hidden rounded-[1.7rem] bg-[#0b141a]">
         <div className="flex items-center gap-2 bg-[#202c33] px-4 py-3">
-          <div className="grid h-8 w-8 place-items-center rounded-full bg-[#2dd4bf] text-sm font-bold text-[#04211d]">o</div>
+          <div className="grid h-8 w-8 place-items-center rounded-full bg-[#A78BFA] text-sm font-bold text-[#1E1B4B]">o</div>
           <div>
             <p className="text-[13px] font-semibold text-white">{label}</p>
             <p className="text-[11px] text-[#8696a0]">online</p>
@@ -98,20 +98,20 @@ function Phone({ children, label }: { children: React.ReactNode; label: string }
 
 export default function Landing() {
   return (
-    <div className={`${display.variable} ${body.variable} min-h-screen bg-[#070b0a] font-[family-name:var(--font-body)] text-[#e6eeea] antialiased`}>
+    <div className={`${display.variable} ${body.variable} min-h-screen bg-[#09070b] font-[family-name:var(--font-body)] text-[#e6eeea] antialiased`}>
       {/* Nav */}
-      <header className="sticky top-0 z-30 border-b border-white/5 bg-[#070b0a]/85 backdrop-blur">
+      <header className="sticky top-0 z-30 border-b border-white/5 bg-[#09070b]/85 backdrop-blur">
         <div className="mx-auto flex h-16 max-w-6xl items-center justify-between px-5">
           <Link href="/" aria-label="MagoBox — início"><Logo size={36} textClassName={`${H} text-xl font-bold tracking-tight text-white`} /></Link>
-          <nav className="hidden items-center gap-8 text-sm text-[#9db0a9] md:flex">
+          <nav className="hidden items-center gap-8 text-sm text-[#a49eaf] md:flex">
             <a href="#vantagens" className="hover:text-white">Vantagens</a>
             <a href="#como" className="hover:text-white">Como funciona</a>
             <a href="#preco" className="hover:text-white">Preço</a>
             <a href="#duvidas" className="hover:text-white">Dúvidas</a>
           </nav>
           <div className="flex items-center gap-3">
-            <Link href="/auth/login" className="hidden text-sm text-[#9db0a9] hover:text-white sm:block">Entrar</Link>
-            <Link href="/auth/register" className="rounded-lg bg-[#2dd4bf] px-4 py-2 text-sm font-semibold text-[#04211d] transition hover:bg-[#5eead4]">
+            <Link href="/auth/login" className="hidden text-sm text-[#a49eaf] hover:text-white sm:block">Entrar</Link>
+            <Link href="/auth/register" className="rounded-lg bg-[#A78BFA] px-4 py-2 text-sm font-semibold text-[#1E1B4B] transition hover:bg-[#C4B5FD]">
               Testar grátis
             </Link>
           </div>
@@ -120,20 +120,20 @@ export default function Landing() {
 
       {/* Hero */}
       <section className="relative overflow-hidden">
-        <div aria-hidden className="pointer-events-none absolute -top-40 left-1/2 h-[520px] w-[820px] -translate-x-1/2 rounded-full bg-[#2dd4bf]/10 blur-[120px]" />
+        <div aria-hidden className="pointer-events-none absolute -top-40 left-1/2 h-[520px] w-[820px] -translate-x-1/2 rounded-full bg-[#A78BFA]/10 blur-[120px]" />
         <div className="relative mx-auto grid max-w-6xl items-center gap-14 px-5 pb-20 pt-16 md:grid-cols-[1.15fr_0.85fr] md:pb-28 md:pt-24">
           <div>
-            <p className="mb-5 inline-flex items-center gap-2 rounded-full border border-white/10 px-3 py-1 text-xs text-[#9db0a9]">
-              <span className="h-1.5 w-1.5 rounded-full bg-[#2dd4bf]" /> 7 dias grátis, depois R$ 70/mês
+            <p className="mb-5 inline-flex items-center gap-2 rounded-full border border-white/10 px-3 py-1 text-xs text-[#a49eaf]">
+              <span className="h-1.5 w-1.5 rounded-full bg-[#A78BFA]" /> 7 dias grátis, depois R$ 70/mês
             </p>
             <h1 className={`${H} text-balance text-4xl font-extrabold leading-[1.05] tracking-tight sm:text-5xl lg:text-6xl`}>
               Seu e-mail, sua agenda e seus clientes, <span className={TEAL}>dentro do WhatsApp.</span>
             </h1>
-            <p className="mt-6 max-w-xl text-lg leading-relaxed text-[#9db0a9]">
+            <p className="mt-6 max-w-xl text-lg leading-relaxed text-[#a49eaf]">
               Um assistente que avisa de cada e-mail, mostra sua agenda e cuida das conversas dos clientes. Você só digita um número ou manda um áudio.
             </p>
             <div className="mt-9 flex flex-wrap items-center gap-4">
-              <Link href="/auth/register" className="rounded-xl bg-[#2dd4bf] px-6 py-3.5 text-base font-semibold text-[#04211d] transition hover:bg-[#5eead4]">
+              <Link href="/auth/register" className="rounded-xl bg-[#A78BFA] px-6 py-3.5 text-base font-semibold text-[#1E1B4B] transition hover:bg-[#C4B5FD]">
                 Começar 7 dias grátis
               </Link>
               <a href="#como" className="rounded-xl border border-white/15 px-6 py-3.5 text-base font-medium text-white transition hover:bg-white/5">
@@ -168,16 +168,16 @@ O que vamos ver agora?
           </h2>
           <div className="mt-12 grid gap-px overflow-hidden rounded-2xl border border-white/10 bg-white/10 sm:grid-cols-2 lg:grid-cols-3">
             {BENEFITS.map((b) => (
-              <div key={b.title} className="bg-[#0a1110] p-7">
-                <div className={`mb-4 grid h-10 w-10 place-items-center rounded-lg bg-[#2dd4bf]/10 ${TEAL}`}>
+              <div key={b.title} className="bg-[#0d0b10] p-7">
+                <div className={`mb-4 grid h-10 w-10 place-items-center rounded-lg bg-[#A78BFA]/10 ${TEAL}`}>
                   <Icon d={b.icon} />
                 </div>
                 <h3 className={`${H} text-lg font-bold`}>{b.title}</h3>
-                <p className="mt-2 text-[15px] leading-relaxed text-[#9db0a9]">{b.text}</p>
+                <p className="mt-2 text-[15px] leading-relaxed text-[#a49eaf]">{b.text}</p>
               </div>
             ))}
           </div>
-          <p className="mt-8 rounded-xl border border-[#2dd4bf]/20 bg-[#2dd4bf]/5 px-5 py-4 text-[15px] text-[#b9e9e2]">
+          <p className="mt-8 rounded-xl border border-[#A78BFA]/20 bg-[#A78BFA]/5 px-5 py-4 text-[15px] text-[#E4DCFB]">
             <strong className="font-semibold">E ele aprende com você.</strong> Diga “lembre que respondo o João de forma informal” e os próximos rascunhos já saem no seu jeito.
           </p>
         </div>
@@ -198,10 +198,10 @@ O que vamos ver agora?
                 ["Mande “oi” e pronto", "O assistente abre o menu. Daí em diante é só número ou áudio."],
               ].map(([t, d], i) => (
                 <li key={t} className="flex gap-4">
-                  <span className={`${H} grid h-9 w-9 flex-none place-items-center rounded-full border border-[#2dd4bf]/40 text-sm font-bold ${TEAL}`}>{i + 1}</span>
+                  <span className={`${H} grid h-9 w-9 flex-none place-items-center rounded-full border border-[#A78BFA]/40 text-sm font-bold ${TEAL}`}>{i + 1}</span>
                   <div>
                     <h3 className="font-semibold">{t}</h3>
-                    <p className="mt-1 text-[15px] leading-relaxed text-[#9db0a9]">{d}</p>
+                    <p className="mt-1 text-[15px] leading-relaxed text-[#a49eaf]">{d}</p>
                   </div>
                 </li>
               ))}
@@ -237,17 +237,17 @@ Olá! Confirmo minha presença na reunião. Obrigado pelo convite.
             <p className={`text-sm font-semibold uppercase tracking-[0.14em] ${TEAL}`}>Preço</p>
             <h2 className={`${H} mt-3 text-balance text-3xl font-bold tracking-tight sm:text-4xl`}>Um plano. Sem pegadinha.</h2>
           </div>
-          <div className="mx-auto mt-12 max-w-md rounded-3xl border border-[#2dd4bf]/30 bg-gradient-to-b from-[#0e1b18] to-[#0a1110] p-8 shadow-[0_30px_80px_-30px_rgba(45,212,191,0.35)]">
+          <div className="mx-auto mt-12 max-w-md rounded-3xl border border-[#A78BFA]/30 bg-gradient-to-b from-[#130f1a] to-[#0d0b10] p-8 shadow-[0_30px_80px_-30px_rgba(167,139,250,0.35)]">
             <div className="flex items-center justify-between">
               <h3 className={`${H} text-xl font-bold`}>Básico</h3>
-              <span className="rounded-full bg-[#2dd4bf]/15 px-3 py-1 text-xs font-semibold text-[#5eead4]">7 dias grátis</span>
+              <span className="rounded-full bg-[#A78BFA]/15 px-3 py-1 text-xs font-semibold text-[#C4B5FD]">7 dias grátis</span>
             </div>
             <p className="mt-6 flex items-end gap-1">
-              <span className="pb-1 text-lg text-[#9db0a9]">R$</span>
+              <span className="pb-1 text-lg text-[#a49eaf]">R$</span>
               <span className={`${H} text-6xl font-extrabold leading-none tracking-tight`}>70</span>
-              <span className="pb-1 text-[#9db0a9]">/mês</span>
+              <span className="pb-1 text-[#a49eaf]">/mês</span>
             </p>
-            <p className="mt-2 text-sm text-[#9db0a9]">depois do período de teste</p>
+            <p className="mt-2 text-sm text-[#a49eaf]">depois do período de teste</p>
             <ul className="mt-7 space-y-3">
               {PLAN.map((f) => (
                 <li key={f} className="flex gap-3 text-[15px]">
@@ -256,10 +256,10 @@ Olá! Confirmo minha presença na reunião. Obrigado pelo convite.
                 </li>
               ))}
             </ul>
-            <Link href="/auth/register" className="mt-8 block rounded-xl bg-[#2dd4bf] py-3.5 text-center text-base font-semibold text-[#04211d] transition hover:bg-[#5eead4]">
+            <Link href="/auth/register" className="mt-8 block rounded-xl bg-[#A78BFA] py-3.5 text-center text-base font-semibold text-[#1E1B4B] transition hover:bg-[#C4B5FD]">
               Começar 7 dias grátis
             </Link>
-            <p className="mt-3 text-center text-xs text-[#7f918b]">Cancele antes do fim do teste e não paga nada.</p>
+            <p className="mt-3 text-center text-xs text-[#868090]">Cancele antes do fim do teste e não paga nada.</p>
           </div>
         </div>
       </section>
@@ -275,7 +275,7 @@ Olá! Confirmo minha presença na reunião. Obrigado pelo convite.
                   {q}
                   <span className={`text-xl transition group-open:rotate-45 ${TEAL}`}>+</span>
                 </summary>
-                <p className="mt-3 text-[15px] leading-relaxed text-[#9db0a9]">{a}</p>
+                <p className="mt-3 text-[15px] leading-relaxed text-[#a49eaf]">{a}</p>
               </details>
             ))}
           </div>
@@ -288,14 +288,14 @@ Olá! Confirmo minha presença na reunião. Obrigado pelo convite.
           <h2 className={`${H} text-balance text-3xl font-bold tracking-tight sm:text-4xl`}>
             Teste por 7 dias e veja quanto tempo você ganha.
           </h2>
-          <Link href="/auth/register" className="mt-8 inline-block rounded-xl bg-[#2dd4bf] px-8 py-4 text-base font-semibold text-[#04211d] transition hover:bg-[#5eead4]">
+          <Link href="/auth/register" className="mt-8 inline-block rounded-xl bg-[#A78BFA] px-8 py-4 text-base font-semibold text-[#1E1B4B] transition hover:bg-[#C4B5FD]">
             Criar minha conta
           </Link>
         </div>
       </section>
 
       <footer className="border-t border-white/5 py-8">
-        <div className="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-3 px-5 text-sm text-[#7f918b]">
+        <div className="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-3 px-5 text-sm text-[#868090]">
           <Logo size={26} textClassName={`${H} text-base font-bold tracking-tight text-white`} />
           <span>© 2026 MagoBox. Todos os direitos reservados.</span>
           <span className="flex gap-5">

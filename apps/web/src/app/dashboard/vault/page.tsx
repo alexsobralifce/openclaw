@@ -5,9 +5,9 @@ import { api } from "@/lib/api";
 import { RecoveryKeyBox } from "@/components/vault/RecoveryKeyBox";
 
 const card = "bg-gray-900 border border-gray-800 rounded-xl p-4";
-const input = "w-full bg-gray-950 border border-gray-700 rounded-lg px-3 py-2 text-sm text-gray-200 placeholder-gray-600 focus:outline-none focus:border-teal-500";
+const input = "w-full bg-gray-950 border border-gray-700 rounded-lg px-3 py-2 text-sm text-gray-200 placeholder-gray-600 focus:outline-none focus:border-violet-500";
 const btn = "px-3 py-1.5 rounded-lg text-xs font-medium transition-colors disabled:opacity-40";
-const primary = `${btn} bg-teal-500 text-white hover:bg-teal-400`;
+const primary = `${btn} bg-violet-500 text-white hover:bg-violet-400`;
 const ghost = `${btn} bg-gray-800 text-gray-300 hover:bg-gray-700`;
 const danger = `${btn} bg-red-500/15 text-red-300 hover:bg-red-500/25`;
 
@@ -84,7 +84,7 @@ export default function VaultPage() {
       </div>
 
       {msg && (
-        <div className={`px-3 py-2 rounded-lg text-xs border ${msg.ok ? "bg-teal-500/10 border-teal-500/30 text-teal-300" : "bg-red-500/10 border-red-500/30 text-red-300"}`}>{msg.text}</div>
+        <div className={`px-3 py-2 rounded-lg text-xs border ${msg.ok ? "bg-violet-500/10 border-violet-500/30 text-violet-300" : "bg-red-500/10 border-red-500/30 text-red-300"}`}>{msg.text}</div>
       )}
 
       {!status.exists ? (
@@ -333,8 +333,8 @@ function Unlocked({ status, setMsg, fail, refresh, showKey }: { status: Status; 
     <>
       <div className={`${card} space-y-3`}>
         <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5">
-          <span className="text-xs text-teal-300">🔓 Desbloqueado · fecha em {label}</span>
-          <span className={`text-[11px] px-2 py-0.5 rounded-md ${status.hasPin && !status.waLocked ? "bg-teal-500/10 text-teal-300" : "bg-gray-800 text-gray-400"}`}>
+          <span className="text-xs text-violet-300">🔓 Desbloqueado · fecha em {label}</span>
+          <span className={`text-[11px] px-2 py-0.5 rounded-md ${status.hasPin && !status.waLocked ? "bg-violet-500/10 text-violet-300" : "bg-gray-800 text-gray-400"}`}>
             WhatsApp: {!status.hasPin ? "sem código" : status.waLocked ? "bloqueado" : "ativo"}
           </span>
         </div>
@@ -376,7 +376,7 @@ function Unlocked({ status, setMsg, fail, refresh, showKey }: { status: Status; 
       )}
 
       {integrity && (
-        <div className={`px-3 py-2 rounded-lg text-xs border ${integrity.ok ? "bg-teal-500/10 border-teal-500/30 text-teal-300" : "bg-red-500/10 border-red-500/30 text-red-300"}`}>
+        <div className={`px-3 py-2 rounded-lg text-xs border ${integrity.ok ? "bg-violet-500/10 border-violet-500/30 text-violet-300" : "bg-red-500/10 border-red-500/30 text-red-300"}`}>
           {integrity.ok ? "✅ " : "⚠️ "}{integrity.text}
         </div>
       )}
@@ -438,7 +438,7 @@ function Unlocked({ status, setMsg, fail, refresh, showKey }: { status: Status; 
                 <div className="min-w-0 flex-1 pt-1">
                   <p className="text-sm font-medium text-gray-200 [overflow-wrap:anywhere]">
                     {e.title}
-                    {e.whatsapp && <span className="ml-2 text-[10px] px-1.5 py-0.5 rounded bg-teal-500/10 text-teal-300 align-middle whitespace-nowrap">WhatsApp</span>}
+                    {e.whatsapp && <span className="ml-2 text-[10px] px-1.5 py-0.5 rounded bg-violet-500/10 text-violet-300 align-middle whitespace-nowrap">WhatsApp</span>}
                   </p>
                   <p className="text-[11px] text-gray-500 mt-0.5 [overflow-wrap:anywhere]">{[e.username, e.url].filter(Boolean).join(" · ")}</p>
                 </div>
@@ -468,7 +468,7 @@ function Unlocked({ status, setMsg, fail, refresh, showKey }: { status: Status; 
                   <button onClick={() => setConfirmDel(null)} className={ghost}>Cancelar</button>
                 </div>
               )}
-              {shown[e.id] !== undefined && <p className="mt-2 font-mono text-sm text-teal-300 break-all select-all">{shown[e.id] || "(sem senha)"}</p>}
+              {shown[e.id] !== undefined && <p className="mt-2 font-mono text-sm text-violet-300 break-all select-all">{shown[e.id] || "(sem senha)"}</p>}
             </div>
           ))}
         </div>
