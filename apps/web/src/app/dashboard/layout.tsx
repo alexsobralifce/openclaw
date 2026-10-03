@@ -1,6 +1,7 @@
 import { Sidebar } from "@/components/layout/Sidebar";
 import { TopBar } from "@/components/layout/TopBar";
 import { BottomNav } from "@/components/layout/BottomNav";
+import { PwaPrompt } from "@/components/layout/PwaPrompt";
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
   return (
@@ -10,6 +11,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         <TopBar />
         <main className="flex-1 min-h-0 overflow-hidden">{children}</main>
         <BottomNav />
+        <PwaPrompt />
       </div>
     </div>
   );

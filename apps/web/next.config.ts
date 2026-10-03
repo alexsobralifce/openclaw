@@ -14,7 +14,11 @@ const nextConfig: NextConfig = {
   transpilePackages: ["@openclaw/types"],
   poweredByHeader: false,
   async headers() {
-    return [{ source: "/:path*", headers: securityHeaders }];
+    return [
+      { source: "/:path*", headers: securityHeaders },
+      // O navegador precisa checar o service worker a cada visita para pegar versões novas
+      { source: "/sw.js", headers: [{ key: "Cache-Control", value: "no-cache, max-age=0" }, { key: "Content-Type", value: "application/javascript; charset=utf-8" }] },
+    ];
   },
 };
 

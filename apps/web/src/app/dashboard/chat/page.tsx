@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { io } from "socket.io-client";
 import { api, type ChatMessage } from "@/lib/api";
 import { useMe } from "@/hooks/useMe";
+import { disablePush, enablePush } from "@/lib/push";
 
 const API = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001";
 const btn = "px-3 py-1.5 rounded-lg text-xs font-medium transition-colors";
@@ -12,11 +13,6 @@ const CHANNELS = [
   { id: "app", label: "App" },
   { id: "telegram", label: "Telegram" },
 ] as const;
-
-const urlBase64ToUint8Array = (b64: string) => {
-  const raw = atob((b64 + "=".repeat((4 - (b64.length % 4)) % 4)).replace(/-/g, "+").replace(/_/g, "/"));
-  return Uint8Array.from(raw, (c) => c.charCodeAt(0));
-};
 
 export default function ChatPage() {
   const me = useMe();
@@ -112,18 +108,9 @@ export default function ChatPage() {
   async function togglePush() {
     if (!push) return;
     try {
-      const reg = await navigator.serviceWorker.register("/sw.js");
-      const existing = await reg.pushManager.getSubscription();
-      if (push.subscribed && existing) {
-        await api.appChat.pushUnsubscribe(existing.endpoint);
-        await existing.unsubscribe();
-        setPush({ ...push, subscribed: false });
-        return;
-      }
-      if ((await Notification.requestPermission()) !== "granted") throw new Error("Permissão de notificação negada no navegador.");
-      const sub = existing ?? (await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: urlBase64ToUint8Array(push.publicKey) }));
-      await api.appChat.pushSubscribe(sub.toJSON());
-      setPush({ ...push, subscribed: true });
+      if (push.subscribed) await disablePush();
+      else await enablePush(push.publicKey);
+      setPush({ ...push, subscribed: !push.subscribed });
     } catch (e: any) {
       setError(e.message);
     }
