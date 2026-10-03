@@ -6,11 +6,19 @@ import { splitForTelegram, waToTelegramHtml } from "./telegram-format";
 export class TelegramService implements OnModuleInit {
   private readonly logger = new Logger(TelegramService.name);
 
-  /** Aponta o bot para este servidor (precisa de API_URL e TELEGRAM_WEBHOOK_SECRET). Falha só vira aviso no log. */
+  /** Endereço público da API (o Telegram precisa alcançá-lo; `API_URL` é o endereço interno do Railway). */
+  publicApiUrl() {
+    const explicit = process.env.PUBLIC_API_URL?.replace(/\/$/, "");
+    if (explicit) return explicit;
+    return process.env.RAILWAY_PUBLIC_DOMAIN ? `https://${process.env.RAILWAY_PUBLIC_DOMAIN}` : "";
+  }
+
+  /** Aponta o bot para este servidor (precisa de endereço público e TELEGRAM_WEBHOOK_SECRET). Falha só vira aviso no log. */
   async onModuleInit() {
-    if (!this.enabled() || !process.env.API_URL || !process.env.TELEGRAM_WEBHOOK_SECRET) return;
+    const base = this.publicApiUrl();
+    if (!this.enabled() || !base || !process.env.TELEGRAM_WEBHOOK_SECRET) return;
     try {
-      await this.call("setWebhook", JSON.stringify({ url: `${process.env.API_URL}/api/v1/channels/telegram/webhook`, secret_token: process.env.TELEGRAM_WEBHOOK_SECRET, allowed_updates: ["message"] }));
+      await this.call("setWebhook", JSON.stringify({ url: `${base}/api/v1/channels/telegram/webhook`, secret_token: process.env.TELEGRAM_WEBHOOK_SECRET, allowed_updates: ["message"] }));
     } catch (e: any) {
       this.logger.warn(`Telegram: não consegui registrar o webhook: ${e.message}`);
     }
