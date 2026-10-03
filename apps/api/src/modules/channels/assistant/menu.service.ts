@@ -12,7 +12,7 @@ import { weatherDetail, weatherLines } from "./weather";
 import { isLocationQuery, isWeatherQuery, loadLocation, parseCityCommand, saveLocation, UserLocation } from "./location";
 import { todayItems, when as routineWhen } from "./routine";
 import { AssistantConfig, configKey, fmtInterval, IDLE_MENU_MS, intervalProblem, parseInterval, PRESETS } from "./chat-clean";
-import { driveQueryFrom, fileIcon, fmtSize, looksLikeDriveRequest, parseDriveQuery, rankFiles, sanitizeAlternates } from "./drive";
+import { driveQueryFrom, fileIcon, fmtSize, looksLikeDriveRequest, looksLikeMediaRequest, parseDriveQuery, rankFiles, sanitizeAlternates } from "./drive";
 import { suspiciousReasons } from "./security";
 import { contactQuery, looksLikeContactsRefresh } from "./contacts";
 import { EmailSearchSpec, emailSearchSpec } from "./email-search";
@@ -209,7 +209,7 @@ export class MenuService {
         if (isLocationQuery(flat)) return await this.locationView(workspaceId);
         if (/^(ver |mostrar |abrir )?(as )?(config|configuracoes|configuracao|ajustes)$/.test(flat)) return await this.configMenu(workspaceId);
         if (/^(ver |mostrar |abrir )?(a |minha )?rotina$/.test(flat)) return await this.routineList(workspaceId);
-        if ((await this.services(workspaceId)).includes("drive") && (looksLikeDriveRequest(flat) || (await jevSays("drive_file")))) {
+        if ((await this.services(workspaceId)).includes("drive") && (looksLikeDriveRequest(flat) || looksLikeMediaRequest(flat) || (await jevSays("drive_file")))) {
           const q = driveQueryFrom(text);
           return q ? await this.driveSearch(workspaceId, q) : await this.driveEntry(workspaceId);
         }
@@ -1113,6 +1113,14 @@ export class MenuService {
       DIV,
       cancel,
     ].join("\n");
+  }
+
+  /**
+   * A IA livre listou arquivos em texto: guarda a lista para o número que o dono responder escolher o arquivo
+   * (sem isto o "2" cairia no menu principal, onde 2 é a agenda).
+   */
+  async rememberDriveResults(ws: string, items: any[], query: string): Promise<void> {
+    if (items.length) await this.set(ws, "drive", { items, query });
   }
 
   /** Assunto de nota pelo nome: a busca por texto primeiro; se não achar, o Jev escolhe entre os existentes ("contratos" para "contrato do joão"). */

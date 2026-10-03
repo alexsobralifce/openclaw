@@ -5,7 +5,7 @@ const FILLER = new Set(
   ("me mim a o as os um uma de do da dos das no na nos nas em pra para por favor pode poder podia quero preciso queria gostaria " +
     "buscar busque busca busco procurar procure procura achar ache pegar pegue pega baixar baixe mandar manda mande enviar envia envie " +
     "passar passe passa trazer traga traz abrir abra ver mostrar mostre arquivo arquivos documento documentos meu minha meus minhas " +
-    "google drive gdrive ai la ali agora rapido rapidinho").split(" "),
+    "ouvir escutar tocar toca toque google drive gdrive ai la ali agora rapido rapidinho").split(" "),
 );
 
 const strip = (w: string) => w.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase().replace(/[^a-z0-9]/g, "");
@@ -13,6 +13,21 @@ const strip = (w: string) => w.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerC
 /** O texto pede algo do Drive? ("me manda o contrato do drive", "drive relatório", "buscar no drive"). */
 export function looksLikeDriveRequest(flat: string): boolean {
   return /\b(g?drive)\b/.test(flat) && (/^(g?drive|google drive)\b/.test(flat) || /\b(busc\w*|procur\w*|ach\w*|peg\w*|baix\w*|mand\w*|envi\w*|pass\w*|traz\w*|quer\w*|precis\w*|abr\w*)\b/.test(flat));
+}
+
+const MEDIA_NOUN = "(?:musicas?|cancao|cancoes|audios?|mp3|faixas?|fotos?|imagens?|videos?|planilhas?|pdfs?|apresentacao|slides?)";
+const MEDIA_ASK = "(?:quer\\w*|preciso|precisa\\w*|baix\\w*|mand\\w*|envi\\w*|peg\\w*|traz\\w*|toc\\w*|ouvir|escutar|busc\\w*|procur\\w*|ach\\w*|abr\\w*|me da|tem)";
+/** Depois do tipo vem outra coisa que não o nome do arquivo ("foto pro João", "pdf no e-mail"). */
+const NOT_A_FILE_NAME = /^(para|pra|pro|ao|aos|no|na|nos|nas|num|numa|em|por|com|e|ou)$/;
+
+/**
+ * Pede um arquivo pelo tipo e nome, sem dizer "drive": "quero a música catingueira", "baixe a música X", "me manda a foto do contrato".
+ * Exige verbo de pedido + tipo (música, foto, pdf, planilha...) + o nome logo depois; fala de e-mail, WhatsApp, agenda ou nota não conta.
+ */
+export function looksLikeMediaRequest(flat: string): boolean {
+  if (/\b(e-?mails?|whatsapp|zap|agenda|eventos?|notas?|contato|telefone)\b/.test(flat)) return false;
+  const m = flat.match(new RegExp(`^(?:por favor )?(?:eu )?(?:me )?${MEDIA_ASK}\\b.*?\\b${MEDIA_NOUN}\\s+(\\S{2,})`));
+  return !!m && !NOT_A_FILE_NAME.test(m[1]);
 }
 
 /** Tira o pedido e deixa só o nome procurado, mantendo acentos e maiúsculas das palavras que sobram. */

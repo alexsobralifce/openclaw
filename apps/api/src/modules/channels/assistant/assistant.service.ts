@@ -781,9 +781,12 @@ export class AssistantService {
     if (name === "drive_search") {
       const r = await this.menu.driveFind(workspaceId, String(args.query ?? ""));
       if (!r.accounts.length) return { error: "Google não conectado. Peça ao dono para conectar em Canais > Conectar Google no painel." };
+      // O número que o dono responder à lista (em texto) precisa escolher o arquivo, não cair no menu principal
+      await this.menu.rememberDriveResults(workspaceId, r.items, String(args.query ?? "")).catch(() => undefined);
       return {
         aproximado: r.fuzzy,
-        arquivos: r.items.map((f) => ({ id: f.id, conta: f.account, nome: f.nome, tipo: f.tipo, modificado: f.modificado, tamanho: f.tamanho })),
+        arquivos: r.items.map((f, i) => ({ n: i + 1, id: f.id, conta: f.account, nome: f.nome, tipo: f.tipo, modificado: f.modificado, tamanho: f.tamanho })),
+        instrucao: "Se mostrar a lista, use o número n de cada arquivo, na mesma ordem, sem repetir nem inventar nomes; o dono escolhe respondendo o número.",
         ...(r.errors.length ? { avisos: r.errors } : {}),
       };
     }

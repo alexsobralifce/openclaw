@@ -27,6 +27,8 @@ export function parseChoice(text: string, count?: number): number | null {
   let t = normalize(text);
   t = t.replace(/^(eu )?(quero|escolho|abre|abrir|abra|ver|ler|seleciona|selecionar)( a| o)? /, "");
   t = t.replace(/^(a |o )?(opcao|numero|item|alternativa|tecla) /, "");
+  // Em telas com lista: "música 2", "arquivo 3", "foto 1"
+  if (count) t = t.replace(/^(a |o )?(musica|arquivo|faixa|foto|video|pdf|planilha|documento) /, "");
   t = t.replace(/^(a|o) /, "").replace(/ (opcao|item|email|e-mail|conversa|mensagem)$/, "").replace(/ (por favor|pfv)$/, "");
   if (/^\d{1,2}$/.test(t)) return Number(t);
   if (t in CARDINALS) return CARDINALS[t];

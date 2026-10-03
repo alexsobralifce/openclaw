@@ -19,7 +19,7 @@ const TIMEOUT_MS = 2_500;
 const QUESTION = choice("O que o dono da secretária virtual quer fazer com esta mensagem do WhatsApp?", {
   agenda_add: "Pôr um ou mais compromissos na agenda: eventos com data ou hora marcada (marcar, adicionar, prazos, consultas, provas, reuniões).",
   note_add: "Guardar uma anotação, ideia, lembrete solto ou informação para consultar depois, SEM data nem hora marcada (anota isso, guarda isso, registra aí).",
-  drive_file: "Achar ou receber um arquivo que está no Google Drive (contrato, planilha, PDF, documento).",
+  drive_file: "Achar, baixar ou receber um arquivo salvo no Google Drive: música, áudio, foto, vídeo, contrato, planilha, PDF, documento (ex.: \"quero a música Catingueira\", \"baixe a música X\", \"me manda o contrato\", \"tem a foto do evento?\").",
   other: "Qualquer outra coisa: perguntar algo, ver a agenda, e-mails, clima, conversar, mandar e-mail, cofre de senhas, procurar o que já foi anotado.",
 });
 
