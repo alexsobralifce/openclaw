@@ -98,18 +98,44 @@ export function parseLetterFile(content: string): Contact[] {
   return out.filter((c) => c.nome);
 }
 
-/** Acha pelo nome: todas as palavras buscadas começam alguma palavra do nome ("marcos", "m silva", "silva"). */
+/** Partes de nome que quase nunca estão cadastradas ("Arnaud Jr" no pedido, "Arnaud" na lista): sufixos de família e ligações. */
+const NAME_NOISE = new Set(["jr", "junior", "filho", "neto", "sobrinho", "segundo", "terceiro", "ii", "iii", "de", "da", "do", "dos", "das", "e"]);
+
+/** Tira sufixos e ligações do nome pedido ("arnaud jr" → "arnaud"). Se só sobrar ruído, devolve o texto como veio. */
+export function dropNameNoise(name: string): string {
+  const kept = name.split(/\s+/).filter((t) => t && !NAME_NOISE.has(normalize(t)));
+  return kept.length ? kept.join(" ") : name;
+}
+
+/**
+ * Acha pelo nome, do mais exato ao mais frouxo, parando no primeiro nível que achar alguém:
+ * 1. todas as palavras buscadas começam alguma palavra do nome ("marcos", "m silva", "silva");
+ * 2. o mesmo, sem sufixos e ligações ("arnaud jr" acha "Arnaud", "maria da silva" acha "Maria Silva");
+ * 3. com 2+ palavras importantes, quem bate com o primeiro nome ("arnaud costa" acha "Arnaud Souza"); os mais parecidos primeiro.
+ */
 export function findContacts(contacts: Contact[], query: string, max = 5): Contact[] {
   const terms = normalize(query).split(" ").filter((t) => t.length >= 2);
   if (!terms.length) return [];
   const full = terms.join(" ");
-  const scored = contacts.flatMap((c) => {
+  const core = terms.filter((t) => !NAME_NOISE.has(t));
+  const rows = contacts.map((c) => {
     const name = normalize(c.nome);
-    const words = name.split(" ");
-    if (!terms.every((t) => words.some((w) => w.startsWith(t)))) return [];
-    return [{ c, score: name === full ? 3 : words[0].startsWith(terms[0]) ? 2 : 1 }];
+    return { c, name, words: name.split(" ") };
   });
-  return scored.sort((a, b) => b.score - a.score || byName(a.c, b.c)).slice(0, max).map((x) => x.c);
+  const matched = (words: string[], ts: string[]) => ts.filter((t) => words.some((w) => w.startsWith(t))).length;
+  const pick = (ts: string[], need: number) =>
+    rows.flatMap((r) => {
+      const hit = matched(r.words, ts);
+      return hit >= need && hit > 0 ? [{ ...r, hit }] : [];
+    });
+
+  let found = pick(terms, terms.length);
+  if (!found.length && core.length && core.length < terms.length) found = pick(core, core.length);
+  if (!found.length && core.length >= 2) found = pick([core[0]], 1).map((r) => ({ ...r, hit: matched(r.words, core) }));
+
+  const lead = core[0] ?? terms[0];
+  const score = (r: { name: string; words: string[] }) => (r.name === full ? 3 : r.words[0].startsWith(lead) ? 2 : 1);
+  return found.sort((a, b) => score(b) - score(a) || b.hit - a.hit || byName(a.c, b.c)).slice(0, max).map((r) => r.c);
 }
 
 // ─── Comandos ──────────────────────────────────────────────────

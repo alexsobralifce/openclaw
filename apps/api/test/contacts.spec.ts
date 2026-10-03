@@ -117,6 +117,32 @@ describe("findContacts", () => {
   });
 });
 
+describe("findContacts: nomes que não batem exatamente", () => {
+  const c = (nome: string): Contact => ({ nome, telefones: [], emails: [] });
+  const names = (list: Contact[], q: string) => findContacts(list, q).map((x) => x.nome);
+
+  it("ignora sufixo no pedido: 'arnaud jr' acha 'Arnaud'", () => {
+    expect(names([c("Arnaud"), c("Maria")], "arnaud jr")).toEqual(["Arnaud"]);
+    expect(names([c("Arnaud Souza"), c("Maria")], "Arnaud Junior")).toEqual(["Arnaud Souza"]);
+  });
+  it("se o sufixo está cadastrado, o nome completo continua ganhando", () => {
+    expect(names([c("Arnaud"), c("Arnaud Jr")], "arnaud jr")).toEqual(["Arnaud Jr"]);
+  });
+  it("ignora ligações: 'maria da silva' acha 'Maria Silva'", () => {
+    expect(names([c("Maria Silva"), c("Pedro")], "maria da silva")).toEqual(["Maria Silva"]);
+  });
+  it("sobrenome que não está cadastrado cai no primeiro nome, mais parecidos primeiro", () => {
+    expect(names([c("Arnaud Souza"), c("Maria")], "arnaud costa")).toEqual(["Arnaud Souza"]);
+    // quem bate em todas as palavras vence; o primeiro nome só entra quando ninguém bate
+    expect(names([c("Arnaud Souza"), c("Arnaud Costa Lima")], "arnaud costa")).toEqual(["Arnaud Costa Lima"]);
+    expect(names([c("Arnaud Souza"), c("Arnaud Pereira")], "arnaud costa")).toEqual(["Arnaud Pereira", "Arnaud Souza"]);
+  });
+  it("não inventa: nome desconhecido, ou só sufixo, não acha ninguém", () => {
+    expect(names([c("Maria")], "arnaud jr")).toEqual([]);
+    expect(names([c("Arnaud")], "jr")).toEqual([]);
+  });
+});
+
 describe("comandos", () => {
   const q = (t: string) => contactQuery(normalize(t));
   it("reconhece pedidos de telefone e e-mail por nome", () => {

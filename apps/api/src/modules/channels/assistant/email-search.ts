@@ -1,6 +1,6 @@
 // Busca no Gmail por pedido escrito ou falado (lógica pura): "buscar e-mails do Marcos", "e-mails sobre contrato".
 
-import { NOT_A_NAME } from "./contacts";
+import { dropNameNoise, NOT_A_NAME } from "./contacts";
 
 export interface EmailSearchSpec {
   /** consulta na sintaxe do Gmail */
@@ -20,7 +20,11 @@ const safe = (t: string) => t.replace(/[^a-z0-9@._\- ]/g, " ").replace(/\s+/g, "
 function spec(connector: string | undefined, what: string): EmailSearchSpec | null {
   const term = safe(what);
   if (term.length < 2 || NOT_A_NAME.test(term)) return null;
-  if (connector && FROM.test(connector)) return { gmail: `(from:(${term}) OR to:(${term}))`, label: `de ${term}` };
+  if (connector && FROM.test(connector)) {
+    // "arnaud jr" no pedido, "Arnaud" no cabeçalho do e-mail: o Gmail exigiria as duas palavras, então fica só o nome que importa
+    const who = safe(dropNameNoise(term)) || term;
+    return { gmail: `(from:(${who}) OR to:(${who}))`, label: `de ${who}` };
+  }
   return { gmail: term, label: `sobre ${term}` };
 }
 

@@ -5,6 +5,7 @@ import { io } from "socket.io-client";
 import { api, type ChatMessage } from "@/lib/api";
 import { useMe } from "@/hooks/useMe";
 import { disablePush, enablePush } from "@/lib/push";
+import { parseWaMarkup, type WaSeg } from "@/lib/wa-markup";
 import { MobileMenu } from "@/components/layout/MobileMenu";
 
 const API = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001";
@@ -25,6 +26,17 @@ const toBase64 = (blob: Blob) =>
     r.onerror = () => reject(new Error("Não consegui ler o arquivo."));
     r.readAsDataURL(blob);
   });
+
+/** Mostra a marcação do WhatsApp (*negrito*, _itálico_) formatada, sem os símbolos. */
+function Rich({ segs }: { segs: WaSeg[] }) {
+  return (
+    <>
+      {segs.map((g, i) =>
+        g.t === "text" ? <span key={i}>{g.v}</span> : g.t === "b" ? <strong key={i} className="font-semibold"><Rich segs={g.v} /></strong> : g.t === "i" ? <em key={i}><Rich segs={g.v} /></em> : <s key={i}><Rich segs={g.v} /></s>,
+      )}
+    </>
+  );
+}
 
 const clock = (s: number) => `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
 
@@ -268,7 +280,7 @@ export default function ChatPage() {
         {messages.map((m) => (
           <div key={m.id} className={`flex ${m.direction === "IN" ? "justify-end" : "justify-start"}`}>
             <div className={`max-w-[92%] rounded-2xl px-3 py-1.5 text-[15px] leading-snug whitespace-pre-wrap break-words ${m.direction === "IN" ? "bg-violet-500 text-white" : "bg-gray-800 text-gray-200"}`}>
-              {m.text}
+              <Rich segs={parseWaMarkup(m.text)} />
               {m.kind === "FILE" && m.meta?.fileId && (
                 <button onClick={() => download(m)} className="block mt-1 text-xs underline">📎 {m.meta.fileName ?? "Baixar arquivo"}</button>
               )}

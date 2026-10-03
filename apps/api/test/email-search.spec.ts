@@ -84,3 +84,14 @@ describe("atualizar o banco de e-mails", () => {
     expect(r("atualizar contatos")).toBe(false);
   });
 });
+
+describe("busca por remetente com sufixo", () => {
+  it("'emails do arnaud jr' procura só por arnaud no Gmail", () => {
+    const spec = emailSearchSpec("buscar emails do arnaud jr");
+    expect(spec?.gmail).toBe("(from:(arnaud) OR to:(arnaud))");
+    expect(spec?.label).toBe("de arnaud");
+  });
+  it("mantém o nome completo quando não há sufixo", () => {
+    expect(emailSearchSpec("emails do joao silva")?.gmail).toBe("(from:(joao silva) OR to:(joao silva))");
+  });
+});
