@@ -3,6 +3,7 @@ import { prisma } from "@openclaw/database";
 import * as bcrypt from "bcryptjs";
 import { EvolutionService } from "../channels/evolution/evolution.service";
 import { canEditUser, effectiveServices, isService, PlatformRole, ROLE_DEFAULTS, UserStatus } from "../auth/permissions";
+import { isPlan, PLANS } from "../auth/plans";
 
 export interface UserPatch {
   name?: string;
@@ -10,6 +11,8 @@ export interface UserPatch {
   role?: PlatformRole;
   status?: UserStatus;
   services?: string[];
+  /** Id do plano; "" ou null tira o plano (os serviços ficam como estão). */
+  plan?: string | null;
 }
 
 // Só dados cadastrais: o root/admin gerencia contas, mas não enxerga o conteúdo dos workspaces
@@ -21,6 +24,7 @@ const SELECT = {
   role: true,
   status: true,
   services: true,
+  plan: true,
   approvedAt: true,
   createdAt: true,
   workspaces: { select: { workspace: { select: { id: true, name: true } } } },
@@ -76,8 +80,9 @@ export class UsersService implements OnModuleInit {
   }
 
   /** Cria uma conta já aprovada, com workspace próprio. */
-  async create(actor: PlatformRole, data: { name: string; email: string; password: string; workspaceName?: string; role?: PlatformRole; services?: string[]; phone?: string }) {
+  async create(actor: PlatformRole, data: { name: string; email: string; password: string; workspaceName?: string; role?: PlatformRole; services?: string[]; phone?: string; plan?: string | null }) {
     const role = data.role ?? "USER";
+    const plan = this.checkPlan(data.plan);
     if (!canEditUser(actor, "USER", role)) throw new ForbiddenException("Você não pode criar usuários com este nível");
     if (await prisma.user.findUnique({ where: { email: data.email } })) throw new ConflictException("Email já cadastrado");
     const phone = await this.checkPhone(data.phone);
@@ -91,7 +96,8 @@ export class UsersService implements OnModuleInit {
         role,
         status: "ACTIVE",
         approvedAt: new Date(),
-        services: this.cleanServices(data.services ?? ROLE_DEFAULTS[role]),
+        plan,
+        services: this.cleanServices(data.services ?? (plan ? PLANS[plan].services : ROLE_DEFAULTS[role])),
         workspaces: {
           create: { role: "OWNER", workspace: { create: { name: wsName, slug: `${slugify(wsName)}-${Date.now().toString(36)}` } } },
         },
@@ -108,6 +114,9 @@ export class UsersService implements OnModuleInit {
     if (!canEditUser(actor, target.role, patch.role)) throw new ForbiddenException("Você não pode alterar este usuário");
 
     const phone = patch.phone === undefined ? undefined : await this.checkPhone(patch.phone, id);
+    const plan = patch.plan === undefined ? undefined : this.checkPlan(patch.plan);
+    // Escolher um plano libera os serviços dele; se o admin mandar a lista de serviços junto, vale a lista
+    const services = patch.services ? this.cleanServices(patch.services) : plan ? this.cleanServices(PLANS[plan].services) : undefined;
     const approving = patch.status === "ACTIVE" && target.status === "PENDING";
     const u = await prisma.user.update({
       where: { id },
@@ -117,13 +126,21 @@ export class UsersService implements OnModuleInit {
         ...(patch.role ? { role: patch.role } : {}),
         ...(patch.status ? { status: patch.status } : {}),
         ...(approving ? { approvedAt: new Date() } : {}),
-        ...(patch.services ? { services: this.cleanServices(patch.services) } : {}),
+        ...(plan !== undefined ? { plan } : {}),
+        ...(services ? { services } : {}),
       },
       select: SELECT,
     });
     this.logger.log(`[AUDIT] usuário ${target.email} alterado por ${actorId}: ${Object.keys(patch).join(", ")}`);
     if (approving) await this.warnBackup();
     return this.view(u);
+  }
+
+  /** Plano válido, ou null para tirar o plano. */
+  private checkPlan(plan: string | null | undefined): string | null {
+    if (plan === undefined || plan === null || plan === "") return null;
+    if (!isPlan(plan)) throw new BadRequestException("Plano inválido");
+    return plan;
   }
 
   /** Remove a conta e o workspace dela (com todo o conteúdo) e desliga os WhatsApps conectados. */
@@ -179,6 +196,7 @@ export class UsersService implements OnModuleInit {
       status: u.status,
       services: u.services,
       effectiveServices: effectiveServices(u.role, u.services),
+      plan: u.plan ?? null,
       approvedAt: u.approvedAt,
       createdAt: u.createdAt,
       workspace: u.workspaces?.[0]?.workspace ?? null,

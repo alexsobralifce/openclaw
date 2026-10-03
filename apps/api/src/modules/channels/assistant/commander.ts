@@ -9,8 +9,10 @@ export interface Commander {
   phone: string;
   workspaceId: string;
   services: Service[];
-  /** Nível na plataforma; root e admin não têm limite de tokens. */
+  /** Nível na plataforma; root e admin não têm limite de IA. */
   role?: string;
+  /** Plano comercial (nulo = sem plano: valem os limites gerais do ambiente). */
+  plan?: string | null;
 }
 
 export const can = (c: Commander, s: Service) => c.services.includes(s);
@@ -35,7 +37,7 @@ export async function findCommander(phone: string, channelWorkspaceId: string, i
   const workspaceId = user?.workspaces[0]?.workspaceId;
   if (!user || !workspaceId) return null;
   if (workspaceId !== channelWorkspaceId && sharedInstance() !== instance) return null;
-  return { userId: user.id, name: user.name, phone: user.phone!, workspaceId, services: effectiveServices(user.role, user.services), role: user.role };
+  return { userId: user.id, name: user.name, phone: user.phone!, workspaceId, services: effectiveServices(user.role, user.services), role: user.role, plan: user.plan ?? null };
 }
 
 /** Dono do workspace, para avisos que não partem de uma mensagem (e-mails novos, automações). */
@@ -43,7 +45,7 @@ export async function workspaceCommander(workspaceId: string): Promise<Commander
   const m = await prisma.workspaceMember.findFirst({ where: { workspaceId, role: "OWNER" }, include: { user: true } });
   const u = m?.user;
   if (!u || u.status !== "ACTIVE" || !u.phone) return null;
-  return { userId: u.id, name: u.name, phone: u.phone, workspaceId, services: effectiveServices(u.role, u.services), role: u.role };
+  return { userId: u.id, name: u.name, phone: u.phone, workspaceId, services: effectiveServices(u.role, u.services), role: u.role, plan: u.plan ?? null };
 }
 
 /** Instância pela qual o assistente fala com o dono do workspace. */

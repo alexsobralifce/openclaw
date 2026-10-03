@@ -79,8 +79,8 @@ export default function UsagePage() {
           </div>
           <p className="text-xs text-gray-500">
             {data.monthlyLimitUsd > 0
-              ? `Limite mensal por usuário: ${usd(data.monthlyLimitUsd)} de gasto em IA, somando todos os provedores pelo preço de cada modelo (root e admin não têm limite). Ao passar, a IA para de responder para a pessoa até o mês seguinte; o menu continua. Modelo sem preço configurado conta pelo maior preço da tabela.`
-              : "Sem limite mensal por usuário. Para definir, configure AI_MONTHLY_USD_LIMIT no servidor, em dólares."}
+              ? `Limite geral para quem não tem plano: ${usd(data.monthlyLimitUsd)} de gasto em IA por mês, somando todos os provedores pelo preço de cada modelo. Quem tem plano segue o teto do plano (root e admin não têm limite). Ao passar, a IA para de responder para a pessoa até o mês seguinte; o menu continua. Modelo sem preço configurado conta pelo maior preço da tabela.`
+              : "Sem limite geral para quem não tem plano. Defina planos em Usuários, ou AI_MONTHLY_USD_LIMIT no servidor (em dólares)."}
           </p>
           {data.total.unpricedTokens > 0 && (
             <p className="text-xs text-amber-300/90">
@@ -122,7 +122,7 @@ export default function UsagePage() {
                   <tr key={u.userId} className="border-t border-gray-800 align-top">
                     <td className="py-2 pr-3">
                       <div className="text-gray-200">{u.name}</div>
-                      <div className="text-xs text-gray-500">{u.email ?? "—"} · {u.lastDay ? `último uso ${u.lastDay}` : "ainda não usou"}</div>
+                      <div className="text-xs text-gray-500">{u.email ?? "—"}{u.plan ? ` · plano ${u.plan}` : ""} · {u.lastDay ? `último uso ${u.lastDay}` : "ainda não usou"}</div>
                     </td>
                     <td className="py-2 pr-3 text-right tabular-nums font-medium">{nf.format(u.totalTokens)}</td>
                     <td className="py-2 pr-3 text-right tabular-nums">{nf.format(u.inputTokens)}</td>
@@ -132,8 +132,8 @@ export default function UsagePage() {
                     <td className="py-2 pr-3 text-right tabular-nums">{usd(u.monthlyUsd)}</td>
                     <td className="py-2 pr-3 text-right tabular-nums">
                       {usd(u.monthUsd)}
-                      {data.monthlyLimitUsd > 0 && u.role !== "ROOT" && u.role !== "ADMIN" && u.userId !== "sistema" && (
-                        <span className={u.monthUsd >= data.monthlyLimitUsd ? "block text-xs text-red-300" : "block text-xs text-gray-500"}>{Math.round((u.monthUsd / data.monthlyLimitUsd) * 100)}% do limite</span>
+                      {u.limitUsd > 0 && u.userId !== "sistema" && (
+                        <span className={u.monthUsd >= u.limitUsd ? "block text-xs text-red-300" : "block text-xs text-gray-500"}>{Math.round((u.monthUsd / u.limitUsd) * 100)}% de {usd(u.limitUsd)}</span>
                       )}
                     </td>
                     <td className="py-2 text-xs text-gray-400">

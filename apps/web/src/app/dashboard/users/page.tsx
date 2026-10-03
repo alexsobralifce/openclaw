@@ -39,7 +39,7 @@ export default function UsersPage() {
   }
   useEffect(() => {
     load();
-    api.users.catalog().then(setCatalog).catch((e) => setErr(e.message));
+    Promise.all([api.users.catalog(), api.users.plans()]).then(([c, p]) => setCatalog({ ...c, plans: p.plans } as any)).catch((e) => setErr(e.message));
   }, []);
 
   const pendingCount = users.filter((u) => u.status === "PENDING").length;
@@ -93,17 +93,19 @@ function UserRow({ user, me, catalog, onChange, onError }: { user: any; me: any;
   const [role, setRole] = useState(user.role);
   const [services, setServices] = useState<string[]>(user.services);
   const [phone, setPhone] = useState(user.phone ?? "");
+  const [plan, setPlan] = useState<string>(user.plan ?? "");
   const [saving, setSaving] = useState(false);
+  const planInfo = (catalog.plans ?? []).find((p: any) => p.id === plan);
 
   const locked = user.role === "ROOT" || user.id === me?.id || (me?.platformRole === "ADMIN" && user.role === "ADMIN");
-  const dirty = role !== user.role || phone !== (user.phone ?? "") || services.slice().sort().join() !== user.services.slice().sort().join();
+  const dirty = role !== user.role || phone !== (user.phone ?? "") || plan !== (user.plan ?? "") || services.slice().sort().join() !== user.services.slice().sort().join();
   const st = STATUS[user.status];
 
   async function save(extra: any = {}) {
     onError("");
     setSaving(true);
     try {
-      await api.users.update(user.id, { role, services, phone, ...extra });
+      await api.users.update(user.id, { role, services, phone, plan, ...extra });
       onChange();
     } catch (e: any) {
       onError(e.message);
@@ -177,6 +179,29 @@ function UserRow({ user, me, catalog, onChange, onError }: { user: any; me: any;
               <input value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="Ex.: 5585912345678" className={input} />
             </label>
           </div>
+          <label className="block">
+            <span className="block text-[11px] text-gray-500 mb-1">Plano</span>
+            <select
+              value={plan}
+              onChange={(e) => {
+                setPlan(e.target.value);
+                // Escolher um plano libera os serviços dele (dá para ajustar na lista abaixo antes de salvar)
+                const p = (catalog.plans ?? []).find((x: any) => x.id === e.target.value);
+                if (p) setServices(p.services);
+              }}
+              className={input}
+            >
+              <option value="">Sem plano (limites gerais do servidor)</option>
+              {(catalog.plans ?? []).map((p: any) => (
+                <option key={p.id} value={p.id}>{p.name}{p.priceBrl ? ` · R$ ${p.priceBrl.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}/mês` : ""}</option>
+              ))}
+            </select>
+            {planInfo && (
+              <span className="block text-[11px] text-gray-500 mt-1">
+                IA até US$ {planInfo.aiUsd.toLocaleString("pt-BR", { minimumFractionDigits: 2 })} por mês · {planInfo.googleAccounts} {planInfo.googleAccounts === 1 ? "conta Google" : "contas Google"} · PDF até {planInfo.pdfPages} páginas · áudio até {planInfo.audioSeconds >= 120 ? `${planInfo.audioSeconds / 60} min` : `${planInfo.audioSeconds} s`}
+              </span>
+            )}
+          </label>
           <div>
             <div className="flex items-center justify-between mb-1.5">
               <span className="text-[11px] text-gray-500">Serviços liberados</span>

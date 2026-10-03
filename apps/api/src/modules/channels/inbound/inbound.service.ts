@@ -1,3 +1,4 @@
+import { planOf } from "../../auth/plans";
 import { fmtDuration, maxAudioSeconds } from "../assistant/media-limits";
 import { QUOTA_NOTICE, quotaHit, trackUser } from "../assistant/usage";
 import { Injectable, Logger, OnModuleDestroy, OnModuleInit } from "@nestjs/common";
@@ -160,7 +161,7 @@ export class InboundService implements OnModuleInit, OnModuleDestroy {
       // Modo "mensagem para si mesmo": as mensagens do dono também são do número conectado e podem ser apagadas na limpeza
       if (data.key.fromMe) await this.assistant.trackMessage(commander.workspaceId, instance, data.key);
 
-      trackUser({ userId: commander.userId, workspaceId: commander.workspaceId, exempt: commander.role === "ROOT" || commander.role === "ADMIN" });
+      trackUser({ userId: commander.userId, workspaceId: commander.workspaceId, exempt: commander.role === "ROOT" || commander.role === "ADMIN", limitUsd: planOf(commander.plan)?.aiUsd });
       let text = commandText(data.message);
       let heard = false;
       if (!text && isVoiceOrAudio(data.message)) {
@@ -171,8 +172,9 @@ export class InboundService implements OnModuleInit, OnModuleDestroy {
         }
         // Áudio muito longo custa caro para transcrever: pede um recado mais curto, sem baixar nada
         const secs = audioSeconds(data.message);
-        if (secs && secs > maxAudioSeconds()) {
-          await this.assistant.sendToUser(commander, instance, `🎙️ Esse áudio tem ${fmtDuration(secs)}, mais que o limite de ${fmtDuration(maxAudioSeconds())}. Pode mandar em partes menores, ou escrever?`);
+        const plan = planOf(commander.plan);
+        if (secs && secs > maxAudioSeconds(plan)) {
+          await this.assistant.sendToUser(commander, instance, `🎙️ Esse áudio tem ${fmtDuration(secs)}, mais que o limite de ${fmtDuration(maxAudioSeconds(plan))}${plan ? ` do plano ${plan.name}` : ""}. Pode mandar em partes menores, ou escrever?`);
           return;
         }
         try {

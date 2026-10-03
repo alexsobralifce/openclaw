@@ -1,9 +1,11 @@
 // Limites de tamanho de PDF e áudio: fixam o pior caso de custo por operação, com folga larga para o uso normal.
+// Quem tem plano segue o limite do plano; sem plano, valem as variáveis de ambiente (ou o padrão).
+import type { PlanDef } from "../../auth/plans";
 
 /** Páginas por PDF (MAX_PDF_PAGES). 80 páginas custam cerca de US$ 0,03 para virar nota; uso comum fica abaixo de 20. */
-export const maxPdfPages = () => positive(process.env.MAX_PDF_PAGES, 80);
+export const maxPdfPages = (plan?: PlanDef | null) => plan?.pdfPages ?? positive(process.env.MAX_PDF_PAGES, 80);
 /** Segundos por áudio (MAX_AUDIO_SECONDS). 5 minutos custam cerca de US$ 0,01 para transcrever; um recado comum dura menos de 1. */
-export const maxAudioSeconds = () => positive(process.env.MAX_AUDIO_SECONDS, 300);
+export const maxAudioSeconds = (plan?: PlanDef | null) => plan?.audioSeconds ?? positive(process.env.MAX_AUDIO_SECONDS, 300);
 
 function positive(raw: string | undefined, fallback: number) {
   const n = Math.trunc(Number(raw));

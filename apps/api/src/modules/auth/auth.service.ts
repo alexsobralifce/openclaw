@@ -119,6 +119,7 @@ export class AuthService {
       role: ws?.role ?? null,
       platformRole: user.role,
       services: effectiveServices(user.role, user.services),
+      plan: user.plan ?? null,
     };
   }
 

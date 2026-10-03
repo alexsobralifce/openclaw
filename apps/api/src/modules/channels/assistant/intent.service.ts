@@ -1,6 +1,7 @@
 import { Injectable, Logger } from "@nestjs/common";
 import { TypeSafeClient, choice, noul } from "@typesafe-ai/sdk";
 import { DomainJudgment, GROUP_IDS, groupQuestion } from "./tool-select";
+import { recordUsage } from "./usage";
 
 /** O que o dono quer com a mensagem, entre os pedidos que o menu atende sozinho (sem chamar o GPT). */
 export type Intent = "agenda_add" | "drive_file" | "note_add" | "other";
@@ -44,7 +45,9 @@ export class IntentService {
     if (!this.enabled()) return null;
     try {
       this.client ??= new TypeSafeClient({ timeout: TIMEOUT_MS, retry: { maxRetries: 0 } });
-      const { answers } = await this.client.systemOne({ state: { mensagem: text.slice(0, 1_500) }, questions: { intent: QUESTION } });
+      const res = await this.client.systemOne({ state: { mensagem: text.slice(0, 1_500) }, questions: { intent: QUESTION } });
+      this.count(res);
+      const { answers } = res;
       const { choice: intent, confidence } = answers.intent;
       // Sem o texto da mensagem: só o suficiente para calibrar o limiar.
       this.logger.log(`Jev: ${intent} (confiança ${confidence.toFixed(2)}, ${text.split(/\s+/).length} palavras)`);
@@ -64,11 +67,18 @@ export class IntentService {
     try {
       this.client ??= new TypeSafeClient({ timeout: TIMEOUT_MS, retry: { maxRetries: 0 } });
       const questions: any = Object.fromEntries(GROUP_IDS.map((id) => [id, noul(groupQuestion(id))]));
-      const { answers } = (await this.client.systemOne({ state: { mensagem: text.slice(0, 1_500) }, questions })) as any;
+      const res = (await this.client.systemOne({ state: { mensagem: text.slice(0, 1_500) }, questions })) as any;
+      this.count(res);
+      const { answers } = res;
       return GROUP_IDS.map((id) => ({ id, p: Number(answers[id]?.noul) })).filter((x) => Number.isFinite(x.p));
     } catch (e: any) {
       this.logger.warn(`Jev indisponível para escolher ferramentas, vão todas: ${e.message}`);
       return null;
     }
+  }
+
+  /** Conta a chamada ao Jev no consumo do usuário (o SDK devolve o uso em tokens). Sem preço configurado, os tokens contam pelo maior preço da tabela. */
+  private count(res: any) {
+    recordUsage("jev", String(res?.model ?? "jev-latest"), { input: Number(res?.usage?.input_tokens) || 0, output: Number(res?.usage?.output_tokens) || 0 });
   }
 }

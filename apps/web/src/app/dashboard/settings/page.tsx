@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { api, MenuItem } from "@/lib/api";
+import { api, type PlanInfo, MenuItem } from "@/lib/api";
 import { setUser } from "@/lib/auth";
 import { useMe } from "@/hooks/useMe";
 
@@ -18,6 +18,10 @@ export default function SettingsPage() {
   const [menu, setMenu] = useState<MenuItem[] | null>(null);
   const [menuMsg, setMenuMsg] = useState<{ ok: boolean; text: string } | null>(null);
   const [menuSaving, setMenuSaving] = useState(false);
+  const [use, setUse] = useState<{ plan: PlanInfo | null; limitUsd: number; monthUsd: number } | null>(null);
+  useEffect(() => {
+    api.usage.mine().then(setUse).catch(() => {});
+  }, []);
 
   useEffect(() => {
     if (me) setForm({ name: me.name, phone: me.phone ?? "" });
@@ -70,6 +74,32 @@ export default function SettingsPage() {
         <h1 className="text-xl font-semibold text-gray-200">Configurações</h1>
         <p className="text-sm text-gray-500 mt-0.5">Seu perfil e o número de WhatsApp usado para falar com o assistente.</p>
       </div>
+
+      {use && (
+        <div className={`${card} space-y-2`}>
+          <div className="flex items-baseline justify-between gap-3">
+            <h2 className="text-sm font-medium text-gray-200">Seu plano: {use.plan ? use.plan.name : "sem plano definido"}</h2>
+            {use.plan && use.plan.priceBrl > 0 && <span className="text-xs text-gray-500">R$ {use.plan.priceBrl.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}/mês</span>}
+          </div>
+          {use.limitUsd > 0 ? (
+            <>
+              <div className="h-2 rounded-full bg-gray-800 overflow-hidden" role="img" aria-label={`Uso de IA no mês: ${Math.round((use.monthUsd / use.limitUsd) * 100)}%`}>
+                <div className={`h-full ${use.monthUsd >= use.limitUsd ? "bg-red-400" : use.monthUsd / use.limitUsd > 0.8 ? "bg-amber-400" : "bg-violet-400"}`} style={{ width: `${Math.min(100, (use.monthUsd / use.limitUsd) * 100)}%` }} />
+              </div>
+              <p className="text-xs text-gray-500">
+                Uso de IA neste mês: {Math.round((use.monthUsd / use.limitUsd) * 100)}% do limite do plano. Ao chegar a 100%, o menu continua funcionando e a IA volta no mês seguinte.
+              </p>
+            </>
+          ) : (
+            <p className="text-xs text-gray-500">Sem limite mensal de IA na sua conta.</p>
+          )}
+          {use.plan && (
+            <p className="text-xs text-gray-500">
+              {use.plan.googleAccounts} {use.plan.googleAccounts === 1 ? "conta Google" : "contas Google"} · PDF até {use.plan.pdfPages} páginas · áudio até {use.plan.audioSeconds >= 120 ? `${use.plan.audioSeconds / 60} minutos` : `${use.plan.audioSeconds} segundos`}
+            </p>
+          )}
+        </div>
+      )}
 
       <form onSubmit={save} className={`${card} space-y-3`}>
         {msg && (

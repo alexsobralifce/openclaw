@@ -49,6 +49,8 @@ model User {
   // ACTIVE por padrão para que contas já existentes continuem entrando; o cadastro público cria como PENDING
   status       UserStatus   @default(ACTIVE)
   services     String[]     @default([])
+  // Plano comercial (aprendiz, mago, arquimago, teste); nulo = sem plano (valem os limites gerais do ambiente). Sem @unique de propósito.
+  plan         String?
   approvedAt   DateTime?
   createdAt    DateTime     @default(now())
   updatedAt    DateTime     @updatedAt

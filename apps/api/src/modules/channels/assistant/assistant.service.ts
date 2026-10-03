@@ -1,4 +1,5 @@
 import { chatCompletion } from "./openai-chat";
+import { planOf } from "../../auth/plans";
 import { maxPdfPages, pdfPageCount } from "./media-limits";
 import { IntentService } from "./intent.service";
 import { pickTools } from "./tool-select";
@@ -439,7 +440,7 @@ export class AssistantService {
   async voice(workspaceId: string, text: string): Promise<{ fala: string }> {
     const owner = await workspaceCommander(workspaceId);
     if (!owner || !can(owner, "assistant")) throw new ForbiddenException("O assistente não está liberado para esta conta.");
-    trackUser({ userId: owner.userId, workspaceId, exempt: owner.role === "ROOT" || owner.role === "ADMIN" });
+    trackUser({ userId: owner.userId, workspaceId, exempt: owner.role === "ROOT" || owner.role === "ADMIN", limitUsd: planOf(owner.plan)?.aiUsd });
     await this.menu.enterCar(workspaceId);
     // Vários comandos numa chamada só, separados por ";" (ex.: "ler e-mails; Pessoal"): o menu avança uma tela por comando
     // e a resposta é a do último. Poupa ações na macro e evita errar a tela.
@@ -505,7 +506,7 @@ export class AssistantService {
   /** Devolve `redact: true` quando a mensagem tinha um código do cofre: o registro de entrada deve escondê-la. */
   async handle(c: Commander, instanceName: string, text: string, opts: { heard?: boolean; quoted?: string } = {}): Promise<{ redact: boolean }> {
     const workspaceId = c.workspaceId;
-    trackUser({ userId: c.userId, workspaceId, exempt: c.role === "ROOT" || c.role === "ADMIN" });
+    trackUser({ userId: c.userId, workspaceId, exempt: c.role === "ROOT" || c.role === "ADMIN", limitUsd: planOf(c.plan)?.aiUsd });
     let answer: string;
     try {
       answer = (await this.menu.respond(workspaceId, text, opts.quoted || undefined)) ?? (await this.think(c, text));
@@ -528,7 +529,7 @@ export class AssistantService {
    */
   async handleAgendaMedia(c: Commander, instanceName: string, key: object, media: { mime: string; caption: string }) {
     const workspaceId = c.workspaceId;
-    trackUser({ userId: c.userId, workspaceId, exempt: c.role === "ROOT" || c.role === "ADMIN" });
+    trackUser({ userId: c.userId, workspaceId, exempt: c.role === "ROOT" || c.role === "ADMIN", limitUsd: planOf(c.plan)?.aiUsd });
     const mode = await this.menu.agendaMediaIntent(workspaceId, media.caption);
     if (mode === "no") return;
     let answer: string;
@@ -543,8 +544,9 @@ export class AssistantService {
         const m = await this.evolution.getMediaBase64(instanceName, key);
         const pages = /pdf/i.test(m.mimetype || media.mime) && m.base64.length * 0.75 <= MAX_MEDIA_BYTES ? pdfPageCount(Buffer.from(m.base64, "base64")) : 0;
         if (m.base64.length * 0.75 > MAX_MEDIA_BYTES) answer = "📎 Esse arquivo é grande demais para eu ler (limite de 15 MB). Mande um arquivo menor.";
-        else if (pages > maxPdfPages()) {
-          answer = `📄 Esse PDF tem cerca de ${pages} páginas, mais que o limite de ${maxPdfPages()}. Mande só as páginas que interessam, ou divida o arquivo em partes.`;
+        else if (pages > maxPdfPages(planOf(c.plan))) {
+          const plan = planOf(c.plan);
+          answer = `📄 Esse PDF tem cerca de ${pages} páginas, mais que o limite de ${maxPdfPages(plan)}${plan ? ` do plano ${plan.name}` : ""}. Mande só as páginas que interessam, ou divida o arquivo em partes.`;
         } else {
           const src = { text: media.caption || undefined, media: [{ mime: m.mimetype || media.mime, base64: m.base64 }] };
           answer = mode === "note" ? await this.menu.noteIngest(workspaceId, src) : await this.menu.agendaIngest(workspaceId, src);

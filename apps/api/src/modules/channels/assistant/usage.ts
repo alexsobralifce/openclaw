@@ -13,6 +13,8 @@ export interface UsageContext {
   workspaceId?: string;
   /** root e admin não têm limite. */
   exempt?: boolean;
+  /** Teto de gasto de IA no mês, em US$, do plano do usuário; ausente = limite geral do ambiente. */
+  limitUsd?: number;
   /** A cota foi atingida neste fluxo: quem responde ao usuário acrescenta o aviso. */
   quotaHit?: boolean;
 }
@@ -38,22 +40,45 @@ export const geminiTokens = (data: any): Tokens => ({
   output: num(data?.usageMetadata?.candidatesTokenCount) + num(data?.usageMetadata?.thoughtsTokenCount),
 });
 
-/** Soma uma chamada ao contador do dia. Falhas (banco fora, tabela ainda não criada) só viram aviso no log. */
+/** Dono de cada workspace (cache de 10 min): chamadas de rotinas automáticas, sem usuário no contexto, contam para ele. */
+const ownerCache = new Map<string, { at: number; userId: string | null }>();
+const OWNER_CACHE_MS = 10 * 60_000;
+async function ownerOf(workspaceId: string): Promise<string | null> {
+  const hit = ownerCache.get(workspaceId);
+  if (hit && Date.now() - hit.at < OWNER_CACHE_MS) return hit.userId;
+  let userId: string | null = null;
+  try {
+    userId = (await prisma.workspaceMember.findFirst({ where: { workspaceId, role: "OWNER" }, select: { userId: true } }))?.userId ?? null;
+  } catch {
+    /* sem banco: cai em "sistema" */
+  }
+  ownerCache.set(workspaceId, { at: Date.now(), userId });
+  return userId;
+}
+export const resetOwnerCache = () => ownerCache.clear();
+
+/**
+ * Soma uma chamada ao contador do dia. O usuário vem do contexto; sem ele, vale o dono do workspace (rotinas automáticas);
+ * sem workspace, "sistema". Falhas (banco fora, tabela ainda não criada) só viram aviso no log.
+ */
 export function recordUsage(provider: string, model: string, tokens: Tokens, fallbackWs?: string, at = new Date()): void {
   const ctx = als.getStore();
-  const userId = ctx?.userId ?? SYSTEM_USER;
   const workspaceId = ctx?.workspaceId ?? fallbackWs ?? "";
   const day = dayStamp(at, TZ);
-  bumpMonth(userId, limitCost({ model, inputTokens: tokens.input, outputTokens: tokens.output }, loadPrices()));
-  void Promise.resolve()
-    .then(() =>
-      prisma.aiUsage.upsert({
-        where: { userId_day_provider_model: { userId, day, provider, model } },
-        create: { userId, workspaceId, day, provider, model, calls: 1, inputTokens: tokens.input, outputTokens: tokens.output },
-        update: { calls: { increment: 1 }, inputTokens: { increment: tokens.input }, outputTokens: { increment: tokens.output } },
-      }),
-    )
-    .catch((e: any) => console.warn(`Contador de tokens falhou: ${String(e?.message ?? e).slice(0, 120)}`));
+  void (async () => {
+    // Com usuário no contexto, o gasto entra no cache da cota já, sem esperar nada
+    let userId = ctx?.userId;
+    if (userId) bumpMonth(userId, limitCost({ model, inputTokens: tokens.input, outputTokens: tokens.output }, loadPrices()));
+    else {
+      userId = (workspaceId && (await ownerOf(workspaceId))) || SYSTEM_USER;
+      if (userId !== SYSTEM_USER) bumpMonth(userId, limitCost({ model, inputTokens: tokens.input, outputTokens: tokens.output }, loadPrices()));
+    }
+    await prisma.aiUsage.upsert({
+      where: { userId_day_provider_model: { userId, day, provider, model } },
+      create: { userId, workspaceId, day, provider, model, calls: 1, inputTokens: tokens.input, outputTokens: tokens.output },
+      update: { calls: { increment: 1 }, inputTokens: { increment: tokens.input }, outputTokens: { increment: tokens.output } },
+    });
+  })().catch((e: any) => console.warn(`Contador de tokens falhou: ${String(e?.message ?? e).slice(0, 120)}`));
 }
 
 /** Preço em US$ por 1 milhão de tokens. */
@@ -194,8 +219,8 @@ async function monthUsd(userId: string, at = new Date()): Promise<number> {
  * automáticas) ou isento (root/admin), não faz nada. Se o banco falhar, deixa passar: contar nunca derruba o assistente.
  */
 export async function assertQuota(): Promise<void> {
-  const limit = monthlyLimitUsd();
   const ctx = als.getStore();
+  const limit = ctx?.limitUsd ?? monthlyLimitUsd();
   if (!limit || !ctx?.userId || ctx.exempt) return;
   let used = 0;
   try {

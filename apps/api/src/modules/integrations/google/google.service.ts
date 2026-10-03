@@ -5,6 +5,7 @@ import { nextDay } from "../../channels/assistant/agenda-events";
 import { DriveKind, KIND_Q, wordVariants } from "../../channels/assistant/drive";
 import { buildBook, parseAddresses, SeenAddress } from "../../channels/assistant/email-book";
 import { CONTACTS_FOLDER, Contact, EMAIL_BOOK_FOLDER, fileOfLetter, findContacts, fromPerson, groupByLetter, parseLetterFile, renderLetterFile } from "../../channels/assistant/contacts";
+import { planOf } from "../../auth/plans";
 import { appendEntry, dailyFileName, dayStamp, formatEntry, NoteDraft, noteFileName, NOTES_FOLDER, renderNote, snippets, storageAccount, TOPICS_FOLDER } from "../../channels/assistant/notes";
 
 const SCOPES = [
@@ -125,6 +126,17 @@ export class GoogleService implements OnModuleInit {
     return (await res.json()) as any;
   }
 
+  /** Plano do dono do workspace limita quantas contas Google ele conecta; sem plano (ou root/admin), sem limite. */
+  private async assertAccountLimit(workspaceId: string): Promise<void> {
+    const owner = await prisma.workspaceMember.findFirst({ where: { workspaceId, role: "OWNER" }, include: { user: true } });
+    const plan = owner && owner.user.role === "USER" ? planOf(owner.user.plan) : null;
+    if (!plan) return;
+    const connected = (await this.listAccounts(workspaceId)).length;
+    if (connected >= plan.googleAccounts) {
+      throw new Error(`O plano ${plan.name} permite ${plan.googleAccounts} ${plan.googleAccounts === 1 ? "conta Google" : "contas Google"}. Remova uma em Canais ou troque de plano para conectar outra.`);
+    }
+  }
+
   async connect(workspaceId: string, code: string) {
     const t = await this.tokenRequest({
       code,
@@ -139,6 +151,7 @@ export class GoogleService implements OnModuleInit {
     const email: string = info.email ?? "google";
 
     const existing = await this.findChannel(workspaceId, email);
+    if (!existing) await this.assertAccountLimit(workspaceId);
     // Mantém o que já estava no canal (ex.: contactsSyncedAt) ao reconectar
     const config = { ...((existing?.config as object | undefined) ?? {}), provider: "google", email, refreshToken: sealToken(t.refresh_token) };
     if (existing) {

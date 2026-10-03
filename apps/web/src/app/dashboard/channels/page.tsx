@@ -30,7 +30,7 @@ export default function ChannelsPage() {
     load();
     const g = new URLSearchParams(window.location.search).get("google");
     if (g === "ok") setGoogleMsg("Google conectado com sucesso.");
-    if (g === "error") setGoogleMsg("Não foi possível conectar o Google. Tente novamente.");
+    if (g === "error") setGoogleMsg((new URLSearchParams(window.location.search).get("motivo") ?? "").slice(0, 240) || "Não foi possível conectar o Google. Tente novamente.");
     const ig = new URLSearchParams(window.location.search).get("instagram");
     if (ig === "ok") setGoogleMsg("Instagram conectado com sucesso.");
     if (ig === "error") setGoogleMsg("Não foi possível conectar o Instagram. Tente novamente.");

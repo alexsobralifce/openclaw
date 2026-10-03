@@ -42,20 +42,18 @@ const BENEFITS = [
   { icon: ICONS.shield, title: "Você no controle", text: "Nada é enviado sem o seu “1 - Confirmar”. E-mails com truques para enganar a IA são sinalizados." },
 ];
 
-const PLAN = [
-  "1 número de WhatsApp conectado por QR Code",
-  "Assistente por texto e por áudio",
-  "Gmail e Google Agenda (até 2 contas)",
-  "Aviso de novos e-mails no WhatsApp",
-  "Painel de conversas de clientes em tempo real",
-  "Confirmação antes de qualquer envio",
-  "Memória das suas preferências",
+// Planos mostrados na landing. Mantenha iguais aos de apps/api/src/modules/auth/plans.ts (preços e limites de contas, PDF e áudio).
+const PLANS = [
+  { name: "Aprendiz", who: "Para experimentar e uso leve", price: "9,90", tag: "", features: ["Assistente por texto e por áudio no WhatsApp", "E-mail, agenda, notas, Drive e contatos", "1 conta Google", "PDF até 15 páginas e áudio até 1 minuto", "Uso leve de IA por mês"] },
+  { name: "Mago", who: "Para o uso diário", price: "29,90", tag: "Para o dia a dia", features: ["Tudo do Aprendiz", "Rotina, memória e cofre de senhas", "Até 3 contas Google", "PDF até 50 páginas e áudio até 3 minutos", "Uso diário de IA"] },
+  { name: "Arquimago", who: "Para uso intenso e em escala", price: "69,90", tag: "", features: ["Tudo do Mago", "Painel de conversas de clientes em tempo real", "API, webhooks e automações", "Até 10 contas Google", "PDF até 80 páginas e áudio até 5 minutos", "Uso intenso de IA"] },
 ];
 
 const FAQ = [
   ["Preciso de um número de WhatsApp novo?", "Você conecta o número lendo um QR Code, como no WhatsApp Web. Recomendamos um número dedicado ao atendimento. Os comandos ao assistente saem do seu número pessoal."],
   ["Meus e-mails ficam seguros?", "Você autoriza o acesso pela tela do próprio Google e pode revogar quando quiser nas configurações da sua conta. O assistente nunca envia nada sem a sua confirmação."],
-  ["O que acontece depois dos 7 dias?", "O plano Básico passa a custar R$ 70 por mês. Se você cancelar antes do fim do teste, não paga nada."],
+  ["O que acontece depois dos 7 dias?", "Você escolhe um plano: Aprendiz (R$ 9,90), Mago (R$ 29,90) ou Arquimago (R$ 69,90) por mês. Se cancelar antes do fim do teste, não paga nada. O teste tem um limite de uso de IA menor que o dos planos."],
+  ["E se eu usar muito a IA?", "Cada plano tem um limite mensal de uso de IA. Ao chegar nele, o menu do assistente continua funcionando e a IA (respostas livres, áudio e leitura de arquivos) volta no mês seguinte. Em Configurações você acompanha quanto já usou."],
   ["A IA responde meus clientes sozinha?", "Não. Ela escreve o rascunho a partir do que você diz em poucas palavras, e só envia depois do seu OK."],
   ["Funciona com outros canais além do WhatsApp?", "Hoje: WhatsApp, Gmail e Google Agenda. Instagram, e-mail por IMAP e webchat estão previstos."],
 ];
@@ -124,7 +122,7 @@ export default function Landing() {
         <div className="relative mx-auto grid max-w-6xl items-center gap-14 px-5 pb-20 pt-16 md:grid-cols-[1.15fr_0.85fr] md:pb-28 md:pt-24">
           <div>
             <p className="mb-5 inline-flex items-center gap-2 rounded-full border border-white/10 px-3 py-1 text-xs text-[#a49eaf]">
-              <span className="h-1.5 w-1.5 rounded-full bg-[#A78BFA]" /> 7 dias grátis, depois R$ 70/mês
+              <span className="h-1.5 w-1.5 rounded-full bg-[#A78BFA]" /> 7 dias grátis, depois a partir de R$ 9,90/mês
             </p>
             <h1 className={`${H} text-balance text-4xl font-extrabold leading-[1.05] tracking-tight sm:text-5xl lg:text-6xl`}>
               Seu e-mail, sua agenda e seus clientes, <span className={TEAL}>dentro do WhatsApp.</span>
@@ -235,32 +233,37 @@ Olá! Confirmo minha presença na reunião. Obrigado pelo convite.
         <div className="mx-auto max-w-6xl px-5">
           <div className="mx-auto max-w-2xl text-center">
             <p className={`text-sm font-semibold uppercase tracking-[0.14em] ${TEAL}`}>Preço</p>
-            <h2 className={`${H} mt-3 text-balance text-3xl font-bold tracking-tight sm:text-4xl`}>Um plano. Sem pegadinha.</h2>
+            <h2 className={`${H} mt-3 text-balance text-3xl font-bold tracking-tight sm:text-4xl`}>Escolha o plano do seu tamanho</h2>
+            <p className="mt-3 text-[15px] text-[#a49eaf]">Todos começam com 7 dias grátis. Sem fidelidade e sem pegadinha: o limite de uso de IA de cada plano está claro desde o começo.</p>
           </div>
-          <div className="mx-auto mt-12 max-w-md rounded-3xl border border-[#A78BFA]/30 bg-gradient-to-b from-[#130f1a] to-[#0d0b10] p-8 shadow-[0_30px_80px_-30px_rgba(167,139,250,0.35)]">
-            <div className="flex items-center justify-between">
-              <h3 className={`${H} text-xl font-bold`}>Básico</h3>
-              <span className="rounded-full bg-[#A78BFA]/15 px-3 py-1 text-xs font-semibold text-[#C4B5FD]">7 dias grátis</span>
-            </div>
-            <p className="mt-6 flex items-end gap-1">
-              <span className="pb-1 text-lg text-[#a49eaf]">R$</span>
-              <span className={`${H} text-6xl font-extrabold leading-none tracking-tight`}>70</span>
-              <span className="pb-1 text-[#a49eaf]">/mês</span>
-            </p>
-            <p className="mt-2 text-sm text-[#a49eaf]">depois do período de teste</p>
-            <ul className="mt-7 space-y-3">
-              {PLAN.map((f) => (
-                <li key={f} className="flex gap-3 text-[15px]">
-                  <span className={`mt-0.5 ${TEAL}`}><Icon d={ICONS.check} /></span>
-                  {f}
-                </li>
-              ))}
-            </ul>
-            <Link href="/auth/register" className="mt-8 block rounded-xl bg-[#FBBF24] py-3.5 text-center text-base font-semibold text-[#2E1065] transition hover:bg-[#FDE68A]">
-              Começar 7 dias grátis
-            </Link>
-            <p className="mt-3 text-center text-xs text-[#868090]">Cancele antes do fim do teste e não paga nada.</p>
+          <div className="mt-12 grid gap-6 md:grid-cols-3">
+            {PLANS.map((p) => (
+              <div key={p.name} className={`flex flex-col rounded-3xl border p-8 ${p.tag ? "border-[#A78BFA]/50 bg-gradient-to-b from-[#1a1233] to-[#0d0b10] shadow-[0_30px_80px_-30px_rgba(167,139,250,0.35)]" : "border-white/10 bg-[#0d0b10]"}`}>
+                <div className="flex items-center justify-between gap-2">
+                  <h3 className={`${H} text-xl font-bold`}>{p.name}</h3>
+                  {p.tag && <span className="rounded-full bg-[#A78BFA]/15 px-3 py-1 text-xs font-semibold text-[#C4B5FD]">{p.tag}</span>}
+                </div>
+                <p className="mt-1 text-sm text-[#a49eaf]">{p.who}</p>
+                <p className="mt-6 flex items-end gap-1">
+                  <span className="pb-1 text-lg text-[#a49eaf]">R$</span>
+                  <span className={`${H} text-5xl font-extrabold leading-none tracking-tight`}>{p.price}</span>
+                  <span className="pb-1 text-[#a49eaf]">/mês</span>
+                </p>
+                <ul className="mt-7 flex-1 space-y-3">
+                  {p.features.map((f) => (
+                    <li key={f} className="flex gap-3 text-[15px]">
+                      <span className={`mt-0.5 ${TEAL}`}><Icon d={ICONS.check} /></span>
+                      {f}
+                    </li>
+                  ))}
+                </ul>
+                <Link href="/auth/register" className="mt-8 block rounded-xl bg-[#FBBF24] py-3.5 text-center text-base font-semibold text-[#2E1065] transition hover:bg-[#FDE68A]">
+                  Começar 7 dias grátis
+                </Link>
+              </div>
+            ))}
           </div>
+          <p className="mt-6 text-center text-xs text-[#868090]">Cancele antes do fim do teste e não paga nada. O teste tem um limite de uso de IA menor que o dos planos.</p>
         </div>
       </section>
 

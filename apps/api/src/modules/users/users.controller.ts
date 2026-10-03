@@ -2,6 +2,7 @@ import { Body, Controller, Delete, Get, Param, Patch, Post, Query, Request } fro
 import { ArrayMaxSize, IsArray, IsEmail, IsIn, IsOptional, IsString, Matches, MaxLength, MinLength } from "class-validator";
 import { AdminOnly } from "../auth/access";
 import { PlatformRole, SERVICES, UserStatus } from "../auth/permissions";
+import { PLANS } from "../auth/plans";
 import { UsersService } from "./users.service";
 
 const ROLES: PlatformRole[] = ["ROOT", "ADMIN", "USER"];
@@ -16,6 +17,7 @@ class CreateUserDto {
   @IsOptional() @IsIn(ROLES) role?: PlatformRole;
   @IsOptional() @IsArray() @ArrayMaxSize(20) @IsString({ each: true }) services?: string[];
   @IsOptional() @IsString() @Matches(PHONE, { message: "WhatsApp inválido" }) phone?: string;
+  @IsOptional() @IsString() @MaxLength(20) plan?: string;
 }
 
 class UpdateUserDto {
@@ -24,6 +26,7 @@ class UpdateUserDto {
   @IsOptional() @IsIn(ROLES) role?: PlatformRole;
   @IsOptional() @IsIn(STATUSES) status?: UserStatus;
   @IsOptional() @IsArray() @ArrayMaxSize(20) @IsString({ each: true }) services?: string[];
+  @IsOptional() @IsString() @MaxLength(20) plan?: string;
 }
 
 @AdminOnly()
@@ -34,6 +37,12 @@ export class UsersController {
   @Get("services")
   services() {
     return { services: SERVICES, ...this.users.catalog() };
+  }
+
+  /** Planos comerciais e os limites de cada um (para a tela de usuários). */
+  @Get("plans")
+  plans() {
+    return { plans: Object.values(PLANS) };
   }
 
   @Get()

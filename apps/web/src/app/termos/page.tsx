@@ -63,9 +63,11 @@ export default function TermsPage() {
       <section className="space-y-2">
         <h2 className="text-base font-semibold text-gray-200">6. Limites de uso</h2>
         <p>
-          O uso de inteligência artificial tem um custo, por isso podemos aplicar um limite mensal de uso por usuário. Ao atingi-lo, as funções que
-          dependem de IA (respostas livres, áudio, leitura de arquivos) ficam indisponíveis até o mês seguinte, e o menu do assistente continua
-          funcionando. Podemos ajustar esses limites e, em caso de uso abusivo, restringir a conta.
+          O uso de inteligência artificial tem um custo, por isso cada plano (Aprendiz, Mago e Arquimago) tem limites: uso mensal de IA, número de contas
+          Google, páginas por PDF e duração de cada áudio. Os limites do seu plano aparecem em Configurações, junto com quanto você já usou no mês. Ao
+          atingir o limite de IA, as funções que dependem dela (respostas livres, áudio, leitura de arquivos) ficam indisponíveis até o mês seguinte, e o
+          menu do assistente continua funcionando. Arquivos acima do limite de páginas ou de duração do seu plano não são processados. Podemos ajustar os
+          limites, avisando no painel, e, em caso de uso abusivo, restringir a conta.
         </p>
       </section>
 

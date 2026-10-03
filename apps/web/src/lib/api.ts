@@ -40,6 +40,19 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   return res.json();
 }
 
+/** Plano comercial e seus limites (vem de /users/plans). */
+export interface PlanInfo {
+  id: string;
+  name: string;
+  priceBrl: number;
+  aiUsd: number;
+  googleAccounts: number;
+  pdfPages: number;
+  audioSeconds: number;
+  services: string[];
+  summary: string;
+}
+
 export interface NoteTopic {
   id: string;
   name: string;
@@ -71,6 +84,8 @@ export interface UsageReport {
     unpricedTokens: number;
     monthlyUsd: number;
     monthUsd: number;
+    limitUsd: number;
+    plan: string | null;
     status: string | null;
   }[];
 }
@@ -94,6 +109,7 @@ export const api = {
   },
   usage: {
     report: (days: number) => request<UsageReport>(`/usage?days=${days}`),
+    mine: () => request<{ plan: PlanInfo | null; limitUsd: number; monthUsd: number; since: string }>("/usage/me"),
   },
   assistant: {
     menu: () => request<{ items: MenuItem[] }>("/assistant/menu"),
@@ -105,6 +121,7 @@ export const api = {
   },
   users: {
     catalog: () => request<{ services: Record<string, string>; defaults: Record<string, string[]> }>("/users/services"),
+    plans: () => request<{ plans: PlanInfo[] }>("/users/plans"),
     list: (status?: string) => request<any[]>(`/users${status ? `?status=${status}` : ""}`),
     create: (data: any) => request<any>("/users", { method: "POST", body: JSON.stringify(data) }),
     update: (id: string, data: any) => request<any>(`/users/${id}`, { method: "PATCH", body: JSON.stringify(data) }),
