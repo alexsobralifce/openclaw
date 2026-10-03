@@ -20,8 +20,12 @@ export function getToken(): string | null {
   try { return localStorage.getItem("oc_token"); } catch { return null; }
 }
 
+/** Marca de "Agora não" do aviso de instalação; cada login a apaga para o aviso voltar. */
+export const PWA_DISMISS_KEY = "oc_pwa_dismissed";
+
 export function setToken(token: string) {
   try {
+    localStorage.removeItem(PWA_DISMISS_KEY);
     localStorage.setItem("oc_token", token);
     document.cookie = `oc_token=${token}; path=/; max-age=${60 * 60 * 24 * 7}; SameSite=Lax`;
   } catch {}

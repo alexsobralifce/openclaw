@@ -2,10 +2,9 @@
 
 import { useEffect, useState } from "react";
 import { api } from "@/lib/api";
+import { PWA_DISMISS_KEY } from "@/lib/auth";
 import { enablePush, pushSupported, registerServiceWorker } from "@/lib/push";
 
-const DISMISS_KEY = "oc_pwa_dismissed";
-const REASK_MS = 7 * 86_400_000;
 
 interface InstallEvent extends Event {
   prompt: () => Promise<void>;
@@ -14,26 +13,38 @@ interface InstallEvent extends Event {
 
 const read = (k: string) => { try { return localStorage.getItem(k); } catch { return null; } };
 
+type Platform = "ios" | "android" | "other";
+
+const detectPlatform = (): Platform => {
+  const ua = navigator.userAgent;
+  // iPadOS 13+ se apresenta como Mac, mas tem tela de toque
+  if (/iphone|ipad|ipod/i.test(ua) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1)) return "ios";
+  return /android/i.test(ua) ? "android" : "other";
+};
+
 /**
- * Ao entrar no painel: registra o service worker e oferece instalar o atalho e ligar as notificações.
- * O navegador só concede as duas coisas depois de um toque do usuário, então o aviso traz os botões; "Agora não" só volta em 7 dias.
+ * A cada login, se o app ainda não está instalado: no Android pede para instalar o app e no iPhone para criar o atalho; também oferece ligar as notificações.
+ * O navegador só concede instalação e notificação depois de um toque do usuário, então o aviso traz os botões.
+ * "Agora não" vale só até o próximo login (o login apaga a marca, ver `setToken`).
  */
 export function PwaPrompt() {
   const [installEvt, setInstallEvt] = useState<InstallEvent | null>(null);
   const [standalone, setStandalone] = useState(true);
-  const [ios, setIos] = useState(false);
+  const [platform, setPlatform] = useState<Platform>("other");
   const [push, setPush] = useState<{ enabled: boolean; publicKey: string; subscribed: boolean } | null>(null);
   const [perm, setPerm] = useState<NotificationPermission>("default");
   const [hidden, setHidden] = useState(true);
+  const [waited, setWaited] = useState(false); // dá tempo ao Chrome de oferecer o botão de instalar antes de mostrar o passo a passo manual
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
 
   useEffect(() => {
     void registerServiceWorker();
+    const timer = setTimeout(() => setWaited(true), 1500);
     setStandalone(window.matchMedia("(display-mode: standalone)").matches || (navigator as any).standalone === true);
-    setIos(/iphone|ipad|ipod/i.test(navigator.userAgent));
+    setPlatform(detectPlatform());
     if ("Notification" in window) setPerm(Notification.permission);
-    setHidden(Date.now() - Number(read(DISMISS_KEY) ?? 0) < REASK_MS);
+    setHidden(!!read(PWA_DISMISS_KEY));
     api.appChat.pushStatus().then(setPush).catch(() => undefined);
 
     const onPrompt = (e: Event) => { e.preventDefault(); setInstallEvt(e as InstallEvent); };
@@ -41,18 +52,20 @@ export function PwaPrompt() {
     window.addEventListener("beforeinstallprompt", onPrompt);
     window.addEventListener("appinstalled", onInstalled);
     return () => {
+      clearTimeout(timer);
       window.removeEventListener("beforeinstallprompt", onPrompt);
       window.removeEventListener("appinstalled", onInstalled);
     };
   }, []);
 
-  const canInstall = !standalone && !!installEvt;
-  const iosInstall = !standalone && ios && !installEvt; // iPhone não tem botão de instalar: é pelo menu Compartilhar
+  const canInstall = !standalone && !!installEvt; // Chrome/Edge: botão que abre o instalador
+  const iosInstall = !standalone && platform === "ios"; // iPhone não tem botão: é pelo menu Compartilhar
+  const androidManual = !standalone && platform === "android" && !installEvt && waited; // navegador que não ofereceu o botão: pelo menu
   const canPush = !!push?.enabled && pushSupported() && !push.subscribed && perm !== "denied";
-  if (hidden || (!canInstall && !iosInstall && !canPush)) return null;
+  if (hidden || (!canInstall && !iosInstall && !androidManual && !canPush)) return null;
 
   const later = () => {
-    try { localStorage.setItem(DISMISS_KEY, String(Date.now())); } catch {}
+    try { localStorage.setItem(PWA_DISMISS_KEY, "1"); } catch {}
     setHidden(true);
   };
 
@@ -82,15 +95,25 @@ export function PwaPrompt() {
   const btn = "px-3 py-1.5 rounded-lg text-xs font-medium";
   return (
     <div role="dialog" aria-label="Instalar o MagoBox e ativar notificações" className="fixed z-50 inset-x-3 bottom-[calc(5rem+env(safe-area-inset-bottom))] md:inset-x-auto md:right-4 md:bottom-4 md:w-96 bg-gray-900 border border-gray-700 rounded-xl p-4 shadow-xl space-y-3">
-      <p className="text-sm font-medium text-gray-200">Tenha o MagoBox à mão</p>
+      <p className="text-sm font-medium text-gray-200">
+        {iosInstall ? "Crie o atalho do MagoBox" : canInstall || androidManual ? "Instale o app MagoBox" : "Ative as notificações"}
+      </p>
       <ul className="text-xs text-gray-400 space-y-1">
-        {(canInstall || iosInstall) && <li>Atalho na tela inicial, abrindo como um app.</li>}
+        {(canInstall || androidManual || iosInstall) && <li>Abre em tela cheia, como um app, direto da tela inicial.</li>}
         {canPush && <li>Avisos do assistente (e-mails, lembretes e respostas) mesmo com o app fechado.</li>}
       </ul>
-      {iosInstall && <p className="text-xs text-gray-300">No iPhone: toque em <b>Compartilhar</b> e depois em <b>Adicionar à Tela de Início</b>. As notificações ficam disponíveis depois disso.</p>}
+      {iosInstall && (
+        <ol className="text-xs text-gray-300 list-decimal pl-4 space-y-0.5">
+          <li>Toque em <b>Compartilhar</b> (o quadrado com a seta para cima).</li>
+          <li>Role e escolha <b>Adicionar à Tela de Início</b>.</li>
+          <li>Toque em <b>Adicionar</b> e abra o MagoBox pelo ícone novo.</li>
+          <li className="text-gray-400 list-none -ml-4">As notificações ficam disponíveis depois disso.</li>
+        </ol>
+      )}
+      {androidManual && <p className="text-xs text-gray-300">Toque no menu <b>⋮</b> do navegador e escolha <b>Instalar app</b> (ou <b>Adicionar à tela inicial</b>). Se a opção não aparecer, abra o endereço direto no Chrome.</p>}
       {error && <p className="text-xs text-red-300">{error}</p>}
       <div className="flex flex-wrap gap-2">
-        {canInstall && <button onClick={install} className={`${btn} bg-violet-500 text-white`}>Criar atalho</button>}
+        {canInstall && <button onClick={install} className={`${btn} bg-violet-500 text-white`}>{platform === "android" ? "Instalar app" : "Criar atalho"}</button>}
         {canPush && <button onClick={notify} disabled={busy} className={`${btn} bg-violet-500 text-white disabled:opacity-50`}>{busy ? "Ativando…" : "Ativar notificações"}</button>}
         <button onClick={later} className={`${btn} bg-gray-800 text-gray-300 hover:bg-gray-700`}>Agora não</button>
       </div>
