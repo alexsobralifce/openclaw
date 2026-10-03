@@ -90,7 +90,8 @@ openclaw/
 | `inbound/inbound.service.ts` | Fila durável `InboundEvent` (tick 2 s, claim otimista, backoff 5s/30s/2min/10min/1h, 6 tentativas). Orquestra o roteamento |
 | `assistant/menu.service.ts` (~1.700 linhas) | Máquina de estados de menu numerado; `respond()` devolve `string \| null` (null = IA livre) |
 | `assistant/assistant.service.ts` | Fachada: envio, transcrição, limpeza do chat, agente OpenAI com tools (máx. 6 rodadas) |
-| `assistant/intent.service.ts` | Jev (TypeSafe): `agenda_add` / `drive_file` / `note_add` / `other`, `MIN_CONFIDENCE = 0.8`, timeout 2,5 s |
+| `assistant/intent.service.ts` | Jev (TypeSafe): `agenda_add` / `drive_file` / `note_add` / `other`, `MIN_CONFIDENCE = 0.8`, timeout 2,5 s. `pickPerson`: escolhe entre contatos de nome parecido (ou "nenhum"), só como reserva quando a busca exata não acha ninguém |
+| `assistant/conversation-memory.ts` | Memória curta da conversa (24 h): últimas 10 trocas por usuário em `KvEntry` `conv:<userId>` (TTL de 24 h renovado a cada mensagem), texto cifrado com a chave do workspace, teto de ~5.000 caracteres. Entra no prompt da IA livre (`think`) como bloco marcado como dado. Nunca guarda cofre, segredo, código, erro nem escolha de menu ("1"). "esquecer a conversa" apaga |
 | `assistant/commander.ts` | Identifica o usuário que comanda pelo WhatsApp e checa serviços |
 | `assistant/gemini.service.ts`, `memory.service.ts`, `weather.service.ts` | Gemini (transcrição/extração/TTS), memórias e rotina, clima Open-Meteo |
 | `assistant/email-*.ts`, `drive.ts`, `notes.ts`, `contacts.ts`, `email-search.ts`, `email-book.ts`, `email-compose.ts`, `menu-items.ts`, `agenda-events.ts`, `voice.ts`, `speech.ts`, `security.ts`, `vault-command.ts`, `routine.ts`, `location.ts`, `chat-clean.ts` | Lógica pura (testável sem mocks) |
@@ -205,6 +206,9 @@ Webhook → `InboundEvent` → worker → `InboxService.processIncoming` → `We
 - CORS e websockets aceitam `WEB_URL` + `WEB_ORIGINS` (lista separada por vírgula), ver `web-origins.ts`. `WEB_URL` é também o destino dos redirecionamentos (login com Google, link do cofre).
 - **Leitor de JSON:** `app.use(json())` no `main.ts` faz o Nest achar que já há um leitor global e pular o dele: sem o segundo `app.use`, todo POST chega com corpo vazio. Por isso tudo vive em `body-parsers.ts` (25 MB só em `BIG_BODY_PATHS`, e `req.rawBody` para a assinatura do Instagram), com teste em `test/body-parsers.spec.ts`.
 - O redirect do Google (`GOOGLE_REDIRECT_URI`) precisa estar cadastrado no Google Cloud, exatamente igual; o Instagram (`INSTAGRAM_REDIRECT_URI`) ainda usa o endereço do Railway (a Meta não tem a URL nova).
+
+**Busca de nomes (contatos e e-mail por remetente)**
+- `findContacts` busca em níveis (todas as palavras → sem sufixo/ligação como "jr", "filho", "da" → pelo primeiro nome). Se nada achar, `GoogleService.contactsLookup` peneira nomes parecidos (`fuzzyCandidates`, distância de edição) e o Jev (`pickPerson`, ligado por `setPersonPicker` no construtor do `AssistantService`) escolhe. "E-mails do fulano" soma os endereços do contato achado à busca pelo nome (`MenuService.withPersonAddresses`). Sem chave do Jev ou com dúvida, vale só a busca exata.
 
 **Assistente**
 6. `modules/ai/`, `common/` e `config/` estão vazios; a IA vive em `channels/assistant/`.

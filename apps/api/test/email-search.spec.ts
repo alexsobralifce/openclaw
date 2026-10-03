@@ -7,9 +7,9 @@ const q = (t: string) => emailSearchSpec(normalize(t));
 
 describe("busca de e-mails no Gmail", () => {
   it("por pessoa: from/to", () => {
-    expect(q("buscar e-mails do Marcos")).toEqual({ gmail: "(from:(marcos) OR to:(marcos))", label: "de marcos" });
-    expect(q("procura emails da Maria Souza")).toEqual({ gmail: "(from:(maria souza) OR to:(maria souza))", label: "de maria souza" });
-    expect(q("e-mails do João")).toEqual({ gmail: "(from:(joao) OR to:(joao))", label: "de joao" });
+    expect(q("buscar e-mails do Marcos")).toEqual({ gmail: "(from:(marcos) OR to:(marcos))", label: "de marcos", person: "marcos" });
+    expect(q("procura emails da Maria Souza")).toEqual({ gmail: "(from:(maria souza) OR to:(maria souza))", label: "de maria souza", person: "maria souza" });
+    expect(q("e-mails do João")).toEqual({ gmail: "(from:(joao) OR to:(joao))", label: "de joao", person: "joao" });
   });
   it("por assunto: termos soltos", () => {
     expect(q("e-mails sobre contrato")).toEqual({ gmail: "contrato", label: "sobre contrato" });

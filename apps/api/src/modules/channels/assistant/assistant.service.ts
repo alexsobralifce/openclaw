@@ -1,5 +1,6 @@
 import { chatCompletion } from "./openai-chat";
 import { planOf } from "../../auth/plans";
+import { ConversationMemory, isForgetCommand, renderHistory, worthKeeping } from "./conversation-memory";
 import { fmtDuration, maxAudioSeconds, maxPdfPages, pdfPageCount } from "./media-limits";
 import { IntentService } from "./intent.service";
 import { pickTools } from "./tool-select";
@@ -304,6 +305,8 @@ const MAX_VOICE_STEPS = 4;
 @Injectable()
 export class AssistantService {
   private readonly logger = new Logger(AssistantService.name);
+  /** Últimas trocas de cada usuário (24 h), que entram no prompt da IA livre. */
+  private readonly conv: ConversationMemory;
 
   constructor(
     private evolution: EvolutionService,
@@ -317,7 +320,10 @@ export class AssistantService {
     private appChat?: AppChatService,
     private telegram?: TelegramService,
   ) {
+    this.conv = new ConversationMemory(this.state);
     this.menu.setExecutor((ws, a) => this.execute(ws, a.name, a.args));
+    // `?.`: os dublês de teste do GoogleService são parciais
+    this.google.setPersonPicker?.(async (query, candidates) => (await this.intents?.pickPerson(query, candidates.map((c) => ({ nome: c.nome, email: c.emails[0] })))) ?? null);
     this.menu.setFileSender((ws, f) => this.sendFileToOwner(ws, f));
     this.menu.setChatCleaner((ws, minAgeMs) => this.cleanChat(ws, minAgeMs));
   }
@@ -573,9 +579,14 @@ export class AssistantService {
   }
 
   /** Esta mensagem mexe no cofre (abrir, buscar senha, bloquear) ou é o código dele? No Telegram isso não é permitido. */
-  private async blockedOnTelegram(ws: string, text: string): Promise<boolean> {
+  /** Esta mensagem fala do cofre (abrir, buscar senha, bloquear)? Nada disso vai para a memória da conversa. */
+  private touchesVault(text: string): boolean {
     const flat = normalize(text);
-    if (isVaultHome(flat) || isVaultLock(flat) || !!vaultQuery(flat)) return true;
+    return isVaultHome(flat) || isVaultLock(flat) || !!vaultQuery(flat);
+  }
+
+  private async blockedOnTelegram(ws: string, text: string): Promise<boolean> {
+    if (this.touchesVault(text)) return true;
     return /^\d{4}$/.test(text.trim()) && (await this.menu.awaitingPin(ws));
   }
 
@@ -588,13 +599,22 @@ export class AssistantService {
       await this.sendToUser(c, instanceName, TELEGRAM_VAULT_NOTICE);
       return { redact: false };
     }
+    // "Esquecer a conversa": apaga a memória das últimas 24 h na hora
+    if (isForgetCommand(normalize(text))) {
+      await this.conv.forget(c.userId).catch((e) => this.logger.warn(`Esquecer a conversa falhou: ${e.message}`));
+      await this.sendToUser(c, instanceName, "🧹 Pronto, esqueci a nossa conversa recente.");
+      return { redact: false };
+    }
     let answer: string;
+    let failed = false;
     try {
       answer = (await this.menu.respond(workspaceId, text, opts.quoted || undefined)) ?? (await this.think(c, text));
     } catch (err: any) {
       this.logger.error(`Assistente falhou: ${err.message}`);
       answer = "Erro ao processar o comando. Tente novamente.";
+      failed = true;
     }
+    const plainAnswer = answer;
     if (quotaHit()) answer = `${answer}\n\n${QUOTA_NOTICE}`;
     if (opts.heard && !(await this.menu.isCar(workspaceId))) answer = `🎙️ _"${text}"_\n\n${answer}`;
     const secret = await this.menu.takeSecret(workspaceId);
@@ -602,6 +622,10 @@ export class AssistantService {
     // Rede de segurança: se uma resposta com segredo escapou até aqui, ela não vai pelo Telegram
     if (secret && channelOfInstance(instanceName) === "telegram") answer = TELEGRAM_VAULT_NOTICE;
     await this.sendToUser(c, instanceName, answer, secret && channelOfInstance(instanceName) !== "telegram" ? { wipeAfterMs: SECRET_WIPE_MS } : {});
+    // Memória da conversa: nunca o cofre, segredo, código ou erro, e escolhas de menu ("1") não contam
+    if (!secret && !redact && !failed && worthKeeping(text) && !this.touchesVault(text)) {
+      await this.conv.remember(c.userId, workspaceId, text, plainAnswer).catch((e) => this.logger.warn(`Guardar a conversa falhou: ${e.message}`));
+    }
     await this.scheduleIdle(c, instanceName);
     return { redact };
   }
@@ -658,10 +682,12 @@ export class AssistantService {
 
     const mem = await this.memory.promptBlock(workspaceId);
     const loc = await loadLocation(this.state, workspaceId);
+    // Últimas trocas (24 h): sem elas a IA trata cada mensagem como a primeira
+    const history = renderHistory(await this.conv.load(c.userId, workspaceId).catch(() => []));
     const messages: any[] = [
       {
         role: "system",
-        content: systemPrompt(c.name, loc, mem),
+        content: history ? `${systemPrompt(c.name, loc, mem)}\n\n${history}` : systemPrompt(c.name, loc, mem),
       },
       { role: "user", content: text },
     ];

@@ -4,7 +4,7 @@ import { isSealed, openToken, sealToken } from "../../webhooks/crypto";
 import { nextDay } from "../../channels/assistant/agenda-events";
 import { DriveKind, KIND_Q, wordVariants } from "../../channels/assistant/drive";
 import { buildBook, parseAddresses, SeenAddress } from "../../channels/assistant/email-book";
-import { CONTACTS_FOLDER, Contact, EMAIL_BOOK_FOLDER, fileOfLetter, findContacts, fromPerson, groupByLetter, parseLetterFile, renderLetterFile } from "../../channels/assistant/contacts";
+import { CONTACTS_FOLDER, Contact, EMAIL_BOOK_FOLDER, fileOfLetter, findContacts, fuzzyCandidates, fromPerson, groupByLetter, parseLetterFile, renderLetterFile } from "../../channels/assistant/contacts";
 import { planOf } from "../../auth/plans";
 import { appendEntry, dailyFileName, dayStamp, formatEntry, NoteDraft, noteFileName, NOTES_FOLDER, renderNote, snippets, storageAccount, TOPICS_FOLDER } from "../../channels/assistant/notes";
 
@@ -797,6 +797,12 @@ export class GoogleService implements OnModuleInit {
     }
   }
 
+  /** Quem escolhe entre nomes parecidos quando a busca exata não acha (o Jev, ligado pelo AssistantService); sem ele, só a busca exata. */
+  private personPicker?: (query: string, candidates: Contact[]) => Promise<number | null>;
+  setPersonPicker(fn: (query: string, candidates: Contact[]) => Promise<number | null>) {
+    this.personPicker = fn;
+  }
+
   /**
    * Contatos que casam com o nome: primeiro os do Google, depois os endereços do catálogo do Gmail (Drive de armazenamento).
    * Devolve null se nenhum dos dois foi importado ainda.
@@ -808,7 +814,12 @@ export class GoogleService implements OnModuleInit {
       const [people, book] = await Promise.all([this.loadBook(workspaceId, account, CONTACTS_FOLDER), this.loadBook(workspaceId, account, EMAIL_BOOK_FOLDER)]);
       if (people === null && book === null) return null;
       // Os contatos do Google (com telefone) vêm antes dos endereços do catálogo
-      return [...findContacts(people ?? [], query, max), ...findContacts(book ?? [], query, max)].slice(0, max);
+      const exact = [...findContacts(people ?? [], query, max), ...findContacts(book ?? [], query, max)].slice(0, max);
+      if (exact.length || !this.personPicker) return exact;
+      // Ninguém bate com o texto: peneira os nomes parecidos e o Jev escolhe (ou diz que nenhum é)
+      const similar = fuzzyCandidates([...(people ?? []), ...(book ?? [])], query, 8);
+      const picked = similar.length ? await this.personPicker(query, similar) : null;
+      return picked !== null && similar[picked] ? [similar[picked]] : [];
     } catch (e) {
       throw this.driveError(e);
     }

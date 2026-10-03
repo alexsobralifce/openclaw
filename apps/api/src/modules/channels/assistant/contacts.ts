@@ -138,6 +138,43 @@ export function findContacts(contacts: Contact[], query: string, max = 5): Conta
   return found.sort((a, b) => score(b) - score(a) || b.hit - a.hit || byName(a.c, b.c)).slice(0, max).map((r) => r.c);
 }
 
+/** Distância de edição entre duas palavras (Levenshtein), para achar "arnoud" perto de "arnaud". */
+function editDistance(a: string, b: string): number {
+  const row = Array.from({ length: b.length + 1 }, (_, j) => j);
+  for (let i = 1; i <= a.length; i++) {
+    let prev = row[0];
+    row[0] = i;
+    for (let j = 1; j <= b.length; j++) {
+      const tmp = row[j];
+      row[j] = Math.min(row[j] + 1, row[j - 1] + 1, prev + (a[i - 1] === b[j - 1] ? 0 : 1));
+      prev = tmp;
+    }
+  }
+  return row[b.length];
+}
+
+/** 1 = igual, 0 = nada a ver; uma palavra que começa a outra ("arn" / "arnaud") conta como muito parecida. */
+const wordLikeness = (a: string, b: string) => (b.startsWith(a) || a.startsWith(b) ? 0.9 : 1 - editDistance(a, b) / Math.max(a.length, b.length));
+
+/**
+ * Candidatos PARECIDOS com o nome pedido, para quando a busca exata não acha ninguém (erro de digitação, grafia diferente).
+ * Barato e sem IA: serve de peneira antes de o Jev escolher. Devolve os mais parecidos primeiro, no máximo `max`.
+ */
+export function fuzzyCandidates(contacts: Contact[], query: string, max = 8): Contact[] {
+  const terms = normalize(query).split(" ").filter((t) => t.length >= 3 && !NAME_NOISE.has(t));
+  if (!terms.length) return [];
+  return contacts
+    .map((c) => {
+      const words = normalize(c.nome).split(" ").filter(Boolean);
+      const best = terms.map((t) => Math.max(0, ...words.map((w) => wordLikeness(t, w))));
+      return { c, score: best.reduce((a, b) => a + b, 0) / terms.length };
+    })
+    .filter((x) => x.score >= 0.6)
+    .sort((a, b) => b.score - a.score || byName(a.c, b.c))
+    .slice(0, max)
+    .map((x) => x.c);
+}
+
 // ─── Comandos ──────────────────────────────────────────────────
 
 const KIND = "(?:telefone|numero|celular|whatsapp|zap|e-?mail|email|contato)";

@@ -1145,10 +1145,29 @@ export class MenuService {
   }
 
   /** Busca no Gmail de todas as contas e mostra a lista na tela de e-mails (dá para abrir, apagar ou marcar como lido em lote). */
+  /**
+   * "E-mails do Arnaud": o nome pode estar escrito de outro jeito no cabeçalho, então junta os endereços do contato (achado pelo nome,
+   * com a escolha do Jev quando o texto não bate). Mantém a busca pelo nome como estava; qualquer falha segue só com ela.
+   */
+  private async withPersonAddresses(ws: string, spec: EmailSearchSpec): Promise<EmailSearchSpec> {
+    if (!spec.person || !(await this.services(ws)).includes("drive")) return spec;
+    try {
+      const found = await this.google.contactsLookup(ws, spec.person, 3);
+      const emails = [...new Set((found ?? []).flatMap((c) => c.emails))].filter((e) => /^[\w.+-]+@[\w.-]+$/.test(e)).slice(0, 6);
+      if (!emails.length) return spec;
+      const who = emails.map((e) => `from:(${e}) OR to:(${e})`).join(" OR ");
+      return { ...spec, gmail: `${spec.gmail.slice(0, -1)} OR ${who})` };
+    } catch (e: any) {
+      this.logger.warn(`Achar os endereços de ${spec.person} falhou, segue pelo nome: ${e.message}`);
+      return spec;
+    }
+  }
+
   private async emailSearchView(ws: string, spec: EmailSearchSpec): Promise<string> {
     const accounts: string[] = await this.google.listAccounts(ws);
     if (!accounts.length) return this.noGoogle();
     const size = await this.listSize(ws, 8);
+    spec = await this.withPersonAddresses(ws, spec);
     const settled = await Promise.allSettled(accounts.map((a) => this.google.gmailSearch(ws, spec.gmail, a, size)));
     const failed = settled.find((r): r is PromiseRejectedResult => r.status === "rejected");
     if (failed) this.logger.warn(`Buscar e-mails falhou: ${failed.reason?.message ?? failed.reason}`);

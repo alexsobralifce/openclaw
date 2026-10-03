@@ -7,6 +7,8 @@ export interface EmailSearchSpec {
   gmail: string;
   /** como mostrar o pedido: "de marcos" / "sobre contrato" */
   label: string;
+  /** nome da pessoa, nas buscas "de fulano" (para achar os endereços dela nos contatos) */
+  person?: string;
 }
 
 const VERB = "(?:buscar|busca|procurar|procura|achar|acha|pesquisar|pesquisa|encontrar|encontra|localizar|localiza)";
@@ -23,7 +25,7 @@ function spec(connector: string | undefined, what: string): EmailSearchSpec | nu
   if (connector && FROM.test(connector)) {
     // "arnaud jr" no pedido, "Arnaud" no cabeçalho do e-mail: o Gmail exigiria as duas palavras, então fica só o nome que importa
     const who = safe(dropNameNoise(term)) || term;
-    return { gmail: `(from:(${who}) OR to:(${who}))`, label: `de ${who}` };
+    return { gmail: `(from:(${who}) OR to:(${who}))`, label: `de ${who}`, person: who };
   }
   return { gmail: term, label: `sobre ${term}` };
 }

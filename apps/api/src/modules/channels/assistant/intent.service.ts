@@ -77,6 +77,30 @@ export class IntentService {
     }
   }
 
+  /**
+   * Qual destes contatos é a pessoa que o dono pediu? O Jev escolhe com confiança (ou "nenhum"), para grafias e apelidos que a busca
+   * por texto não pega. Devolve o índice do candidato, ou null (sem chave, com erro, demora, dúvida ou "nenhum").
+   */
+  async pickPerson(query: string, candidates: { nome: string; email?: string }[]): Promise<number | null> {
+    if (!this.enabled() || !candidates.length) return null;
+    try {
+      this.client ??= new TypeSafeClient({ timeout: TIMEOUT_MS, retry: { maxRetries: 0 } });
+      const options: Record<string, string> = Object.fromEntries(candidates.slice(0, 8).map((c, i) => [`c${i}`, `${c.nome}${c.email ? ` (${c.email})` : ""}`]));
+      options.nenhum = "Nenhum destes é a pessoa pedida.";
+      const question = choice("Qual destes contatos é a pessoa que o dono da secretária procura? Considere erro de digitação, sobrenome ou sufixo a mais ou a menos (Jr, Filho) e apelido; na dúvida, nenhum.", options as any);
+      const res = (await this.client.systemOne({ state: { pedido: query.slice(0, 100) }, questions: { pessoa: question } })) as any;
+      this.count(res);
+      const { choice: pick, confidence } = res.answers.pessoa;
+      // Sem o nome pedido nem os candidatos: só o suficiente para calibrar o limiar.
+      this.logger.log(`Jev (pessoa): ${pick === "nenhum" ? "nenhum" : "um candidato"} (confiança ${Number(confidence).toFixed(2)}, ${candidates.length} candidatos)`);
+      const i = /^c(\d+)$/.exec(String(pick));
+      return i && confidence >= MIN_CONFIDENCE ? Number(i[1]) : null;
+    } catch (e: any) {
+      this.logger.warn(`Jev indisponível para escolher o contato: ${e.message}`);
+      return null;
+    }
+  }
+
   /** Conta a chamada ao Jev no consumo do usuário (o SDK devolve o uso em tokens). Sem preço configurado, os tokens contam pelo maior preço da tabela. */
   private count(res: any) {
     recordUsage("jev", String(res?.model ?? "jev-latest"), { input: Number(res?.usage?.input_tokens) || 0, output: Number(res?.usage?.output_tokens) || 0 });
