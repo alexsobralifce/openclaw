@@ -116,6 +116,27 @@ export class GoogleService implements OnModuleInit {
     return `https://accounts.google.com/o/oauth2/v2/auth?${p}`;
   }
 
+  /** Tela de consentimento só para entrar no MagoBox: identidade (e-mail e nome), sem acesso a Gmail, Agenda ou Drive. */
+  loginUrl(state: string) {
+    const p = new URLSearchParams({
+      client_id: this.clientId,
+      redirect_uri: this.redirectUri,
+      response_type: "code",
+      scope: "openid email profile",
+      prompt: "select_account",
+      state,
+    });
+    return `https://accounts.google.com/o/oauth2/v2/auth?${p}`;
+  }
+
+  /** Troca o código do login pelo e-mail da conta Google. O id_token vem direto do Google (TLS + segredo do app); ainda se confere o destinatário. */
+  async loginIdentity(code: string): Promise<{ email: string; verified: boolean }> {
+    const t = await this.tokenRequest({ code, grant_type: "authorization_code", redirect_uri: this.redirectUri });
+    const claims = JSON.parse(Buffer.from(String(t.id_token ?? "").split(".")[1] ?? "", "base64url").toString() || "{}");
+    if (claims.aud !== this.clientId || !/^(https:\/\/)?accounts\.google\.com$/.test(claims.iss ?? "") || !claims.email) throw new Error("id_token do Google inválido");
+    return { email: String(claims.email).toLowerCase(), verified: claims.email_verified === true || claims.email_verified === "true" };
+  }
+
   private async tokenRequest(params: Record<string, string>) {
     const res = await fetch("https://oauth2.googleapis.com/token", {
       method: "POST",

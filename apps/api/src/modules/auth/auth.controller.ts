@@ -33,6 +33,11 @@ class LoginDto {
   password!: string;
 }
 
+class GoogleTicketDto {
+  @IsString() @Matches(/^[a-f0-9]{48}$/)
+  ticket!: string;
+}
+
 class ProfileDto {
   @IsOptional() @IsString() @MinLength(2) @MaxLength(80)
   name?: string;
@@ -58,6 +63,13 @@ export class AuthController {
   @Post("login")
   login(@Body() dto: LoginDto) {
     return this.auth.login(dto.email, dto.password);
+  }
+
+  @UseGuards(RateLimitGuard)
+  @RateLimit("google-exchange", 30, 900)
+  @Post("google/exchange")
+  googleExchange(@Body() dto: GoogleTicketDto) {
+    return this.auth.loginWithGoogleTicket(dto.ticket);
   }
 
   @Access()

@@ -5,6 +5,7 @@ import * as bcrypt from "bcryptjs";
 import { statusMessage } from "./jwt.strategy";
 import { effectiveServices } from "./permissions";
 import { StateService } from "../state/state.service";
+import { loginTicketKey } from "./google-login";
 
 // Falhas de senha por e-mail: depois de tantas, a conta espera um tempo (vale mesmo com IPs diferentes)
 const MAX_FAILS = 8;
@@ -84,6 +85,16 @@ export class AuthService {
     // Só depois de conferir a senha, para não revelar quais e-mails estão cadastrados
     if (user.status !== "ACTIVE") throw new ForbiddenException(statusMessage(user.status));
 
+    return this.buildResponse(user);
+  }
+
+  /** Troca o ticket do login com Google (uso único, 60 s) pela sessão. */
+  async loginWithGoogleTicket(ticket: string) {
+    const key = loginTicketKey(ticket);
+    const t = await this.state.get<{ userId: string }>(key);
+    await this.state.del(key);
+    const user = t && (await prisma.user.findUnique({ where: { id: t.userId }, include: { workspaces: { include: { workspace: true } } } }));
+    if (!user || user.status !== "ACTIVE") throw new UnauthorizedException("Login com Google expirado. Tente de novo.");
     return this.buildResponse(user);
   }
 

@@ -131,6 +131,7 @@ export const api = {
         method: "POST",
         body: JSON.stringify(data),
       }),
+    googleExchange: (ticket: string) => request<{ accessToken: string; user: any }>("/auth/google/exchange", { method: "POST", body: JSON.stringify({ ticket }) }),
     me: () => request<any>("/auth/me"),
     services: () => request<Record<string, string>>("/auth/services"),
     updateMe: (data: { name?: string; phone?: string }) =>
