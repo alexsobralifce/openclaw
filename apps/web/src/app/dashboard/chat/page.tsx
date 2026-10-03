@@ -6,6 +6,7 @@ import { api, type ChatMessage } from "@/lib/api";
 import { useMe } from "@/hooks/useMe";
 import { disablePush, enablePush } from "@/lib/push";
 import { parseWaMarkup, type WaSeg } from "@/lib/wa-markup";
+import { fileEmoji, fileExpired, fileSizeLabel, isAutoFileNote } from "@/lib/chat-file";
 import { MobileMenu } from "@/components/layout/MobileMenu";
 
 const API = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001";
@@ -280,9 +281,20 @@ export default function ChatPage() {
         {messages.map((m) => (
           <div key={m.id} className={`flex ${m.direction === "IN" ? "justify-end" : "justify-start"}`}>
             <div className={`max-w-[92%] rounded-2xl px-3 py-1.5 text-[15px] leading-snug whitespace-pre-wrap break-words ${m.direction === "IN" ? "bg-violet-500 text-white" : "bg-gray-800 text-gray-200"}`}>
-              <Rich segs={parseWaMarkup(m.text)} />
+              {!(m.kind === "FILE" && isAutoFileNote(m.text, m.meta?.fileName)) && <Rich segs={parseWaMarkup(m.text)} />}
               {m.kind === "FILE" && m.meta?.fileId && (
-                <button onClick={() => download(m)} className="block mt-1 text-xs underline">📎 {m.meta.fileName ?? "Baixar arquivo"}</button>
+                fileExpired(m.createdAt) ? (
+                  <p className="mt-1 text-xs opacity-70">{fileEmoji(m.meta.mime)} {m.meta.fileName ?? "Arquivo"} · expirou (fica disponível por 1 hora). Peça de novo.</p>
+                ) : (
+                  <button onClick={() => download(m)} aria-label={`Baixar ${m.meta.fileName ?? "arquivo"}`} className="mt-1 flex w-full items-center gap-3 rounded-xl bg-black/20 px-3 py-2 text-left active:bg-black/30">
+                    <span className="text-xl" aria-hidden>{fileEmoji(m.meta.mime)}</span>
+                    <span className="min-w-0 flex-1">
+                      <span className="block truncate text-sm font-medium">{m.meta.fileName ?? "Arquivo"}</span>
+                      <span className="block text-xs opacity-70">{[fileSizeLabel(m.meta.size), "Toque para baixar"].filter(Boolean).join(" · ")}</span>
+                    </span>
+                    <svg width="22" height="22" fill="none" viewBox="0 0 24 24" aria-hidden className="flex-shrink-0"><path d="M12 3v12m0 0-4-4m4 4 4-4M5 21h14" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" /></svg>
+                  </button>
+                )
               )}
               <span className="block text-right text-[10px] opacity-60 mt-0.5">{new Date(m.createdAt).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}</span>
             </div>
