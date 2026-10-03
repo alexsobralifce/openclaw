@@ -3,7 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 const h = vi.hoisted(() => ({ upsert: vi.fn(async (_a: any) => ({})) }));
 vi.mock("@openclaw/database", () => ({ prisma: { aiUsage: { upsert: (a: any) => h.upsert(a) } } }));
 
-import { chatCompletion, shouldFallback } from "../src/modules/channels/assistant/openai-chat";
+import { chatCompletion, fallbackReasoning, shouldFallback } from "../src/modules/channels/assistant/openai-chat";
 
 const ok = (model: string) => new Response(JSON.stringify({ model, choices: [{ message: { content: "oi" } }], usage: { prompt_tokens: 10, completion_tokens: 5 } }));
 const fail = (status: number, text = "erro") => new Response(text, { status });
@@ -94,5 +94,31 @@ describe("modelo reserva da IA (OpenAI)", () => {
   it("shouldFallback", () => {
     expect([null, 404, 408, 429, 500, 502, 503].every(shouldFallback)).toBe(true);
     expect([400, 401, 403, 422].some(shouldFallback)).toBe(false);
+  });
+
+  it("o reserva recebe reasoning_effort 'none' (o Luna recusa ferramentas sem isso); o principal nunca recebe", async () => {
+    const bodies = stub(fail(503), ok("reserva-x"));
+    await call();
+    expect(bodies[0].reasoning_effort).toBeUndefined();
+    expect(bodies[1].reasoning_effort).toBe("none");
+  });
+
+  it("reserva que recusa o parâmetro: repete sem ele; erro de ferramentas com raciocínio não repete", async () => {
+    let bodies = stub(fail(503), fail(400, "Unsupported parameter: reasoning_effort"), ok("reserva-x"));
+    await call();
+    expect(bodies.map((b) => b.reasoning_effort)).toEqual([undefined, "none", undefined]);
+    bodies = stub(fail(503), fail(400, "Function tools with reasoning_effort are not supported"));
+    await expect(call()).rejects.toThrow("Function tools");
+    expect(bodies).toHaveLength(2);
+  });
+
+  it("OPENAI_FALLBACK_REASONING muda o valor, e 'off' não envia nada", async () => {
+    process.env.OPENAI_FALLBACK_REASONING = "low";
+    expect(fallbackReasoning()).toBe("low");
+    process.env.OPENAI_FALLBACK_REASONING = "off";
+    const bodies = stub(fail(503), ok("reserva-x"));
+    await call();
+    expect(bodies[1].reasoning_effort).toBeUndefined();
+    delete process.env.OPENAI_FALLBACK_REASONING;
   });
 });

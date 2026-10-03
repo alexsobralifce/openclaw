@@ -31,6 +31,14 @@ export function thinkingConfig(): { thinkingConfig?: { thinkingLevel: string } }
   return ["low", "medium", "high"].includes(raw) ? { thinkingConfig: { thinkingLevel: raw } } : {};
 }
 
+/**
+ * Só o modelo principal recebe o nível de pensamento: medido no contrato de teste, o 3.8 Flash cai de 632 para 0 tokens de
+ * pensamento com "low", mas o 3.1 Flash-Lite (o reserva) não pensa por padrão e passaria a pensar se recebesse "low".
+ */
+export function withThinking<T extends object>(body: T, isPrimary: boolean): T & { generationConfig?: object } {
+  return isPrimary ? { ...body, generationConfig: thinkingConfig() } : body;
+}
+
 @Injectable()
 export class GeminiService {
   enabled() {
@@ -81,14 +89,13 @@ export class GeminiService {
           ],
         },
       ],
-      generationConfig: thinkingConfig(),
     };
     // Resposta rápida ou nada: se o Gemini demorar, quem chamou usa outro serviço (Whisper).
     const models = [process.env.GEMINI_MODEL || "gemini-3.8-flash", ...(process.env.GEMINI_FALLBACK_MODEL ? [process.env.GEMINI_FALLBACK_MODEL] : [])];
     let lastErr: any;
     for (const model of models) {
       try {
-        const data = await this.call(model, body, 15_000, 0);
+        const data = await this.call(model, withThinking(body, model === models[0]), 15_000, 0);
         const text = (data.candidates?.[0]?.content?.parts ?? []).map((p: any) => p.text ?? "").join("").trim();
         if (text) return text;
       } catch (e) {
@@ -107,12 +114,12 @@ export class GeminiService {
     if (input.text) parts.push({ text: `Texto enviado:\n${input.text}` });
     if (input.urls?.length) parts.push({ text: `Links para ler:\n${input.urls.join("\n")}` });
     for (const m of input.media ?? []) parts.push({ inline_data: { mime_type: m.mime.split(";")[0].trim(), data: m.base64 } });
-    const body: any = { contents: [{ parts }], generationConfig: thinkingConfig(), ...(input.urls?.length ? { tools: [{ url_context: {} }] } : {}) };
+    const body: any = { contents: [{ parts }], ...(input.urls?.length ? { tools: [{ url_context: {} }] } : {}) };
     const models = [process.env.GEMINI_MODEL || "gemini-3.8-flash", ...(process.env.GEMINI_FALLBACK_MODEL ? [process.env.GEMINI_FALLBACK_MODEL] : [])];
     let lastErr: any;
     for (const model of models) {
       try {
-        const data = await this.call(model, body, 45_000, 1);
+        const data = await this.call(model, withThinking(body, model === models[0]), 45_000, 1);
         const text = (data.candidates?.[0]?.content?.parts ?? []).map((p: any) => p.text ?? "").join("").trim();
         if (text) return text;
       } catch (e) {

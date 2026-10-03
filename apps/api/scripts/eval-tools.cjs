@@ -31,8 +31,8 @@ async function pool(items, n, fn) {
   return out;
 }
 
-async function openai(model, text, tools) {
-  const body = { model, messages: [{ role: "system", content: SYSTEM }, { role: "user", content: text }], ...(tools.length ? { tools } : {}) };
+async function openai(model, text, tools, extra = {}) {
+  const body = { model, ...extra, messages: [{ role: "system", content: SYSTEM }, { role: "user", content: text }], ...(tools.length ? { tools } : {}) };
   const res = await fetch("https://api.openai.com/v1/chat/completions", { method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${process.env.OPENAI_API_KEY}` }, body: JSON.stringify(body), signal: AbortSignal.timeout(60000) });
   if (!res.ok) return { error: `${res.status} ${(await res.text()).slice(0, 160)}` };
   const d = await res.json();
@@ -110,7 +110,7 @@ const okCall = (c, r) => (c.expect.length === 0 ? r.calls.length === 0 : r.calls
     const rows = await pool(sample, 5, async (c) => {
       const j = await intents.toolDomains(c.text);
       const picked = await pickTools(c.text, async () => j);
-      return { c, r: await openai(fb, c.text, picked ? ALL.filter((t) => picked.has(t.function.name)) : ALL) };
+      return { c, r: await openai(fb, c.text, picked ? ALL.filter((t) => picked.has(t.function.name)) : ALL, { reasoning_effort: process.env.OPENAI_FALLBACK_REASONING || "none" }) };
     });
     const errs = rows.filter((x) => x.r.error);
     errs.slice(0, 5).forEach((x) => console.log("  ERRO:", x.c.text, "→", x.r.error));
@@ -131,7 +131,12 @@ const okCall = (c, r) => (c.expect.length === 0 ? r.calls.length === 0 : r.calls
       for (const level of ["low", null]) {
         const t0 = Date.now();
         const body = { contents: [{ parts: [{ text: prompt }, { inline_data: { mime_type: "application/pdf", data: pdf } }] }], ...(level ? { generationConfig: { thinkingConfig: { thinkingLevel: level } } } : {}) };
-        const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${process.env.GEMINI_API_KEY}`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body), signal: AbortSignal.timeout(90000) });
+        let res;
+        for (let t = 0; t < 5; t++) {
+          res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${process.env.GEMINI_API_KEY}`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body), signal: AbortSignal.timeout(90000) });
+          if (res.status !== 503 && res.status !== 429) break;
+          await new Promise((r) => setTimeout(r, 4000 * (t + 1)));
+        }
         const label = `${model} · pensamento ${level || "padrão"}`;
         if (!res.ok) { console.log(`  ${label}: ERRO ${res.status} ${(await res.text()).slice(0, 140).replace(/\s+/g, " ")}`); continue; }
         const d = await res.json();

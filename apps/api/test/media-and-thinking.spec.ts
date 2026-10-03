@@ -88,6 +88,24 @@ describe("pensamento do Gemini", () => {
     expect(bodies.map((b) => b.generationConfig)).toEqual([{ thinkingConfig: { thinkingLevel: "low" } }, { thinkingConfig: { thinkingLevel: "low" } }]);
   });
 
+  it("só o principal recebe o nível de pensamento; o reserva vai sem (ele não pensa por padrão)", async () => {
+    process.env.GEMINI_FALLBACK_MODEL = "reserva-lite";
+    const sent: { model: string; cfg: any }[] = [];
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url: any, init: any) => {
+        const model = String(url).match(/models\/([^:]+):/)![1];
+        sent.push({ model, cfg: JSON.parse(init.body).generationConfig });
+        return model === "reserva-lite" ? new Response(JSON.stringify(okBody)) : new Response("alta demanda", { status: 503 });
+      }),
+    );
+    expect(await new GeminiService().extract("p", { text: "t" })).toBe("texto lido");
+    const principal = sent.filter((x) => x.model !== "reserva-lite");
+    expect(principal.length).toBeGreaterThan(0);
+    expect(principal.every((x) => x.cfg?.thinkingConfig?.thinkingLevel === "low")).toBe(true);
+    expect(sent.filter((x) => x.model === "reserva-lite").every((x) => x.cfg === undefined)).toBe(true);
+  });
+
   it("modelo que recusa o nível (400): repete na hora sem ele e a leitura funciona", async () => {
     const bodies: any[] = [];
     vi.stubGlobal(
