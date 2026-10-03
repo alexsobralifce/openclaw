@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 
-export const metadata: Metadata = { title: "Termos de Serviço — MagoBox" };
+export const metadata: Metadata = { title: "Termos de Serviço — MagoBox", alternates: { canonical: "/termos" } };
 
 const CONTACT = process.env.NEXT_PUBLIC_CONTACT_EMAIL || "o contato de suporte informado pela empresa que atende você";
 

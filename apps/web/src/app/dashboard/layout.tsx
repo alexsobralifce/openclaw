@@ -1,7 +1,11 @@
+import type { Metadata } from "next";
 import { Sidebar } from "@/components/layout/Sidebar";
 import { TopBar } from "@/components/layout/TopBar";
 import { BottomNav } from "@/components/layout/BottomNav";
 import { PwaPrompt } from "@/components/layout/PwaPrompt";
+
+// O painel é de uso interno: fora do Google
+export const metadata: Metadata = { robots: { index: false, follow: false } };
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
   return (

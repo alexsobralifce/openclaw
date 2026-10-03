@@ -10,6 +10,8 @@ export const metadata: Metadata = {
   title: "MagoBox — sua secretária virtual no WhatsApp",
   description:
     "Um assistente no WhatsApp que avisa de cada e-mail, mostra sua agenda e cuida dos seus clientes. Você só digita um número ou manda um áudio. 7 dias grátis.",
+  // Um só endereço para o Google (o mesmo site responde em app. e www.)
+  alternates: { canonical: "/" },
 };
 
 const TEAL = "text-[#A78BFA]";
