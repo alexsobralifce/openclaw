@@ -1,4 +1,5 @@
-import { assertQuota, openaiTokens, QUOTA_NOTICE, quotaHit, recordUsage, trackUser } from "./usage";
+import { chatCompletion } from "./openai-chat";
+import { assertQuota, QUOTA_NOTICE, quotaHit, recordUsage, trackUser } from "./usage";
 import { ForbiddenException, Injectable, Logger } from "@nestjs/common";
 import { prisma } from "@openclaw/database";
 import { GoogleService } from "../../integrations/google/google.service";
@@ -569,19 +570,7 @@ export class AssistantService {
     let flagged = false;
 
     for (let i = 0; i < MAX_ROUNDS; i++) {
-      await assertQuota();
-      const res = await fetch("https://api.openai.com/v1/chat/completions", {
-        method: "POST",
-        headers: { "Content-Type": "application/json", Authorization: `Bearer ${apiKey}` },
-        body: JSON.stringify({
-          model: process.env.OPENAI_MODEL || "gpt-4o-mini",
-          messages,
-          tools: TOOLS.filter((t) => toolAllowed(c.services, t.function.name)),
-        }),
-      });
-      if (!res.ok) throw new Error(`OpenAI ${res.status}: ${await res.text()}`);
-      const data: any = await res.json();
-      recordUsage("openai", String(data.model ?? process.env.OPENAI_MODEL ?? "gpt-4o-mini"), openaiTokens(data), workspaceId);
+      const data: any = await chatCompletion({ messages, tools: TOOLS.filter((t) => toolAllowed(c.services, t.function.name)) }, { apiKey, ws: workspaceId });
       const msg = data.choices[0].message;
       messages.push(msg);
       if (!msg.tool_calls?.length) {

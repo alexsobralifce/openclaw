@@ -20,7 +20,7 @@ import { looksLikeEmailBookRefresh } from "./email-book";
 import { cleanSubject, ComposeSeed, composeSeed, extractAddresses, MAX_BODY, verbatimBody } from "./email-compose";
 import { menuHiddenKey, MENU_ITEMS, sanitizeHidden } from "./menu-items";
 import { cleanTitle, looksLikeNoteAdd, looksLikeNoteCaption, looksLikeNoteSearch, looksLikeNotesHome, noteTerms, noteTextFrom, noteWithTopic, parseNotePlan, pickTopic, startsLikeNote, storageAccount, topicRequest } from "./notes";
-import { assertQuota, openaiTokens, recordUsage } from "./usage";
+import { chatCompletion } from "./openai-chat";
 import { StateService } from "../../state/state.service";
 import { effectiveServices, Service } from "../../auth/permissions";
 import { normalize, parseChoice, pickByLabel } from "./voice";
@@ -2191,19 +2191,10 @@ export class MenuService {
       if (mem) system = `${system}\n\n${mem}`;
     }
     if (!key) throw new Error("OPENAI_API_KEY não configurada");
-    await assertQuota();
-    const res = await fetch("https://api.openai.com/v1/chat/completions", {
-      method: "POST",
-      headers: { "Content-Type": "application/json", Authorization: `Bearer ${key}` },
-      body: JSON.stringify({
-        model: process.env.OPENAI_MODEL || "gpt-4o-mini",
-        messages: [{ role: "system", content: system }, { role: "user", content: user }],
-        ...(json ? { response_format: { type: "json_object" } } : {}),
-      }),
-    });
-    if (!res.ok) throw new Error(`OpenAI ${res.status}`);
-    const data: any = await res.json();
-    recordUsage("openai", String(data.model ?? process.env.OPENAI_MODEL ?? "gpt-4o-mini"), openaiTokens(data), ws);
+    const data: any = await chatCompletion(
+      { messages: [{ role: "system", content: system }, { role: "user", content: user }], ...(json ? { response_format: { type: "json_object" } } : {}) },
+      { apiKey: key, ws, timeoutMs: 30_000 },
+    );
     return (data.choices[0].message.content ?? "").trim();
   }
 }
