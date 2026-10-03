@@ -3,9 +3,9 @@
 @tailwind utilities;
 
 /* ── Tema ─────────────────────────────────────────────────────────────────
-   Noite (padrão) e dia trocam só os canais da paleta de cinzas, que o painel inteiro usa. No dia a escala é invertida
+   Noite (padrão) e dia, escolhidos pelo claro/escuro do aparelho, trocam só os canais da paleta de cinzas, que o painel inteiro usa. No dia a escala é invertida
    (o gray-950 de fundo vira o claro, o gray-200 de texto vira o escuro); o gray-500, no meio, serve nos dois.
-   A classe `light` vai no <html> só dentro do painel (ver ThemeToggle); landing e login ficam sempre escuros. */
+   A classe `light` vai no <html> só dentro do painel (ver ThemeSync); landing e login ficam sempre escuros. */
 :root {
   color-scheme: dark;
   --gray-50: 247 245 252; --gray-100: 238 235 247; --gray-200: 221 217 236; --gray-300: 196 191 220; --gray-400: 156 150 188; --gray-500: 110 103 148;

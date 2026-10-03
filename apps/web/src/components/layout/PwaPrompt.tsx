@@ -94,7 +94,7 @@ export function PwaPrompt() {
 
   const btn = "px-3 py-1.5 rounded-lg text-xs font-medium";
   return (
-    <div role="dialog" aria-label="Instalar o MagoBox e ativar notificações" className="fixed z-50 inset-x-3 bottom-[calc(5rem+env(safe-area-inset-bottom))] md:inset-x-auto md:right-4 md:bottom-4 md:w-96 bg-gray-900 border border-gray-700 rounded-xl p-4 shadow-xl space-y-3">
+    <div role="dialog" aria-label="Instalar o MagoBox e ativar notificações" className="fixed z-40 inset-x-3 top-[calc(3rem+env(safe-area-inset-top))] md:inset-x-auto md:top-auto md:right-4 md:bottom-4 md:w-96 bg-gray-900 border border-gray-700 rounded-xl p-4 shadow-xl space-y-3">
       <p className="text-sm font-medium text-gray-200">
         {iosInstall ? "Crie o atalho do MagoBox" : canInstall || androidManual ? "Instale o app MagoBox" : "Ative as notificações"}
       </p>

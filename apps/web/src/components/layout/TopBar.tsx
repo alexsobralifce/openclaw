@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { clearToken, getUser, UserInfo } from "@/lib/auth";
 import { LogoMark } from "@/components/brand/Logo";
-import { ThemeToggle } from "@/components/layout/ThemeToggle";
+import { MobileMenu } from "@/components/layout/MobileMenu";
 
 function initials(name: string) {
   return name
@@ -41,7 +41,8 @@ export function TopBar() {
 
   return (
     <header className={`${pathname.startsWith("/dashboard/chat") ? "hidden md:flex" : "flex"} items-center justify-end gap-2 px-3 md:px-6 h-[calc(3.5rem_+_env(safe-area-inset-top))] pt-[env(safe-area-inset-top)] md:h-14 md:pt-0 border-b border-gray-800 bg-gray-900 flex-shrink-0`}>
-      {/* No celular a barra lateral não existe: a marca fica aqui */}
+      {/* No celular a barra lateral não existe: o menu sanduíche e a marca ficam aqui */}
+      <MobileMenu />
       <span className="md:hidden flex-shrink-0"><LogoMark size={30} /></span>
       {/* Workspace pill */}
       {user?.workspaceName && (
@@ -56,7 +57,6 @@ export function TopBar() {
 
       {/* Right side */}
       <div className="flex items-center gap-1 md:gap-3 flex-shrink-0">
-        <ThemeToggle />
         {/* Notifications (placeholder) */}
         <button className="relative p-2 text-gray-500 hover:text-gray-300 transition-colors rounded-lg hover:bg-gray-800">
           <svg width="18" height="18" fill="none" viewBox="0 0 24 24">

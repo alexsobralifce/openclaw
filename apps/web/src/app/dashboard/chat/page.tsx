@@ -5,8 +5,7 @@ import { io } from "socket.io-client";
 import { api, type ChatMessage } from "@/lib/api";
 import { useMe } from "@/hooks/useMe";
 import { disablePush, enablePush } from "@/lib/push";
-import { LogoMark } from "@/components/brand/Logo";
-import { ThemeToggle } from "@/components/layout/ThemeToggle";
+import { MobileMenu } from "@/components/layout/MobileMenu";
 
 const API = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001";
 const btn = "px-3 py-1.5 rounded-lg text-xs font-medium transition-colors";
@@ -223,9 +222,8 @@ export default function ChatPage() {
     <div className="flex flex-col h-full max-w-3xl mx-auto w-full">
       {/* Cabeçalho enxuto: no celular substitui a barra do topo (ver TopBar), para sobrar espaço às mensagens */}
       <div className="relative flex items-center gap-2 px-3 min-h-11 pt-[env(safe-area-inset-top)] md:pt-0 border-b border-gray-800 flex-shrink-0 bg-gray-900 md:bg-transparent">
-        <span className="md:hidden flex-shrink-0"><LogoMark size={26} /></span>
+        <MobileMenu />
         <h1 className="text-sm font-semibold text-gray-200 mr-auto">Assistente</h1>
-        <span className="md:hidden"><ThemeToggle /></span>
         <button onClick={() => setPanel((v) => !v)} className={iconBtn} aria-expanded={panel} aria-label="Canais e avisos" title="Canais e avisos">
           <svg width="18" height="18" fill="none" viewBox="0 0 24 24" aria-hidden><circle cx="12" cy="12" r="3" stroke="currentColor" strokeWidth="1.8" /><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" /></svg>
         </button>
