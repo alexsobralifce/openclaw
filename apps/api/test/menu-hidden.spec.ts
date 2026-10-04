@@ -34,7 +34,21 @@ describe("menu principal com itens ocultos", () => {
   it("sem ocultar nada, mostra todos", async () => {
     const { menu } = build();
     const out = (await menu.respond("w1", "menu")) as string;
-    for (const l of ["E-mails", "Google Agenda", "Conversas de clientes", "Perguntar à IA", "Minha memória", "Modo carro", "Google Drive", "Contatos", "Minha rotina", "Cofre de senhas", "Configurações"]) expect(out).toContain(l);
+    for (const l of ["E-mails", "Google Agenda", "Conversas de clientes", "Perguntar à IA", "Minha memória", "Google Drive", "Contatos", "Minha rotina", "Cofre de senhas", "Configurações"]) expect(out).toContain(l);
+    // o Modo carro está desativado por padrão: nem o item, nem a dica no rodapé
+    expect(out).not.toContain("Modo carro");
+    expect(out).not.toContain("Vai dirigir");
+  });
+
+  it("com CAR_MODE=on o menu volta a oferecer o Modo carro", async () => {
+    vi.stubEnv("CAR_MODE", "on");
+    try {
+      const out = (await build().menu.respond("w1", "menu")) as string;
+      expect(out).toContain("Modo carro");
+      expect(out).toContain("Vai dirigir");
+    } finally {
+      vi.unstubAllEnvs();
+    }
   });
 
   it("item oculto some da lista e a numeração se ajusta", async () => {
@@ -90,10 +104,21 @@ describe("menuItems (tela do painel)", () => {
     const { menu } = build();
     await menu.setHiddenItems("w1", ["drive"]);
     const items = await menu.menuItems("w1");
-    expect(items.map((i) => i.id)).toEqual(MENU_ITEMS.map((i) => i.id));
+    // o "Modo carro" está desativado por padrão (CAR_MODE=on religa)
+    expect(items.map((i) => i.id)).toEqual(MENU_ITEMS.filter((i) => i.id !== "car").map((i) => i.id));
     expect(items.find((i) => i.id === "drive")).toMatchObject({ hidden: true, locked: false });
     expect(items.find((i) => i.id === "agenda")).toMatchObject({ hidden: false });
     expect(items.find((i) => i.id === "config")).toMatchObject({ locked: true, hidden: false });
+  });
+
+  it("com CAR_MODE=on o item Modo carro volta ao menu", async () => {
+    vi.stubEnv("CAR_MODE", "on");
+    try {
+      const ids = (await build().menu.menuItems("w1")).map((i) => i.id);
+      expect(ids).toContain("car");
+    } finally {
+      vi.unstubAllEnvs();
+    }
   });
 
   it("sem Google conectado, e-mail, agenda e Drive não aparecem para escolher", async () => {

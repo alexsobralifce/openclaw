@@ -1,4 +1,7 @@
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
+
+// Os testes que ligam CAR_MODE não deixam o valor vazar para os outros
+afterEach(() => vi.unstubAllEnvs());
 
 const kv: { key: string; value: any; expiresAt: Date | null }[] = [];
 vi.mock("@openclaw/database", () => ({
@@ -138,6 +141,7 @@ describe("volta ao menu principal", () => {
   });
 
   it("'abrir assistente' liga o modo carro e 'fechar assistente' desliga, com respostas fixas curtas", async () => {
+    vi.stubEnv("CAR_MODE", "on");
     const { menu } = menuFor();
     expect(await menu.respond("w1", "Abrir assistente.")).toBe("Assistente aberto.");
     expect(await menu.isCar("w1")).toBe(true);
@@ -146,6 +150,7 @@ describe("volta ao menu principal", () => {
   });
 
   it("'assistente' dentro de uma frase maior não liga nem desliga nada", async () => {
+    vi.stubEnv("CAR_MODE", "on");
     const { menu } = menuFor();
     await menu.respond("w1", "modo carro");
     await menu.respond("w1", "quero fechar assistente virtual do cliente");
@@ -153,11 +158,54 @@ describe("volta ao menu principal", () => {
   });
 
   it("no modo carro reinicia a tela sem mandar nada", async () => {
+    vi.stubEnv("CAR_MODE", "on");
     const { menu, store } = menuFor();
     await menu.respond("w1", "modo carro");
     await menu.respond("w1", "agenda");
     expect(await menu.idleReturn("w1")).toBeNull();
     expect(store.get("menu:w1").screen).toBe("main");
+  });
+});
+
+describe("modo carro desativado (padrão)", () => {
+  afterEach(() => vi.unstubAllEnvs());
+
+  it("'modo carro', 'abrir assistente' e Android Auto/CarPlay só avisam, e nada é ligado", async () => {
+    const { menu } = menuFor();
+    for (const t of ["modo carro", "Abrir assistente.", "ativar o android auto", "carplay"]) {
+      expect(await menu.respond("w1", t), t).toContain("modo carro* está desativado");
+      expect(await menu.isCar("w1"), t).toBe(false);
+    }
+  });
+
+  it("frases soltas como 'vou dirigir' deixam de ser comando", async () => {
+    const { menu } = menuFor();
+    for (const t of ["vou dirigir", "estou no carro", "to dirigindo"]) {
+      expect(String(await menu.respond("w1", t))).not.toContain("desativado");
+      expect(await menu.isCar("w1")).toBe(false);
+    }
+  });
+
+  it("o menu principal não oferece mais o Modo carro", async () => {
+    const { menu } = menuFor();
+    expect(String(await menu.respond("w1", "menu"))).not.toContain("Modo carro");
+  });
+
+  it("sair continua funcionando para quem ficou com o modo ligado de antes", async () => {
+    const { menu, store } = menuFor();
+    store.set("mode:w1", "car");
+    expect(await menu.isCar("w1")).toBe(true);
+    expect(await menu.respond("w1", "fechar assistente")).toBe("Assistente fechado.");
+    expect(await menu.isCar("w1")).toBe(false);
+    store.set("mode:w1", "car");
+    await menu.respond("w1", "cheguei");
+    expect(await menu.isCar("w1")).toBe(false);
+  });
+
+  it("a API de voz (MacroDroid) ainda liga o modo por dentro, que protege as senhas", async () => {
+    const { menu } = menuFor();
+    await menu.enterCar("w1");
+    expect(await menu.isCar("w1")).toBe(true);
   });
 });
 

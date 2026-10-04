@@ -69,8 +69,10 @@ describe("fluxo: chegam 5 e-mails e o usuário trata um a um", () => {
   beforeEach(() => vi.stubEnv("OPENAI_API_KEY", ""));
 
   it("lista em ordem de chegada, mesmo que tenham chegado embaralhados", async () => {
-    const { menu } = setup();
-    const out = await menu.notifyNew("ws", [q("3", 300), q("1", 100), q("5", 500), q("2", 200), q("4", 400)]);
+    const { menu, say } = setup();
+    await menu.notifyNew("ws", [q("3", 300), q("1", 100), q("5", 500), q("2", 200), q("4", 400)]);
+    // o aviso é curto; a lista inteira só vem quando o dono pede
+    const out = (await say("fila"))!;
     expect(out).toContain("5 e-mails na fila");
     const pos = ["Assunto 1", "Assunto 2", "Assunto 3", "Assunto 4", "Assunto 5"].map((s) => out.indexOf(s));
     expect([...pos].sort((a, b) => a - b)).toEqual(pos);
@@ -113,6 +115,7 @@ describe("fluxo: chegam 5 e-mails e o usuário trata um a um", () => {
   it("e-mail que chega no meio NÃO troca a tela: os números continuam valendo", async () => {
     const { menu, say, store } = setup();
     await menu.notifyNew("ws", [q("1", 100), q("2", 200), q("3", 300)]);
+    await say("fila");
     // usuário está vendo a lista numerada; chega o 6º e-mail
     const notice = await menu.notifyNew("ws", [q("6", 600)]);
     expect(notice).toContain("Na fila: 4");
@@ -165,7 +168,9 @@ describe("fluxo: chegam 5 e-mails e o usuário trata um a um", () => {
 
   it("no modo carro a fila é lida em voz alta, com número, remetente, assunto e o comando 'próximo'", async () => {
     const { menu } = setup();
-    const spoken = toSpeech(await menu.notifyNew("ws", [q("2", 200), q("1", 100)]));
+    const { say } = { say: (t: string) => menu.respond("ws", t) };
+    await menu.notifyNew("ws", [q("2", 200), q("1", 100)]);
+    const spoken = toSpeech((await say("fila"))!);
     expect(spoken).toContain("um, Fulano 1");
     expect(spoken).toContain("dois, Fulano 2");
     expect(spoken).toMatch(/pr[óo]ximo/i);
@@ -180,5 +185,45 @@ describe("fluxo: chegam 5 e-mails e o usuário trata um a um", () => {
     expect(out).toContain("Ler");
     expect(store.get("menu:ws").screen).toBe("notif");
     expect(store.get("menu:ws").data.q).toBe(true);
+  });
+
+  describe("aviso automático de e-mail novo: sem despejar a fila", () => {
+    const names = (n: number, from = 0) => Array.from({ length: n }, (_, i) => q(String(from + i + 1), 1000 + from + i));
+
+    it("com 50 e-mails acumulados, um novo vira aviso curto (e não a lista inteira)", async () => {
+      const { menu, store } = setup();
+      await menu.notifyNew("ws", names(49));
+      const notice = await menu.notifyNew("ws", [q("900", 5000)]);
+      expect(notice).toContain("Novo e-mail");
+      expect(notice).toContain("Na fila: 50");
+      expect(notice).not.toContain("e-mails na fila");
+      expect(notice).not.toContain("Automáticos");
+      expect(notice.split("\n").length).toBeLessThanOrEqual(4);
+      expect(store.get("menu:ws")).toBeUndefined(); // nem troca a tela
+    });
+
+    it("vários de uma vez: conta e quem mandou, no máximo 3 nomes, sem a lista", async () => {
+      const { menu } = setup();
+      const notice = await menu.notifyNew("ws", [q("1", 100), q("2", 200), q("3", 300), q("4", 400), q("5", 500)]);
+      expect(notice).toContain("5 e-mails novos");
+      expect(notice).toContain("e +2");
+      expect(notice).toContain("fila");
+      expect(notice).not.toContain("Assunto 1");
+    });
+
+    it("no modo carro continua lendo a fila em voz alta", async () => {
+      const { menu, store } = setup();
+      store.set("mode:ws", "car"); // modo carro ligado, assistente parado
+      const out = await menu.notifyNew("ws", [q("2", 200), q("1", 100)]);
+      expect(out).toContain("2 e-mails na fila");
+      expect(out).toContain("Assunto 1");
+    });
+
+    it("a fila continua disponível: 'fila' mostra e 'próximo' abre o mais antigo", async () => {
+      const { menu, say } = setup();
+      await menu.notifyNew("ws", [q("2", 200), q("1", 100)]);
+      expect((await say("fila"))!).toContain("2 e-mails na fila");
+      expect((await say("próximo"))!).toContain("Assunto 1");
+    });
   });
 });

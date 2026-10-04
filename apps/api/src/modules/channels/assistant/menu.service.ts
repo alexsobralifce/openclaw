@@ -19,7 +19,7 @@ import { contactQuery, looksLikeContactsRefresh } from "./contacts";
 import { EmailSearchSpec, emailSearchSpec } from "./email-search";
 import { looksLikeEmailBookRefresh } from "./email-book";
 import { cleanSubject, ComposeSeed, composeSeed, extractAddresses, MAX_BODY, verbatimBody } from "./email-compose";
-import { menuHiddenKey, MENU_ITEMS, sanitizeHidden } from "./menu-items";
+import { carOptionEnabled, CAR_DISABLED_NOTICE, menuHiddenKey, MENU_ITEMS, sanitizeHidden } from "./menu-items";
 import { cleanTitle, looksLikeNoteAdd, looksLikeNoteCaption, looksLikeNoteSearch, looksLikeNotesHome, noteTerms, noteTextFrom, noteWithTopic, parseNotePlan, pickTopic, startsLikeNote, storageAccount, topicRequest } from "./notes";
 import { chatCompletion } from "./openai-chat";
 import { StateService } from "../../state/state.service";
@@ -186,9 +186,11 @@ export class MenuService {
       // "Abrir/fechar assistente": mesma coisa que o modo carro, com resposta curta e fixa. O MacroDroid reconhece estes textos
       // ("Assistente aberto" / "Assistente fechado") para ligar e desligar as macros de voz: não mude as frases.
       if (cmd("^(fechar|encerrar|desativar) (o )?assistente( por favor)?$").test(flat)) return await this.carSet(workspaceId, false, "Assistente fechado.");
-      if (cmd("^(abrir|iniciar|ativar) (o )?assistente( por favor)?$").test(flat)) return await this.carSet(workspaceId, true, "Assistente aberto.");
+      if (cmd("^(abrir|iniciar|ativar) (o )?assistente( por favor)?$").test(flat)) return carOptionEnabled() ? await this.carSet(workspaceId, true, "Assistente aberto.") : CAR_DISABLED_NOTICE;
       if (cmd("sair do modo (direcao|carro)|desligar (o )?modo (direcao|carro)|desativar (o )?modo (direcao|carro)|parei de dirigir|^cheguei").test(flat)) return await this.carSet(workspaceId, false);
-      if (cmd("modo carro|modo direcao|android auto|carplay|car play|estou no carro|to no carro|vou dirigir|estou dirigindo|to dirigindo").test(flat)) return await this.carSet(workspaceId, true);
+      // Ligar: só com a opção ativa. Desativada, "modo carro" e afins respondem o aviso; frases soltas ("vou dirigir") deixam de ser comando
+      if (carOptionEnabled() && cmd("modo carro|modo direcao|android auto|carplay|car play|estou no carro|to no carro|vou dirigir|estou dirigindo|to dirigindo").test(flat)) return await this.carSet(workspaceId, true);
+      if (!carOptionEnabled() && cmd("modo carro|modo direcao|android auto|carplay|car play").test(flat)) return CAR_DISABLED_NOTICE;
       if (/^(ler |ver |abrir |checar )?(os |meus )?(novos )?e-?mails?( novos)?$/.test(flat)) return await this.emailsEntry(workspaceId);
       // Fila de e-mails novos: "próximo" e "fila" valem de qualquer tela, menos onde há algo a confirmar ou digitar
       if (!pending && /^(ler |ver |abrir |passa |passar )?(o )?(proximo|proxima|seguinte)( e-?mail)?$/.test(flat)) return await this.nextFromQueue(workspaceId);
@@ -674,8 +676,10 @@ export class MenuService {
     labels.push({ id: "free", icon: "🤖", label: "Perguntar à IA" });
     options.push({ type: "memory" });
     labels.push({ id: "memory", icon: "🧠", label: "Minha memória" });
-    options.push({ type: "car" });
-    labels.push({ id: "car", icon: "🚗", label: "Modo carro" });
+    if (carOptionEnabled()) {
+      options.push({ type: "car" });
+      labels.push({ id: "car", icon: "🚗", label: "Modo carro" });
+    }
     if (accounts.length && services.includes("drive")) {
       options.push({ type: "drive" });
       labels.push({ id: "drive", icon: "📁", label: "Google Drive", sub: "pedir um arquivo" });
@@ -713,7 +717,7 @@ export class MenuService {
       notes: google && services.includes("drive"),
       vault: services.includes("vault"),
     };
-    return MENU_ITEMS.filter((i) => available[i.id] ?? true).map((i) => ({ id: i.id, icon: i.icon, label: i.label, hidden: hidden.has(i.id), locked: i.id === "config" }));
+    return MENU_ITEMS.filter((i) => (i.id !== "car" || carOptionEnabled()) && (available[i.id] ?? true)).map((i) => ({ id: i.id, icon: i.icon, label: i.label, hidden: hidden.has(i.id), locked: i.id === "config" }));
   }
 
   /** Guarda quais itens ficam fora do menu; ids desconhecidos e o item sempre visível são ignorados. */
@@ -755,12 +759,17 @@ export class MenuService {
     const total = (await this.queueGet(ws)).length;
 
     const st = await this.state.get<State>(this.key(ws));
-    if (st && now - st.at < 5 * 60_000) {
-      const first = items[0];
-      const what = items.length === 1 ? `de *${short(personName(first.de), 30)}*\n📌 ${short(first.assunto ?? "(sem assunto)", 60)}` : `(${items.length} novos)`;
-      return `📩 *Novo e-mail* ${what}\n⏳ _Na fila: ${total}. Quando terminar por aqui, diga *próximo*._`;
-    }
-    return this.queueShow(ws);
+    const busy = !!st && now - st.at < 5 * 60_000;
+    // Um único e-mail na fila vira cartão com ações; no modo carro a fila é lida em voz alta. Fora isso o aviso é curto: a fila
+    // acumula (já chegou a 50) e despejá-la inteira a cada e-mail novo vira ruído. A lista só aparece quando o dono diz "fila".
+    if (!busy && (total === 1 || (await this.isCar(ws)))) return this.queueShow(ws);
+    const names = [...new Set(items.map((m) => short(personName(m.de), 24)))];
+    const what =
+      items.length === 1
+        ? `de *${short(personName(items[0].de), 30)}*\n📌 ${short(items[0].assunto ?? "(sem assunto)", 60)}`
+        : `*${items.length} e-mails novos*\n👤 ${names.slice(0, 3).join(", ")}${names.length > 3 ? ` e +${names.length - 3}` : ""}`;
+    const next = busy ? "Quando terminar por aqui, diga *próximo*." : "Diga *próximo* para ler um a um, ou *fila* para ver a lista.";
+    return `📩 ${items.length === 1 ? "*Novo e-mail* " : ""}${what}\n⏳ _Na fila: ${total}. ${next}_`;
   }
 
   /** Mostra a fila: um e-mail sozinho vira cartão com ações; vários viram lista numerada em ordem de chegada. */
@@ -863,7 +872,7 @@ export class MenuService {
     const [icon, saud] = h < 12 ? ["☀️", "Bom dia"] : h < 18 ? ["🌤️", "Boa tarde"] : ["🌙", "Boa noite"];
     const title = greet ? `${saud}! Sou o MagoBox` : "Menu principal";
     const items = labels.map((l, i) => `${key(i + 1)} ${l.icon} ${l.label}${l.sub ? `\n     _${l.sub}_` : ""}`);
-    return [head(greet ? icon : "🏠", title, "O que vamos ver agora?"), ...(await this.contextLines(ws, greet)), items.join("\n"), foot("Responda com o número, escreva ou mande um áudio 🎙️"), "🚗 _Vai dirigir? Diga *modo carro* e eu respondo em texto para o carro ler em voz alta._"].join("\n");
+    return [head(greet ? icon : "🏠", title, "O que vamos ver agora?"), ...(await this.contextLines(ws, greet)), items.join("\n"), foot("Responda com o número, escreva ou mande um áudio 🎙️"), ...(carOptionEnabled() ? ["🚗 _Vai dirigir? Diga *modo carro* e eu respondo em texto para o carro ler em voz alta._"] : [])].join("\n");
   }
 
   /** Volta à tela principal guardando opções e rótulos (os rótulos permitem escolher falando o nome). */
@@ -886,7 +895,10 @@ export class MenuService {
     if (opt.type === "config") return this.configMenu(ws);
     if (opt.type === "vault") return this.vaultHome(ws);
     // "driving" é o tipo antigo, que ainda pode estar numa tela guardada
-    if (opt.type === "car" || opt.type === "driving") return this.carSet(ws, !(await this.isCar(ws)));
+    if (opt.type === "car" || opt.type === "driving") {
+      const turnOn = !(await this.isCar(ws));
+      return turnOn && !carOptionEnabled() ? CAR_DISABLED_NOTICE : this.carSet(ws, turnOn);
+    }
     await this.set(ws, "free");
     return [head("🤖", "Assistente livre"), "Pode falar! Escreva ou mande um áudio 🎙️ com o que precisa.", DIV, opts(BACK)].join("\n");
   }

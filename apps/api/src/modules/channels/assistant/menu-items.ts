@@ -7,6 +7,14 @@ export interface MenuItemDef {
   label: string;
 }
 
+/**
+ * A opção "Modo carro" (item do menu e comandos para ligar) está desativada; `CAR_MODE=on` religa.
+ * O mecanismo interno continua: a API de voz (MacroDroid) liga o modo por conta própria, e é ele que impede de ler senhas em voz alta.
+ * Comandos para SAIR do modo continuam valendo sempre, para ninguém ficar preso nele.
+ */
+export const carOptionEnabled = () => process.env.CAR_MODE === "on";
+export const CAR_DISABLED_NOTICE = "🚘 O *modo carro* está desativado.";
+
 /** Catálogo, na ordem em que aparecem no menu. */
 export const MENU_ITEMS: MenuItemDef[] = [
   { id: "email", icon: "📧", label: "E-mails" },

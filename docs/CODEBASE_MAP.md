@@ -210,6 +210,10 @@ Webhook → `InboundEvent` → worker → `InboxService.processIncoming` → `We
 **Busca de nomes (contatos e e-mail por remetente)**
 - `findContacts` busca em níveis (todas as palavras → sem sufixo/ligação como "jr", "filho", "da" → pelo primeiro nome). Se nada achar, `GoogleService.contactsLookup` peneira nomes parecidos (`fuzzyCandidates`, distância de edição) e o Jev (`pickPerson`, ligado por `setPersonPicker` no construtor do `AssistantService`) escolhe. "E-mails do fulano" soma os endereços do contato achado à busca pelo nome (`MenuService.withPersonAddresses`). Sem chave do Jev ou com dúvida, vale só a busca exata. Mesmo critério para **arquivos do Drive** (músicas incluídas: `MenuService.driveSearch`, quando há vários achados ou só parecidos, o Jev escolhe, envia e deixa os outros para corrigir pelo número) e **assuntos de nota** (`topicByName`).
 
+**Modo carro e fila de e-mails (04/10/2026)**
+- A opção **Modo carro** está desativada por padrão: sem o item no menu, sem a dica do rodapé, e "modo carro", "abrir assistente", Android Auto e CarPlay só respondem que está desativado (`CAR_MODE=on` religa; `carOptionEnabled` em `menu-items.ts`). Frases soltas ("vou dirigir") deixam de ser comando. Continuam valendo: os comandos para **sair** ("fechar assistente", "cheguei"), o mecanismo interno `enterCar`/`isCar` (a API de voz do MacroDroid liga o modo por dentro e é ele que impede de ler senhas em voz alta) e o guia `docs/MODO_CARRO_MACRODROID.md`, que ficou sem uso enquanto a opção estiver desligada.
+- O aviso automático de e-mail novo (`MenuService.notifyNew`) **não despeja mais a fila** (que chega a 50, `QUEUE_MAX`): é um aviso curto com quem mandou e "Na fila: N". Só vira cartão com ações quando é o único e-mail da fila, e a fila inteira é lida em voz alta no modo carro. A lista completa vem com "fila", e "próximo" abre o mais antigo.
+
 **Assistente**
 6. `modules/ai/`, `common/` e `config/` estão vazios; a IA vive em `channels/assistant/`.
 7. Ordem das regras em `MenuService.respond` importa. Telas `_input` só aceitam comandos globais como mensagem inteira.
