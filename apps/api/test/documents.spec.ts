@@ -1,6 +1,13 @@
 import { describe, expect, it } from "vitest";
 import {
   applyTagEdit,
+  categoryQuery,
+  cleanCategory,
+  docsInCategory,
+  looksLikeCategoriesList,
+  matchCategory,
+  parseCategoryEdit,
+  topCategories,
   cleanTag,
   docFileName,
   docQuery,
@@ -154,5 +161,47 @@ describe("reclassificar notas antigas", () => {
     expect(isFileOriginNote("---\nassunto: Geral\norigem: whatsapp\ntags: [geral]\n---\n# Nota")).toBe(false);
     expect(isFileOriginNote("# Sem propriedades\norigem: arquivo")).toBe(false);
     expect(isFileOriginNote("---\nassunto: A\n---\ntexto com origem: arquivo no corpo")).toBe(false);
+  });
+});
+
+describe("categorias dos documentos", () => {
+  const d = (topic: string, createdAt = "2026-10-01"): any => ({ id: topic + createdAt, title: "x", topic, tags: [], summary: "", createdAt });
+
+  it("agrupa nomes iguais sem diferenciar acento ou maiúscula e conta", () => {
+    const cats = topCategories([d("Saúde"), d("saude", "2026-10-02"), d("Saúde", "2026-10-03"), d("Finanças"), d("")]);
+    expect(cats).toEqual([{ name: "Saúde", count: 3 }, { name: "Finanças", count: 1 }]);
+  });
+
+  it("filtra a categoria, do mais novo ao mais antigo", () => {
+    const docs = [d("Saúde", "2026-10-01"), d("Finanças"), d("saude", "2026-10-05")];
+    expect(docsInCategory(docs, "SAÚDE").map((x) => x.createdAt)).toEqual(["2026-10-05", "2026-10-01"]);
+  });
+
+  it("acha a categoria pelo nome ou pelo começo único", () => {
+    const cats = [{ name: "Finanças", count: 2 }, { name: "Faculdade", count: 1 }];
+    expect(matchCategory(cats, "financas")?.name).toBe("Finanças");
+    expect(matchCategory(cats, "fin")?.name).toBe("Finanças");
+    expect(matchCategory(cats, "f")).toBeNull();
+    expect(matchCategory(cats, "saude")).toBeNull();
+  });
+
+  it("limpa o nome da categoria", () => {
+    expect(cleanCategory("  saúde   e *bem-estar* ")).toBe("Saúde e bem-estar");
+    expect(cleanCategory("x".repeat(80))).toHaveLength(40);
+    expect(cleanCategory(null)).toBe("");
+  });
+
+  it("entende os comandos de categoria", () => {
+    expect(looksLikeCategoriesList("categorias")).toBe(true);
+    expect(looksLikeCategoriesList("minhas categorias")).toBe(true);
+    expect(looksLikeCategoriesList("categoria saude")).toBe(false);
+    expect(categoryQuery("categoria saude")).toBe("saude");
+    expect(categoryQuery("documentos da categoria financas")).toBe("financas");
+    expect(categoryQuery("categorias")).toBeNull();
+    expect(parseCategoryEdit("categoria: Saúde")).toEqual({ name: "Saúde" });
+    expect(parseCategoryEdit("Categoria do documento 2: finanças")).toEqual({ name: "Finanças", n: 2 });
+    expect(parseCategoryEdit("mudar categoria para Trabalho")).toEqual({ name: "Trabalho" });
+    expect(parseCategoryEdit("categoria educação")).toBeNull();
+    expect(parseCategoryEdit("tags: saúde")).toBeNull();
   });
 });

@@ -352,3 +352,52 @@ describe("reclassificar notas antigas de PDF", () => {
     expect(await none.say("reclassificar notas")).toContain("Nenhuma nota nova");
   });
 });
+
+describe("categorias no menu Documentos", () => {
+  it("lista as categorias com a contagem, abre uma pelo número e troca a categoria do documento", async () => {
+    seed({ title: "Exame de sangue", topic: "Saúde", tags: ["exame"] });
+    seed({ title: "Consulta", topic: "saude", tags: ["consulta"] });
+    seed({ title: "Contrato de aluguel", topic: "Contratos" });
+    const { say, screen } = build();
+    expect(await say("documentos")).toContain("Saúde (2)");
+    const cats = await say("categorias");
+    expect(cats).toContain("Saúde · 2");
+    expect(cats).toContain("Contratos · 1");
+    expect(screen()).toBe("docs_cats");
+    const list = await say("1");
+    expect(list).toContain("2 documentos");
+    expect(list).toContain("Exame de sangue");
+    expect(screen()).toBe("docs_list");
+    const card = await say("1");
+    expect(card).toContain("📂 ");
+    expect(screen()).toBe("docs_view");
+    const changed = await say("categoria: Trabalho");
+    expect(changed).toContain("Categoria atualizada");
+    expect(changed).toContain("Trabalho");
+    expect(rows.filter((r) => r.topic === "Trabalho")).toHaveLength(1);
+  });
+
+  it("abre por nome (sem acento) e reaproveita a grafia da categoria existente", async () => {
+    seed({ title: "Exame", topic: "Saúde", tags: ["exame"] });
+    seed({ title: "Contrato", topic: "Contratos", tags: ["contrato"] });
+    const { say } = build();
+    await say("documentos");
+    expect(await say("categoria saude")).toContain("Exame");
+    expect(await say("categoria xyz")).toContain("Categorias que existem");
+    await say("contrato");
+    expect(await say("categoria: saude")).toContain("Categoria atualizada");
+    expect(rows.find((r) => r.title === "Contrato")?.topic).toBe("Saúde");
+  });
+
+  it("o botão 4 pergunta a nova categoria; em outro workspace não mexe", async () => {
+    const mine = seed({ title: "Exame", topic: "Saúde" });
+    const other = seed({ title: "Alheio", topic: "Saúde", workspaceId: "w2" });
+    const { say } = build();
+    await say("documentos");
+    await say("exame");
+    expect(await say("4")).toContain("Diga a nova");
+    await say("categoria: Casa");
+    expect(mine.topic).toBe("Casa");
+    expect(other.topic).toBe("Saúde");
+  });
+});

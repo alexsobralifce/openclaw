@@ -115,6 +115,78 @@ export function topTags(docs: { tags: string[] }[], max = 12): { tag: string; co
   return [...count.entries()].map(([tag, n]) => ({ tag, count: n })).sort((a, b) => b.count - a.count || a.tag.localeCompare(b.tag)).slice(0, max);
 }
 
+// ─── Categorias ───────────────────────────────────────────────────
+// A categoria é o campo `topic` da ficha ("assunto" no banco): uma por documento, criada pelo dono ou sugerida pela IA.
+
+export interface Category {
+  name: string;
+  count: number;
+}
+
+/** Categorias com a contagem, as maiores primeiro. "saúde" e "Saude" são a mesma; vale o nome mais usado. */
+export function topCategories(docs: { topic: string }[]): Category[] {
+  const groups = new Map<string, Map<string, number>>();
+  for (const d of docs) {
+    const name = d.topic.trim();
+    if (!name) continue;
+    const k = normalize(name);
+    const names = groups.get(k) ?? new Map<string, number>();
+    names.set(name, (names.get(name) ?? 0) + 1);
+    groups.set(k, names);
+  }
+  return [...groups.values()]
+    .map((names) => ({ name: [...names.entries()].sort((a, b) => b[1] - a[1] || Number(normalize(a[0]) === a[0]) - Number(normalize(b[0]) === b[0]))[0][0], count: [...names.values()].reduce((a, b) => a + b, 0) }))
+    .sort((a, b) => b.count - a.count || a.name.localeCompare(b.name));
+}
+
+/** Documentos de uma categoria (nome sem diferenciar maiúscula nem acento), do mais novo ao mais antigo. */
+export function docsInCategory<T extends DocLike & { topic: string }>(docs: T[], name: string): T[] {
+  const k = normalize(name);
+  return docs.filter((d) => normalize(d.topic) === k).sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+}
+
+/** A categoria que o texto cita: pelo nome inteiro ("saúde") ou pelo começo ("fin" → Finanças, só se for uma). */
+export function matchCategory(cats: Category[], text: string): Category | null {
+  const k = normalize(text);
+  if (!k) return null;
+  const exact = cats.find((c) => normalize(c.name) === k);
+  if (exact) return exact;
+  const near = cats.filter((c) => normalize(c.name).startsWith(k));
+  return near.length === 1 ? near[0] : null;
+}
+
+/** Nome de categoria como é guardado: até 40 letras, primeira maiúscula ("saúde  e bem-estar" → "Saúde e bem-estar"). */
+export function cleanCategory(raw: unknown): string {
+  const t = String(raw ?? "").replace(/[#*_`~\n\r]+/g, " ").replace(/\s+/g, " ").trim().slice(0, 40).trim();
+  return t ? t[0].toUpperCase() + t.slice(1) : "";
+}
+
+/** "categorias" / "minhas categorias": mostra as categorias com a contagem. */
+export function looksLikeCategoriesList(flat: string): boolean {
+  return /^(?:ver |mostrar |listar |quais sao )?(?:as |minhas )?categorias(?: dos documentos)?$/.test(flat);
+}
+
+/** "categoria saúde", "documentos da categoria finanças", "pdfs de saúde" não (isso é busca): só o que cita "categoria". Devolve o nome citado, ou null. */
+export function categoryQuery(flat: string): string | null {
+  const m = flat.match(/^(?:por favor )?(?:(?:me )?(?:mostra\w*|ver|abr\w*|list\w*|busc\w*|quero)\s+)?(?:(?:os |meus )?(?:documentos|pdfs)\s+)?(?:da |de |na )?categoria\s+(?:de |da |do )?(.{2,40})$/);
+  const q = m?.[1].replace(/\s+(por favor|pfv)$/, "").trim();
+  return q || null;
+}
+
+/**
+ * Mudar a categoria por texto, do documento aberto (ou citado pelo número). Recebe o texto ORIGINAL (para guardar acento e maiúscula):
+ * "categoria: Saúde", "categoria do documento 2: Finanças", "mudar categoria para Trabalho".
+ */
+export function parseCategoryEdit(text: string): { name: string; n?: number } | null {
+  const doc = "(?:\\s+(?:do|no|ao|para o)\\s+documento\\s+(\\d{1,2}))?";
+  const t = text.trim();
+  const m =
+    t.match(new RegExp(`^(?:categoria|categ)${doc}\\s*(?:[:=]|\\bpassa a ser\\b|\\bfica\\b)\\s*(.+)$`, "i")) ??
+    t.match(new RegExp(`^(?:mudar|trocar|alterar|colocar|por|pôr)\\s+(?:a\\s+)?categoria${doc}\\s*(?:(?:para|pra)\\s+|[:=]\\s*)(.+)$`, "i"));
+  const name = cleanCategory(m?.[2]);
+  return m && name.length >= 2 ? { name, ...(m[1] ? { n: Number(m[1]) } : {}) } : null;
+}
+
 // ─── Comandos ─────────────────────────────────────────────────────
 
 const TAG_SEARCH = "(?:com a tag|com tag|com as tags|da tag|das tags|tag|tags|sobre|de|do|da|com)";

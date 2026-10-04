@@ -35,17 +35,16 @@ describe("menu principal com itens ocultos", () => {
     const { menu } = build();
     const out = (await menu.respond("w1", "menu")) as string;
     for (const l of ["E-mails", "Google Agenda", "Conversas de clientes", "Perguntar à IA", "Minha memória", "Google Drive", "Contatos", "Minha rotina", "Cofre de senhas", "Configurações"]) expect(out).toContain(l);
-    // o Modo carro está desativado por padrão: nem o item, nem a dica no rodapé
+    // o Modo carro está desativado por padrão, e a dica "Vai dirigir" não existe mais
     expect(out).not.toContain("Modo carro");
     expect(out).not.toContain("Vai dirigir");
   });
 
-  it("com CAR_MODE=on o menu volta a oferecer o Modo carro", async () => {
+  it("com CAR_MODE=on o menu volta a listar o Modo carro", async () => {
     vi.stubEnv("CAR_MODE", "on");
     try {
       const out = (await build().menu.respond("w1", "menu")) as string;
       expect(out).toContain("Modo carro");
-      expect(out).toContain("Vai dirigir");
     } finally {
       vi.unstubAllEnvs();
     }
