@@ -144,3 +144,21 @@ describe("biblioteca: baixar", () => {
     await expect(ctrl({ driveFile: vi.fn() }).download(req("w2"), d.id, res())).rejects.toThrow("não encontrado");
   });
 });
+
+describe("biblioteca: categorias", () => {
+  it("devolve as categorias com a contagem e filtra por categoria (sem acento ou maiúscula)", async () => {
+    seed({ title: "Exame", topic: "Saúde", tags: [] });
+    seed({ title: "Consulta", topic: "saude", tags: [] });
+    seed({ title: "Aluguel", topic: "Contratos", tags: [] });
+    const all = await ctrl().list(req());
+    expect(all.categories).toEqual([{ name: "Saúde", count: 2 }, { name: "Contratos", count: 1 }]);
+    const only = await ctrl().list(req(), undefined, undefined, "SAUDE");
+    expect(only.documents.map((d: any) => d.title).sort()).toEqual(["Consulta", "Exame"]);
+    expect(only.categories).toHaveLength(2); // a lista de categorias não encolhe com o filtro
+  });
+
+  it("não mostra categorias de outro workspace", async () => {
+    seed({ topic: "Alheia", workspaceId: "w2" });
+    expect((await ctrl().list(req())).categories).toEqual([]);
+  });
+});

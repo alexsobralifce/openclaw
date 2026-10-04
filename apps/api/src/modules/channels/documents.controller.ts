@@ -2,7 +2,7 @@ import { BadRequestException, Body, Controller, Delete, Get, NotFoundException, 
 import { ArrayMaxSize, IsArray, IsOptional, IsString, MaxLength } from "class-validator";
 import { Access } from "../auth/access";
 import { GoogleService } from "../integrations/google/google.service";
-import { cleanTag, MAX_TAGS, searchDocs, topTags } from "./assistant/documents";
+import { cleanTag, docsInCategory, MAX_TAGS, searchDocs, topCategories, topTags } from "./assistant/documents";
 import { deleteDocument, getDocument, listDocuments, updateDocument } from "./assistant/documents-store";
 
 class UpdateDocumentDto {
@@ -39,14 +39,18 @@ export class DocumentsController {
 
   private ws = (req: any): string => req.user.workspaces[0]?.workspaceId;
 
-  /** Lista com busca (`q`: tag, título, assunto ou resumo) e filtro por tag (`tag`); devolve também as tags com a contagem. */
+  /** Lista com busca (`q`: tag, título, assunto ou resumo) e filtros por tag (`tag`) e categoria (`category`); devolve também as tags e as categorias com a contagem. */
   @Get()
-  async list(@Request() req: any, @Query("q") q?: string, @Query("tag") tag?: string) {
+  async list(@Request() req: any, @Query("q") q?: string, @Query("tag") tag?: string, @Query("category") category?: string) {
     const all = await listDocuments(this.ws(req));
     let docs = q?.trim() ? searchDocs(all, q.slice(0, 80)) : all;
     const t = cleanTag(tag);
     if (t) docs = docs.filter((d) => d.tags.includes(t));
-    return { documents: docs.map(view), tags: topTags(all, 50), total: all.length };
+    if (category?.trim()) {
+      const inCat = new Set(docsInCategory(docs, category.slice(0, 60)).map((d) => d.id));
+      docs = docs.filter((d) => inCat.has(d.id));
+    }
+    return { documents: docs.map(view), tags: topTags(all, 50), categories: topCategories(all), total: all.length };
   }
 
   @Patch(":id")

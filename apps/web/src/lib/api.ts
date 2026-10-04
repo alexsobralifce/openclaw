@@ -126,11 +126,12 @@ export interface ChatMessage {
 
 export const api = {
   documents: {
-    list: (q?: string, tag?: string) => {
+    list: (q?: string, tag?: string, category?: string) => {
       const p = new URLSearchParams();
       if (q?.trim()) p.set("q", q.trim());
       if (tag) p.set("tag", tag);
-      return request<{ documents: DocumentView[]; tags: { tag: string; count: number }[]; total: number }>(`/documents${p.size ? `?${p}` : ""}`);
+      if (category) p.set("category", category);
+      return request<{ documents: DocumentView[]; tags: { tag: string; count: number }[]; categories: { name: string; count: number }[]; total: number }>(`/documents${p.size ? `?${p}` : ""}`);
     },
     update: (id: string, patch: { tags?: string[]; title?: string; topic?: string }) => request<DocumentView>(`/documents/${encodeURIComponent(id)}`, { method: "PATCH", body: JSON.stringify(patch) }),
     remove: (id: string) => request<{ ok: boolean }>(`/documents/${encodeURIComponent(id)}`, { method: "DELETE" }),
