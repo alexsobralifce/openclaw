@@ -67,10 +67,6 @@ export function MobileMenu() {
                   </Link>
                 );
               })}
-              <a href="/comandos.html" target="_blank" rel="noopener" className={`${rowClass} border-t border-gray-800`}>
-                <svg width="20" height="20" fill="none" viewBox="0 0 24 24" className="text-gray-500" aria-hidden><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20V3H6.5A2.5 2.5 0 0 0 4 5.5v14ZM4 19.5A2.5 2.5 0 0 0 6.5 22H20v-5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" /></svg>
-                Guia de comandos
-              </a>
               <button onClick={logout} className={`${rowClass} w-full text-red-400`}>
                 <svg width="20" height="20" fill="none" viewBox="0 0 24 24" aria-hidden><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" /></svg>
                 Sair

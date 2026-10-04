@@ -126,6 +126,16 @@ export const nav: { href: string; label: string; icon: React.ReactNode; service?
       </svg>
     ),
   },
+  {
+    href: "/dashboard/ajuda",
+    label: "Ajuda",
+    icon: (
+      <svg width="20" height="20" fill="none" viewBox="0 0 24 24">
+        <circle cx="12" cy="12" r="9" stroke="currentColor" strokeWidth="1.8"/>
+        <path d="M9.5 9.5a2.5 2.5 0 1 1 3.5 2.3c-.7.3-1 .9-1 1.7M12 17h.01" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
+      </svg>
+    ),
+  },
 ];
 
 /** Itens que o usuário pode ver (serviço liberado; "admin" só para ROOT/ADMIN). */
@@ -187,17 +197,6 @@ export function Sidebar() {
 
       {/* Logout */}
       <div className="p-3 border-t border-gray-800 space-y-0.5">
-        <a
-          href="/comandos.html"
-          target="_blank"
-          rel="noopener"
-          className="w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm text-gray-500 hover:text-violet-400 hover:bg-gray-800 transition-colors"
-        >
-          <svg width="16" height="16" fill="none" viewBox="0 0 24 24">
-            <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20V3H6.5A2.5 2.5 0 0 0 4 5.5v14ZM4 19.5A2.5 2.5 0 0 0 6.5 22H20v-5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
-          </svg>
-          Guia de comandos
-        </a>
         <a
           href="/api-publica.html"
           target="_blank"

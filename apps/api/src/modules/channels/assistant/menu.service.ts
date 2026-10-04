@@ -60,11 +60,14 @@ const ALIASES: Record<string, Record<string, number>> = {
   email_draft: { enviar: 1, mandar: 1, "pode enviar": 1, confirmar: 1, sim: 1, refazer: 2, cancelar: 0, nao: 0 },
   client_draft: { enviar: 1, mandar: 1, "pode enviar": 1, confirmar: 1, sim: 1, refazer: 2, cancelar: 0, nao: 0 },
   event_confirm: { confirmar: 1, confirma: 1, sim: 1, criar: 1, refazer: 2, cancelar: 0, nao: 0 },
+  event_delete_confirm: { apagar: 1, excluir: 1, confirmar: 1, confirma: 1, sim: 1, cancelar: 0, nao: 0, voltar: 0 },
+  notes_note: { concluir: 1, "concluir e apagar": 1, concluida: 1, apagar: 1, excluir: 1 },
+  notes_delete_confirm: { apagar: 1, excluir: 1, concluir: 1, confirmar: 1, confirma: 1, sim: 1, cancelar: 0, nao: 0, voltar: 0 },
   email_bulk_delete_confirm: { apagar: 1, excluir: 1, confirmar: 1, confirma: 1, sim: 1, cancelar: 0, nao: 0 },
   client: { responder: 1, resolver: 2 },
   confirm_ai: { confirmar: 1, confirma: 1, sim: 1, "pode enviar": 1, "pode mandar": 1, cancelar: 0, nao: 0 },
   config: { limpeza: 1, "limpar chat": 1, "mudar limpeza": 1, "limpar agora": 2, limpar: 2 },
-  agenda: { hoje: 1, amanha: 2, semana: 3, "proximos 7 dias": 3, "criar evento": 4, "criar eventos": 4, "novo evento": 4, "novos eventos": 4 },
+  agenda: { hoje: 1, amanha: 2, semana: 3, "proximos 7 dias": 3, "criar evento": 4, "criar eventos": 4, "novo evento": 4, "novos eventos": 4, "apagar evento": 5, "excluir evento": 5, "apagar eventos": 5 },
 };
 
 const DIV = "━━━━━━━━━━━━━━━━━━";
@@ -213,6 +216,7 @@ export class MenuService {
         const city = parseCityCommand(text);
         if (city) return await this.setCity(workspaceId, city);
         if (isLocationQuery(flat)) return await this.locationView(workspaceId);
+        if (/^(?:por favor )?(?:apagar|excluir|remover|cancelar) (?:o |um |os )?(?:evento|eventos|compromisso|compromissos)(?: da agenda)?$/.test(flat) && (await this.services(workspaceId)).includes("calendar")) return await this.eventDeletePick(workspaceId);
         if (/^(ver |mostrar |abrir )?(as )?(config|configuracoes|configuracao|ajustes)$/.test(flat)) return await this.configMenu(workspaceId);
         if (/^(ver |mostrar |abrir )?(a |minha )?rotina$/.test(flat)) return await this.routineList(workspaceId);
         if ((await this.services(workspaceId)).includes("drive") && (looksLikeDriveRequest(flat) || looksLikeMediaRequest(flat) || (await jevSays("drive_file")))) {
@@ -380,9 +384,32 @@ export class MenuService {
       }
       case "notes_topic": {
         if (n === 0) return this.notesEntry(ws);
-        if (n === null) return null;
+        if (n === null) {
+          // "concluir 2" / "apagar 2": conclui a nota 2 da lista (pede confirmação)
+          const m = normalize(text).match(/^(?:apagar|excluir|concluir|remover)(?: a)?(?: nota)? (\d{1,2})$/);
+          const target = m ? d.items[Number(m[1]) - 1] : undefined;
+          return target ? this.noteDeleteAsk(ws, d.topic, target) : null;
+        }
         const it = d.items[n - 1];
         return it ? this.noteOpen(ws, d.topic, it) : this.invalid();
+      }
+      case "notes_note": {
+        if (n === 0) return this.notesTopicView(ws, d.topic);
+        if (n === 1) return this.noteDeleteAsk(ws, d.topic, d.item);
+        return n === null ? null : this.invalid();
+      }
+      case "notes_delete_confirm": {
+        if (n === 0) return this.noteOpen(ws, d.topic, d.item);
+        if (n !== 1) return n === null ? null : this.invalid();
+        const target = storageAccount(await this.google.listAccounts(ws));
+        if (!target) return this.noGoogle();
+        try {
+          const done = await this.google.noteTrash(ws, d.item.id, target);
+          return `✅ *Nota concluída e apagada:* ${short(done.name, 50)}\n_Ela está na lixeira do Drive por 30 dias._\n\n${await this.notesTopicView(ws, d.topic)}`;
+        } catch (e: any) {
+          this.logger.warn(`Apagar nota falhou: ${e.message}`);
+          return `😕 ${short(e.message, 220)}\n${DIV}\n${opts(BACK)}`;
+        }
       }
       case "drive_input": {
         if (n === 0) return this.mainMenu(ws, false);
@@ -541,7 +568,36 @@ export class MenuService {
           await this.set(ws, "event_input");
           return `${head("➕", "Novos eventos")}\nDescreva do seu jeito, por texto ou áudio 🎙️. Pode mandar *vários de uma vez*: cole a lista, um *link*, uma *imagem/print*, um PDF ou um post encaminhado, que eu leio e crio tudo.\n_Ex.: "reunião com o João amanhã às 15h por 1 hora"_\n${DIV}\n${opts(BACK)}`;
         }
+        if (n === 5) return this.eventDeletePick(ws);
         return n === null ? null : this.invalid();
+      }
+      case "event_delete": {
+        if (n === 0) return this.agendaMenu(ws);
+        if (n === null) return null;
+        const it = d.items[n - 1];
+        if (!it) return this.invalid();
+        await this.set(ws, "event_delete_confirm", { item: it });
+        return [
+          head("🗑️", "Apagar este evento?"),
+          `📌 *${short(it.titulo ?? "(sem título)", 60)}*`,
+          `🕐 ${this.when(it.inicio, it.fim)}`,
+          `📥 ${accountLabel(it.account)}`,
+          it.recorrente ? "🔁 _Evento que se repete: só esta ocorrência será apagada._" : "",
+          DIV,
+          opts([1, "🗑️", "Apagar"], [0, "❌", "Cancelar"]),
+          foot("Isso apaga o evento do Google Agenda"),
+        ].filter(Boolean).join("\n");
+      }
+      case "event_delete_confirm": {
+        if (n === 0) return this.eventDeletePick(ws);
+        if (n !== 1) return n === null ? null : this.invalid();
+        try {
+          await this.google.calendarDelete(ws, d.item.id, d.item.account);
+        } catch (e: any) {
+          this.logger.warn(`Apagar evento falhou: ${e.message}`);
+          return `😕 Não consegui apagar o evento: ${short(e.message, 160)}\n${DIV}\n${opts(BACK)}`;
+        }
+        return `✅ *Evento apagado:* ${short(d.item.titulo ?? "(sem título)", 50)}\n\n${await this.agendaMenu(ws)}`;
       }
       case "event_input": {
         if (n === 0) return this.agendaMenu(ws);
@@ -1369,7 +1425,7 @@ export class MenuService {
       await this.set(ws, "notes_topic", { topic, items });
       if (!items.length) return [head("📂", topic.name, "sem notas"), "_Esse assunto está vazio._", DIV, opts(BACK)].join("\n");
       const rows = items.map((f, i) => `${key(i + 1)} 📄 ${short(f.name, 50)}`);
-      return [head("📂", topic.name, `${items.length} ${items.length === 1 ? "nota" : "notas"}`), rows.join("\n"), foot("Responda com o número para abrir a nota"), opts(BACK)].join("\n");
+      return [head("📂", topic.name, `${items.length} ${items.length === 1 ? "nota" : "notas"}`), rows.join("\n"), foot("Responda com o número para abrir a nota. Para concluir e apagar: *concluir 2*"), opts(BACK)].join("\n");
     } catch (e: any) {
       this.logger.warn(`Abrir assunto de notas falhou: ${e.message}`);
       return `😕 Não consegui abrir esse assunto: ${short(e.message, 200)}`;
@@ -1383,11 +1439,25 @@ export class MenuService {
     try {
       const note = await this.google.noteRead(ws, item.id, target);
       const body = note.content.replace(/^---\n[\s\S]*?\n---\n/, "").trim();
-      return [head("📄", short(note.name, 60), topic.name), short(body, 3000), body.length > 3000 && note.link ? `_Nota completa: ${note.link}_` : "", DIV, opts(BACK)].filter(Boolean).join("\n");
+      await this.set(ws, "notes_note", { topic, item });
+      return [head("📄", short(note.name, 60), topic.name), short(body, 3000), body.length > 3000 && note.link ? `_Nota completa: ${note.link}_` : "", DIV, opts([1, "✅", "Concluir e apagar"], BACK)].filter(Boolean).join("\n");
     } catch (e: any) {
       this.logger.warn(`Abrir nota falhou: ${e.message}`);
       return `😕 Não consegui abrir a nota: ${short(e.message, 200)}`;
     }
+  }
+
+  /** Concluir uma nota = apagá-la: antes, pede confirmação. A nota vai para a lixeira do Drive (30 dias). */
+  private async noteDeleteAsk(ws: string, topic: { id: string; name: string }, item: { id: string; name: string }): Promise<string> {
+    await this.set(ws, "notes_delete_confirm", { topic, item });
+    return [
+      head("✅", "Concluir e apagar esta nota?"),
+      `📄 *${short(item.name, 60)}*`,
+      `📂 ${short(topic.name, 40)}`,
+      "_Ela vai para a lixeira do Google Drive; dá para recuperar por 30 dias._",
+      DIV,
+      opts([1, "🗑️", "Apagar"], [0, "❌", "Cancelar"]),
+    ].join("\n");
   }
 
   private async noteSaved(ws: string, draft: { title: string; topic: string; content: string }, origin: string): Promise<string> {
@@ -2044,7 +2114,7 @@ export class MenuService {
   }
 
   private agendaOptions() {
-    return opts([1, "📌", "Hoje"], [2, "🌅", "Amanhã"], [3, "🗓️", "Próximos 7 dias"], [4, "➕", "Criar evento"], BACK);
+    return opts([1, "📌", "Hoje"], [2, "🌅", "Amanhã"], [3, "🗓️", "Próximos 7 dias"], [4, "➕", "Criar evento"], [5, "🗑️", "Apagar evento"], BACK);
   }
 
   private async agendaList(ws: string, fromDay: number, toDay: number, label: string) {
@@ -2080,6 +2150,32 @@ export class MenuService {
     });
     const legend = multi ? `\n🔖 _${accounts.map((a: string) => `${letter(a)} = ${a.split("@")[0]}`).join(" · ")}_` : "";
     return [head("📅", title), blocks.join("\n"), legend, DIV, this.agendaOptions()].filter(Boolean).join("\n");
+  }
+
+  /** Apagar evento, passo 1: os eventos dos próximos 7 dias, numerados, de todas as contas. */
+  private async eventDeletePick(ws: string): Promise<string> {
+    const accounts = await this.google.listAccounts(ws);
+    if (!accounts.length) return this.noGoogle();
+    const min = `${dateStr(0)}T00:00:00-03:00`;
+    const max = `${dateStr(7)}T23:59:59-03:00`;
+    const all: any[] = [];
+    for (const account of accounts) {
+      try {
+        (await this.google.calendarList(ws, min, max, account)).forEach((e: any) => all.push({ ...e, account }));
+      } catch (e: any) {
+        this.logger.warn(`Listar eventos para apagar falhou (${account}): ${e.message}`);
+      }
+    }
+    all.sort((a, b) => String(a.inicio).localeCompare(String(b.inicio)));
+    const items = all.slice(0, await this.listSize(ws, 8)).map((e) => ({ id: e.id, account: e.account, titulo: e.titulo, inicio: e.inicio, fim: e.fim, recorrente: !!e.recorrente }));
+    if (!items.length) {
+      await this.set(ws, "agenda");
+      return [head("🗑️", "Apagar evento"), "🙌 Não há eventos nos próximos 7 dias.", DIV, this.agendaOptions()].join("\n");
+    }
+    await this.set(ws, "event_delete", { items });
+    const multi = accounts.length > 1;
+    const rows = items.map((e, i) => `${key(i + 1)} 📌 ${this.when(e.inicio)} · ${short(e.titulo ?? "(sem título)", 30)}${multi ? ` _(${accountLabel(e.account)})_` : ""}`);
+    return [head("🗑️", "Apagar evento", "próximos 7 dias"), rows.join("\n"), foot("Responda com o número do evento que quer apagar"), opts(BACK)].join("\n");
   }
 
   private when(start: string, end?: string | null) {

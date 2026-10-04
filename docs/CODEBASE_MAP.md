@@ -146,7 +146,7 @@ openclaw/
 - `middleware.ts`: matcher só `/dashboard/:path*`; confere presença do cookie `oc_token` (não valida o JWT).
 - `lib/api.ts`: cliente `fetch` tipado como `any`, injeta Bearer, trata 401 (logout) e `ACCOUNT_INACTIVE`. `lib/auth.ts`: token em `localStorage` + cookie espelho (sem HttpOnly).
 - `hooks/useMe.ts` (um `GET /auth/me` por componente), `hooks/useInboxSocket.ts` (Socket.IO, só websocket, callbacks em ref).
-- Páginas em `/dashboard`: **chat** (Assistente, tela inicial; `/dashboard` redireciona para o primeiro item liberado), inbox, channels, automations, users, vault (+ reset), settings, api, usage, notes; contacts é placeholder. Públicas: landing, auth (+ `auth/google`), privacidade, termos, exclusao-de-dados; `robots.ts` e `sitemap.ts` (canônico `www.magobox.com.br`, painel fora do Google).
+- Páginas em `/dashboard`: **ajuda** (documentação do menu do assistente em árvore, com busca; os textos estão em `lib/menu-docs.ts`), **chat** (Assistente, tela inicial; `/dashboard` redireciona para o primeiro item liberado), inbox, channels, automations, users, vault (+ reset), settings, api, usage, notes; contacts é placeholder. Públicas: landing, auth (+ `auth/google`), privacidade, termos, exclusao-de-dados; `robots.ts` e `sitemap.ts` (canônico `www.magobox.com.br`, painel fora do Google).
 - Componentes: `layout/` (Sidebar com o `nav` e `desktopOnly`, `MobileMenu` = menu sanduíche do celular, TopBar, `PwaPrompt` = pede instalar o app/atalho e ligar notificações a cada login, `ThemeSync` = claro/escuro pelo aparelho, só no painel), `inbox/`, `channels/`, `vault/`, `brand/`. Não há design system compartilhado; estilos repetidos por página.
 - Tema: os `gray-*` do Tailwind são variáveis CSS (`globals.css`, `:root` noite e `:root.light` dia, escala invertida); `.light` fica no `<html>` só no painel. Cores de destaque claras têm override em `.light`.
 - PWA: `app/manifest.ts`, `public/sw.js` (push + página offline, sem cache de dados, servido sem cache), `lib/push.ts`. No iPhone o push só funciona com o app instalado.
@@ -206,6 +206,11 @@ Webhook → `InboundEvent` → worker → `InboxService.processIncoming` → `We
 - CORS e websockets aceitam `WEB_URL` + `WEB_ORIGINS` (lista separada por vírgula), ver `web-origins.ts`. `WEB_URL` é também o destino dos redirecionamentos (login com Google, link do cofre).
 - **Leitor de JSON:** `app.use(json())` no `main.ts` faz o Nest achar que já há um leitor global e pular o dele: sem o segundo `app.use`, todo POST chega com corpo vazio. Por isso tudo vive em `body-parsers.ts` (25 MB só em `BIG_BODY_PATHS`, e `req.rawBody` para a assinatura do Instagram), com teste em `test/body-parsers.spec.ts`.
 - O redirect do Google (`GOOGLE_REDIRECT_URI`) precisa estar cadastrado no Google Cloud, exatamente igual; o Instagram (`INSTAGRAM_REDIRECT_URI`) ainda usa o endereço do Railway (a Meta não tem a URL nova).
+
+**Apagar no assistente (04/10/2026)**
+- **Evento da agenda:** "apagar evento" (ou opção 5 da agenda) lista os próximos 7 dias numerados, pede confirmação e chama `calendarDelete` (a lista traz cada ocorrência de um evento recorrente separada, então só aquela some; 404/410 contam como já apagado). O assistente continua sem **editar** evento.
+- **Nota:** "concluir e apagar" (nota aberta, ou "concluir 2" na lista do assunto) pede confirmação e chama `noteTrash`: valida que o arquivo está dentro de um assunto da pasta de notas do usuário e manda para a **lixeira do Drive** (30 dias), nunca apaga de vez. Com o escopo `drive.file` só é possível apagar nota que o próprio app criou; nota colocada à mão recebe um aviso para apagar pelo Drive.
+- Arquivos do Drive e contatos continuam **somente leitura** no assistente.
 
 **Busca de nomes (contatos e e-mail por remetente)**
 - `findContacts` busca em níveis (todas as palavras → sem sufixo/ligação como "jr", "filho", "da" → pelo primeiro nome). Se nada achar, `GoogleService.contactsLookup` peneira nomes parecidos (`fuzzyCandidates`, distância de edição) e o Jev (`pickPerson`, ligado por `setPersonPicker` no construtor do `AssistantService`) escolhe. "E-mails do fulano" soma os endereços do contato achado à busca pelo nome (`MenuService.withPersonAddresses`). Sem chave do Jev ou com dúvida, vale só a busca exata. Mesmo critério para **arquivos do Drive** (músicas incluídas: `MenuService.driveSearch`, quando há vários achados ou só parecidos, o Jev escolhe, envia e deixa os outros para corrigir pelo número) e **assuntos de nota** (`topicByName`).
@@ -293,6 +298,8 @@ Webhook → `InboundEvent` → worker → `InboxService.processIncoming` → `We
 | Novo canal do assistente (como o Telegram) | `assistant/channel-route.ts`, `AssistantService.sendToUser`/`sendFileToOwner`, `commander.ts` (`pickChannel`), coluna em `User` sem `@unique` |
 | Mudar o menu do celular / itens só do computador | `layout/Sidebar.tsx` (`nav`, `desktopOnly`), `layout/MobileMenu.tsx` |
 | Mudar as cores do modo dia | `globals.css` (variáveis `--gray-*` e overrides `.light`), `layout/ThemeSync.tsx` |
+| Novo item no menu do assistente | `assistant/menu-items.ts` e `MenuService.mainOptions`, **e o texto em `apps/web/src/lib/menu-docs.ts`** (a página `/dashboard/ajuda` é feita dele; `test/menu-docs.spec.ts` falha se um item do menu ficar sem documentação ou sem "como adicionar/apagar") |
+| Apagar evento / concluir nota | `MenuService.eventDeletePick` e telas `event_delete`, `event_delete_confirm`, `notes_note`, `notes_delete_confirm`; `GoogleService.calendarDelete` e `noteTrash`; `test/delete-event-note.spec.ts` |
 | Novo serviço/permissão | `auth/permissions.ts` (`SERVICES`, `ROLE_DEFAULTS`), `Sidebar.tsx` (`nav`) |
 | Mudar o cofre | `vault-crypto.ts` (puro), `vault.service.ts`, `test/vault-*.spec.ts`; ver gotchas 13 e 14 |
 | Novo campo no banco | `packages/database/prisma/schema.prisma` (aditivo, sem `@unique`), depois `pnpm --filter @openclaw/database db:generate` |

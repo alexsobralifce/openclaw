@@ -235,6 +235,8 @@ export class GoogleService implements OnModuleInit {
       headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json", ...(init?.headers ?? {}) },
     });
     if (!res.ok) throw new Error(`Google API ${res.status}: ${(await res.text()).slice(0, 300)}`);
+    // DELETE do Calendar responde 204, sem corpo
+    if (res.status === 204) return undefined as T;
     return (await res.json()) as T;
   }
 
@@ -603,6 +605,29 @@ export class GoogleService implements OnModuleInit {
     }
   }
 
+  /**
+   * Conclui uma nota apagando-a: vai para a LIXEIRA do Drive (dá para recuperar por 30 dias), nunca é apagada de vez.
+   * Só mexe em arquivo que está dentro de um assunto da pasta de notas do usuário, e o escopo drive.file só permite arquivos
+   * criados por este app: nota colocada à mão na pasta recebe um aviso claro.
+   */
+  async noteTrash(workspaceId: string, fileId: string, account?: string): Promise<{ name: string }> {
+    if (!/^[\w-]{8,100}$/.test(fileId)) throw new Error("Nota inválida.");
+    try {
+      const root = await this.topicsRoot(workspaceId, account, false);
+      const f = await this.g<any>(workspaceId, account, `https://www.googleapis.com/drive/v3/files/${encodeURIComponent(fileId)}?fields=name,parents,trashed,mimeType`);
+      const parent = f.parents?.[0];
+      const up = parent ? await this.g<any>(workspaceId, account, `https://www.googleapis.com/drive/v3/files/${encodeURIComponent(parent)}?fields=name,parents`) : null;
+      if (!root || f.trashed || f.mimeType === FOLDER_MIME || !up?.parents?.includes(root)) throw new Error("Essa nota não está nas suas notas.");
+      await this.g(workspaceId, account, `https://www.googleapis.com/drive/v3/files/${encodeURIComponent(fileId)}`, { method: "PATCH", body: JSON.stringify({ trashed: true }) });
+      return { name: String(f.name).replace(/\.md$/, "") };
+    } catch (e: any) {
+      if (/Google API 40[34]\b/.test(String(e?.message))) {
+        throw new Error("Não tenho permissão para apagar essa nota (só apago as que eu mesmo criei). Apague pelo Google Drive.");
+      }
+      throw this.noteError(e);
+    }
+  }
+
   // ─── Contatos do Google → Markdown por letra no Drive ─────────
 
   /** Erros da People API em português claro, com o endereço para ativar a API no Google Cloud. */
@@ -836,7 +861,22 @@ export class GoogleService implements OnModuleInit {
       inicio: e.start?.dateTime ?? e.start?.date,
       fim: e.end?.dateTime ?? e.end?.date,
       local: e.location,
+      recorrente: !!e.recurringEventId,
     }));
+  }
+
+  /**
+   * Apaga um evento da agenda principal da conta. Em evento que se repete, a lista traz cada ocorrência separada (singleEvents),
+   * então só aquela ocorrência some. Evento que já não existe (404/410) conta como apagado.
+   */
+  async calendarDelete(workspaceId: string, eventId: string, account?: string): Promise<void> {
+    if (!/^[\w-]{5,1024}$/.test(eventId)) throw new Error("Evento inválido.");
+    try {
+      await this.g(workspaceId, account, `https://www.googleapis.com/calendar/v3/calendars/primary/events/${encodeURIComponent(eventId)}?sendUpdates=none`, { method: "DELETE" });
+    } catch (e: any) {
+      if (/Google API (404|410)\b/.test(String(e?.message))) return;
+      throw e;
+    }
   }
 
   async calendarCreate(
