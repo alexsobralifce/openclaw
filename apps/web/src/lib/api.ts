@@ -198,6 +198,7 @@ export const api = {
   },
   assistant: {
     menu: () => request<{ items: MenuItem[] }>("/assistant/menu"),
+    overview: () => request<{ routine: { total: number; today: { topic: string; when: string }[] }; memories: number }>("/assistant/overview"),
     notes: () => request<{ account: string; topics: NoteTopic[] }>("/assistant/notes"),
     note: (id: string) => request<{ name: string; topic: string; content: string; link?: string }>(`/assistant/notes/${encodeURIComponent(id)}`),
     createNote: (data: { topic: string; title?: string; content: string }) =>

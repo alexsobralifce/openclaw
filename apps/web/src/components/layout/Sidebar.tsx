@@ -19,6 +19,15 @@ export const nav: { href: string; label: string; icon: React.ReactNode; service?
     ),
   },
   {
+    href: "/dashboard/resumo",
+    label: "Resumo",
+    icon: (
+      <svg width="20" height="20" fill="none" viewBox="0 0 24 24">
+        <path d="M4 4h7v9H4zM13 4h7v5h-7zM13 11h7v9h-7zM4 15h7v5H4z" stroke="currentColor" strokeWidth="1.6" strokeLinejoin="round"/>
+      </svg>
+    ),
+  },
+  {
     href: "/dashboard/inbox",
     label: "Inbox",
     service: "inbox",

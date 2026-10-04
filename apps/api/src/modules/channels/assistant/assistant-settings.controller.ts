@@ -1,13 +1,28 @@
 import { BadRequestException, Body, Controller, Get, Param, Post, Put, Request } from "@nestjs/common";
 import { Access } from "../../auth/access";
 import { GoogleService } from "../../integrations/google/google.service";
+import { prisma } from "@openclaw/database";
+import { MemoryService } from "./memory.service";
 import { MenuService } from "./menu.service";
+import { todayItems, when } from "./routine";
 import { cleanTitle, cleanTopic, MAX_NOTE_BODY, storageAccount } from "./notes";
 
 /** Configurações do assistente que o dono ajusta pelo painel. */
 @Controller("assistant")
 export class AssistantSettingsController {
-  constructor(private menu: MenuService, private google: GoogleService) {}
+  constructor(private menu: MenuService, private google: GoogleService, private memory: MemoryService) {}
+
+  /** Números para o resumo do painel: rotina (com os itens de hoje) e quantos fatos o assistente guarda na memória. Nada de conteúdo sensível. */
+  @Access("assistant")
+  @Get("overview")
+  async overview(@Request() req: any) {
+    const ws = this.workspace(req);
+    const routine = await this.memory.listRoutine(ws);
+    const weekday = new Date(new Date().toLocaleString("en-US", { timeZone: process.env.ASSISTANT_TZ || "America/Fortaleza" })).getDay();
+    const today = todayItems(routine, weekday).slice(0, 5).map((i) => ({ topic: i.topic, when: when(i) }));
+    const memories = await prisma.memory.count({ where: { workspaceId: ws, kind: { not: "routine" } } });
+    return { routine: { total: routine.length, today }, memories };
+  }
 
   /** Itens do menu do WhatsApp a que o usuário tem acesso, marcando os que ele escondeu. */
   @Access("assistant")
