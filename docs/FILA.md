@@ -11,10 +11,20 @@ Pedido em 04/10/2026 (feito no meio do catálogo de PDFs): "adicione integraçã
 - Não há nada do Spotify no sistema (o assistente só acha músicas como **arquivos de áudio no Drive**).
 - Localização e tempo (clima): o dono manda a localização (📎) ou diz "minha cidade é Recife"; o clima vem do Open-Meteo (`weather.service.ts`), sem Google.
 
-**Perguntas em aberto**
-1. O que o assistente deve fazer no Spotify? (tocar/pausar num aparelho, buscar e tocar música ou artista, mostrar o que está tocando, criar/abrir playlists, recomendar.) Controlar a reprodução exige conta **Premium** e um app registrado no Spotify for Developers (client id e secret), com login do usuário (OAuth).
-2. "Localização e tempo através do Google" é para trocar o Open-Meteo por APIs do Google (Weather, Geocoding, Time Zone), ou para outra coisa, como sugerir música pelo clima e pelo lugar? As APIs do Google precisam ser ativadas no projeto do Google Cloud (pode ter custo).
-3. Como a localização do usuário deve ser obtida: pela localização que ele já manda, ou pelo navegador/celular?
+**Decisões do dono** (04/10/2026)
+- O assistente deve **tocar e controlar** o Spotify, **buscar e mostrar**, **criar playlists**, **recomendar pelo clima e pelo lugar** e **buscar música por assunto**.
+- **Localização e tempo passam a vir do Google**, no lugar do Open-Meteo (`weather.service.ts`).
+
+**Pré-requisitos que dependem do dono** (a pergunta que ficou sem resposta)
+1. **App no Spotify for Developers** (grátis): gera `SPOTIFY_CLIENT_ID` e `SPOTIFY_CLIENT_SECRET`, e precisa da URL de retorno `https://api.magobox.com.br/api/v1/integrations/spotify/callback`. Sem isso, nada do Spotify roda.
+2. **Conta Premium**: o Spotify só deixa controlar a reprodução (tocar, pausar, pular, volume) com Premium. Sem ela, só buscar, mostrar e criar playlists.
+3. **Chave do Google** com as APIs de Clima (Weather) e Geocoding ativadas no Google Cloud (`GOOGLE_MAPS_API_KEY`); pode ter custo.
+
+**Pontos técnicos**
+- Login do usuário no Spotify por OAuth (fluxo com código), com o token cifrado como o do Google; escopos de leitura/controle do player e de playlists.
+- Até onde sei, o Spotify desativou a API de recomendações para apps novos (nov/2024): "recomendar pelo clima" será a IA escolhendo palavras de humor e gênero e então **buscando** no Spotify.
+- Tudo desligado até as chaves existirem (como o Telegram), com testes por dublê; só dá para validar de verdade depois das chaves.
+- O clima do Google muda a fonte do menu e do tempo no assistente: trocar com teste de regressão, mantendo o Open-Meteo como reserva se a chave faltar.
 
 ## Pendências já combinadas (dependem do dono ou de uma decisão)
 - **Search Console:** verificar `magobox.com.br`, enviar o sitemap e pedir indexação (passo a passo em `DOMINIO_MAGOBOX.md`).
