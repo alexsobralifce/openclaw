@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 
-export const metadata: Metadata = { title: "Exclusão de dados — MagoBox", alternates: { canonical: "/exclusao-de-dados" } };
+export const metadata: Metadata = { title: "Exclusão de dados", alternates: { canonical: "/exclusao-de-dados" } };
 
 const CONTACT = process.env.NEXT_PUBLIC_CONTACT_EMAIL || "o contato de suporte informado pela empresa que atende você";
 

@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 
-export const metadata: Metadata = { title: "Política de Privacidade — MagoBox", alternates: { canonical: "/privacidade" } };
+export const metadata: Metadata = { title: "Política de Privacidade", alternates: { canonical: "/privacidade" } };
 
 const CONTACT = process.env.NEXT_PUBLIC_CONTACT_EMAIL || "o contato de suporte informado pela empresa que atende você";
 

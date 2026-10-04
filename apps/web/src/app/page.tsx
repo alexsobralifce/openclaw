@@ -96,9 +96,29 @@ function Phone({ children, label }: { children: React.ReactNode; label: string }
   );
 }
 
+// Dados estruturados da página inicial: só o que está visível nela (nome, descrição e o "a partir de R$ 9,90/mês").
+const SITE = (process.env.NEXT_PUBLIC_SITE_URL || "https://www.magobox.com.br").replace(/\/$/, "");
+const JSON_LD = {
+  "@context": "https://schema.org",
+  "@graph": [
+    { "@type": "Organization", "@id": `${SITE}/#org`, name: "MagoBox", url: SITE, logo: `${SITE}/brand/magobox-icon-1024.png` },
+    {
+      "@type": "SoftwareApplication",
+      name: "MagoBox",
+      applicationCategory: "BusinessApplication",
+      operatingSystem: "Web, WhatsApp",
+      description: "Assistente no WhatsApp que avisa de cada e-mail, mostra a agenda e cuida dos clientes, por texto ou áudio.",
+      url: SITE,
+      publisher: { "@id": `${SITE}/#org` },
+      offers: { "@type": "Offer", price: "9.90", priceCurrency: "BRL" },
+    },
+  ],
+};
+
 export default function Landing() {
   return (
     <div className={`${display.variable} ${body.variable} min-h-screen bg-[#09070b] font-[family-name:var(--font-body)] text-[#e6eeea] antialiased`}>
+      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(JSON_LD).replace(/</g, "\\u003c") }} />
       {/* Nav */}
       <header className="sticky top-0 z-30 border-b border-white/5 bg-[#09070b]/85 backdrop-blur">
         <div className="mx-auto flex h-16 max-w-6xl items-center justify-between px-5">
