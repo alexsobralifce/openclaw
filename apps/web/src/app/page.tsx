@@ -330,7 +330,10 @@ Olá! Confirmo minha presença na reunião. Obrigado pelo convite.
         <div className="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-3 px-5 text-sm text-[#868090]">
           <Logo size={26} textClassName={`${H} text-base font-bold tracking-tight text-white`} />
           <span>© 2026 MagoBox. Todos os direitos reservados.</span>
-          <span className="flex gap-5">
+          <span className="flex flex-wrap gap-x-5 gap-y-2">
+            <Link href="/privacidade" className="hover:text-white">Política de Privacidade</Link>
+            <Link href="/termos" className="hover:text-white">Termos de Serviço</Link>
+            <Link href="/exclusao-de-dados" className="hover:text-white">Exclusão de dados</Link>
             <Link href="/auth/login" className="hover:text-white">Entrar</Link>
             <Link href="/auth/register" className="hover:text-white">Criar conta</Link>
           </span>
