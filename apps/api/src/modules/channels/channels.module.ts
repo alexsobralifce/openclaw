@@ -22,6 +22,8 @@ import { InboundService } from "./inbound/inbound.service";
 import { InstagramService } from "./instagram/instagram.service";
 import { TelegramService } from "./telegram/telegram.service";
 import { TelegramController } from "./telegram/telegram.controller";
+import { SpotifyController } from "./spotify/spotify.controller";
+import { SpotifyService } from "./spotify/spotify.service";
 import { DocumentsController } from "./documents.controller";
 import { AppChatController } from "./app-chat/app-chat.controller";
 import { AppChatService } from "./app-chat/app-chat.service";
@@ -38,8 +40,8 @@ import { InstagramWorker } from "./workers/instagram.worker";
       inject: [ConfigService],
     }),
   ],
-  controllers: [ChannelsController, AssistantSettingsController, TelegramController, AppChatController, DocumentsController],
-  providers: [TelegramService, AppChatService, AppChatGateway, PushService, ChannelsService, WhatsappWorker, InstagramWorker, InstagramService, InboundService, AssistantService, MenuService, MemoryService, GeminiService, IntentService, EmailWatcherService, WeatherService, AssistantSchedulerService],
+  controllers: [ChannelsController, AssistantSettingsController, TelegramController, AppChatController, DocumentsController, SpotifyController],
+  providers: [SpotifyService, TelegramService, AppChatService, AppChatGateway, PushService, ChannelsService, WhatsappWorker, InstagramWorker, InstagramService, InboundService, AssistantService, MenuService, MemoryService, GeminiService, IntentService, EmailWatcherService, WeatherService, AssistantSchedulerService],
   exports: [ChannelsService, EvolutionModule, AssistantService],
 })
 export class ChannelsModule {}

@@ -9,6 +9,7 @@ export const SERVICES = {
   drive: "Google Drive (buscar e receber arquivos)",
   vault: "Cofre de senhas",
   automations: "Automações",
+  spotify: "Spotify (tocar e controlar música)",
   api: "API e webhooks",
 } as const;
 
