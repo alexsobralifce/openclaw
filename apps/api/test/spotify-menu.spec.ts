@@ -47,6 +47,17 @@ describe("Spotify: buscar com link", () => {
     expect(spotify.play).not.toHaveBeenCalled();
   });
 
+  it("na tela do Spotify, escrever só o nome busca a música (e 0 volta ao menu)", async () => {
+    const { say, spotify, screen } = build({ connected: false });
+    await say("spotify");
+    expect(screen()).toBe("spotify_input");
+    const r = await say("catingueira");
+    expect(r).toContain("https://open.spotify.com/track/abc");
+    expect(spotify.searchLinks).toHaveBeenCalledWith("catingueira", "track", 5, "w1");
+    expect(screen()).toBe("spotify_input");
+    expect(await say("0")).toContain("Menu principal");
+  });
+
   it("sem resultado avisa; falha do Spotify vira mensagem", async () => {
     expect(await build({ links: [] }).say("buscar playlist de nada")).toContain("Não achei");
     const b = build();

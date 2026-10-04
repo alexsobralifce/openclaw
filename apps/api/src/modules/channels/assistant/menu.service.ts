@@ -428,9 +428,11 @@ export class MenuService {
         const t = d.tracks[n - 1];
         return t ? (await this.spotifyBot().playTrack(ws, t)).text : this.invalid();
       }
-      case "spotify_home": {
+      case "spotify_input": {
         if (n === 0) return this.mainMenu(ws, false);
-        return n === null ? null : this.invalid();
+        // Nesta tela, escrever só o nome ("catingueira") busca a música e manda o link (comandos como "tocar X" já foram tratados antes)
+        const q = text.trim().slice(0, 80);
+        return n === null && q.length >= 2 ? this.spotifyRun(ws, { kind: "find", what: "track", query: q }) : this.invalid();
       }
       case "docs_input": {
         if (n === 0) return this.mainMenu(ws, false);
@@ -1582,10 +1584,10 @@ export class MenuService {
 
   private async spotifyEntry(ws: string): Promise<string> {
     const st = await this.spotify!.status(ws);
-    await this.set(ws, "spotify_home");
+    await this.set(ws, "spotify_input");
     return [
       head("🎧", "Spotify", st.connected ? `conectado como ${st.name}${st.premium ? "" : " (sem Premium)"}` : "não conectado"),
-      "🔎 *buscar música catingueira* · *buscar playlist de forró*\n_Eu respondo com o link: ao tocar, abre direto no Spotify._",
+      "🔎 *Escreva o nome da música* (ou *buscar playlist de forró*)\n_Eu respondo com o link: ao tocar, abre direto no Spotify._",
       st.connected
         ? ["▶️ *tocar* catingueira · ⏸️ *pausar* · ⏭️ *pular música* · 🔊 *volume 40*", "🎶 *o que está tocando* · 🎧 *meus aparelhos*", "📝 *criar playlist para estudar*", "🔎 *músicas sobre saudade* · 🌦️ *música para o clima de hoje*"].join("\n")
         : "_Para tocar e controlar o player, conecte a sua conta em *Canais*, no painel (exige Premium)._",
