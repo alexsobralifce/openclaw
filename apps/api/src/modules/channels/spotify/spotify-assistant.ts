@@ -39,8 +39,9 @@ export class SpotifyAssistant {
     try {
       const found = await this.sp.searchLinks(query, what, 5, ws);
       if (!found.length) return { text: `🤔 Não achei ${noun} para *${query}* no Spotify. Tente outras palavras.` };
-      const rows = found.map((f, i) => `${i + 1}. ${what === "track" ? "🎵" : "📝"} *${f.name}*${f.by ? ` — ${f.by}` : ""}\n   🔗 ${f.url}`);
-      return { text: [`🎧 *${noun[0].toUpperCase()}${noun.slice(1)} para "${query}"*`, rows.join("\n"), "_Toque no link para abrir no Spotify._"].join("\n") };
+      // Um resultado por bloco, com o link sozinho na linha (o WhatsApp e o app só o tornam clicável assim) e linha em branco entre eles
+      const rows = found.map((f, i) => `${i + 1}. ${what === "track" ? "🎵" : "📝"} *${f.name}*${f.by ? ` — ${f.by}` : ""}\n${f.url}`);
+      return { text: [`🎧 *${noun[0].toUpperCase()}${noun.slice(1)} para "${query}"*`, rows.join("\n\n"), "_Toque no link para abrir no Spotify._"].join("\n\n") };
     } catch (e: any) {
       if (e instanceof SpotifyError) return { text: `🎧 ${e.message}${e.retryAfter ? ` (cerca de ${e.retryAfter}s)` : ""}` };
       throw e;

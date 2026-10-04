@@ -1,5 +1,5 @@
 /** Marcação de texto do WhatsApp que o assistente usa: *negrito*, _itálico_ e ~tachado~. */
-export type WaSeg = { t: "text"; v: string } | { t: "b" | "i" | "s"; v: WaSeg[] };
+export type WaSeg = { t: "text"; v: string } | { t: "b" | "i" | "s"; v: WaSeg[] } | { t: "link"; v: string };
 
 const KIND = { "*": "b", _: "i", "~": "s" } as const;
 const PATTERN = /\*([^*\n]+)\*|_([^_\n]+)_|~([^~\n]+)~/g;
@@ -31,5 +31,26 @@ export function parseWaMarkup(text: string): WaSeg[] {
     last = m.index + m[0].length;
   }
   plain(text.length);
+  return out;
+}
+
+const URL_RE = /https?:\/\/[^\s<>"]+/g;
+
+/**
+ * Como `parseWaMarkup`, mas endereços http(s) viram trechos de link clicável. Os links são separados ANTES da marcação, para que
+ * "_" e "*" dentro de um endereço não virem itálico ou negrito. Pontuação colada no fim ("…/x.") fica fora do link.
+ */
+export function parseWaRich(text: string): WaSeg[] {
+  const out: WaSeg[] = [];
+  let last = 0;
+  const re = new RegExp(URL_RE.source, "g");
+  for (let m = re.exec(text); m; m = re.exec(text)) {
+    const url = m[0].replace(/[.,;:!?)\]]+$/, "");
+    if (m.index > last) out.push(...parseWaMarkup(text.slice(last, m.index)));
+    out.push({ t: "link", v: url });
+    last = m.index + url.length;
+    re.lastIndex = last;
+  }
+  if (last < text.length) out.push(...parseWaMarkup(text.slice(last)));
   return out;
 }

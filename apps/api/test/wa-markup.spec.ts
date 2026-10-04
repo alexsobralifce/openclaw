@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
-import { parseWaMarkup, WaSeg } from "../../web/src/lib/wa-markup";
+import { parseWaMarkup, parseWaRich, WaSeg } from "../../web/src/lib/wa-markup";
 
-const flat = (segs: WaSeg[]): string => segs.map((g) => (g.t === "text" ? g.v : `<${g.t}>${flat(g.v)}</${g.t}>`)).join("");
+const flat = (segs: WaSeg[]): string => segs.map((g) => (g.t === "text" || g.t === "link" ? g.v : `<${g.t}>${flat(g.v)}</${g.t}>`)).join("");
 
 describe("marcação do WhatsApp no chat do app", () => {
   it("negrito, itálico e tachado viram trechos sem os símbolos", () => {
@@ -25,5 +25,28 @@ describe("marcação do WhatsApp no chat do app", () => {
     expect(flat(parseWaMarkup("*a\nb*"))).toBe("*a\nb*");
     expect(flat(parseWaMarkup("só texto"))).toBe("só texto");
     expect(parseWaMarkup("")).toEqual([]);
+  });
+});
+
+describe("links clicáveis", () => {
+  const rich = (t: string) => parseWaRich(t);
+
+  it("endereço http(s) vira link; texto e negrito ao redor continuam", () => {
+    expect(rich("*Catingueira* — Xangai\nhttps://open.spotify.com/track/7psOzl8llrGpLLl27lFb87\nok")).toEqual([
+      { t: "b", v: [{ t: "text", v: "Catingueira" }] },
+      { t: "text", v: " — Xangai\n" },
+      { t: "link", v: "https://open.spotify.com/track/7psOzl8llrGpLLl27lFb87" },
+      { t: "text", v: "\nok" },
+    ]);
+  });
+
+  it("sublinhado dentro do endereço não vira itálico; pontuação do fim fica fora do link", () => {
+    const segs = rich("veja https://exemplo.com/a_b_c e (https://exemplo.com/x).");
+    expect(segs.filter((s) => s.t === "link").map((s) => s.v)).toEqual(["https://exemplo.com/a_b_c", "https://exemplo.com/x"]);
+    expect(segs.some((s) => s.t === "i")).toBe(false);
+  });
+
+  it("só http e https: outros esquemas ficam como texto", () => {
+    expect(rich("javascript:alert(1) e ftp://x.com")).toEqual([{ t: "text", v: "javascript:alert(1) e ftp://x.com" }]);
   });
 });

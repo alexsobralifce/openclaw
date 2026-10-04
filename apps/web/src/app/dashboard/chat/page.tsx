@@ -5,7 +5,7 @@ import { io } from "socket.io-client";
 import { api, type ChatListedFile, type ChatMessage } from "@/lib/api";
 import { useMe } from "@/hooks/useMe";
 import { disablePush, enablePush } from "@/lib/push";
-import { parseWaMarkup, type WaSeg } from "@/lib/wa-markup";
+import { parseWaRich, type WaSeg } from "@/lib/wa-markup";
 import { fileEmoji, fileExpired, fileSizeLabel, isAutoFileNote } from "@/lib/chat-file";
 import { MobileMenu } from "@/components/layout/MobileMenu";
 
@@ -33,7 +33,7 @@ function Rich({ segs }: { segs: WaSeg[] }) {
   return (
     <>
       {segs.map((g, i) =>
-        g.t === "text" ? <span key={i}>{g.v}</span> : g.t === "b" ? <strong key={i} className="font-semibold"><Rich segs={g.v} /></strong> : g.t === "i" ? <em key={i}><Rich segs={g.v} /></em> : <s key={i}><Rich segs={g.v} /></s>,
+        g.t === "link" ? <a key={i} href={g.v} target="_blank" rel="noopener noreferrer" className="underline underline-offset-2 break-all font-medium">{g.v}</a> : g.t === "text" ? <span key={i}>{g.v}</span> : g.t === "b" ? <strong key={i} className="font-semibold"><Rich segs={g.v} /></strong> : g.t === "i" ? <em key={i}><Rich segs={g.v} /></em> : <s key={i}><Rich segs={g.v} /></s>,
       )}
     </>
   );
@@ -322,7 +322,7 @@ export default function ChatPage() {
         {messages.map((m) => (
           <div key={m.id} className={`flex ${m.direction === "IN" ? "justify-end" : "justify-start"}`}>
             <div className={`max-w-[92%] rounded-2xl px-3 py-1.5 text-[15px] leading-snug whitespace-pre-wrap break-words ${m.direction === "IN" ? "bg-violet-500 text-white" : "bg-gray-800 text-gray-200"}`}>
-              {!(m.kind === "FILE" && isAutoFileNote(m.text, m.meta?.fileName)) && <Rich segs={parseWaMarkup(m.text)} />}
+              {!(m.kind === "FILE" && isAutoFileNote(m.text, m.meta?.fileName)) && <Rich segs={parseWaRich(m.text)} />}
               {m.kind === "FILE" && m.meta?.fileId && (
                 fileExpired(m.createdAt) ? (
                   <p className="mt-1 text-xs opacity-70">{fileEmoji(m.meta.mime)} {m.meta.fileName ?? "Arquivo"} · expirou (fica disponível por 1 hora). Peça de novo.</p>
