@@ -23,6 +23,7 @@ export const MENU_ITEMS: MenuItemDef[] = [
   { id: "free", icon: "🤖", label: "Perguntar à IA" },
   { id: "memory", icon: "🧠", label: "Minha memória" },
   { id: "car", icon: "🚗", label: "Modo carro" },
+  { id: "spotify", icon: "🎧", label: "Spotify" },
   { id: "drive", icon: "📁", label: "Google Drive" },
   { id: "notes", icon: "📝", label: "Notas" },
   { id: "docs", icon: "📚", label: "Documentos" },

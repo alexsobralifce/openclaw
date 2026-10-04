@@ -120,6 +120,15 @@ describe("o que vai ao Jev", () => {
     expect(await new IntentService().pickFile("evidencias", files)).toBeNull();
   });
 
+  it("música do Spotify: ao Jev vai só 'nome — artista', nunca o identificador nem o álbum", async () => {
+    systemOne.mockResolvedValue({ answers: { escolha: { choice: "c1", confidence: 0.9 } } });
+    const tracks = [{ name: "Evidências", artists: "Legião Urbana", uri: "spotify:track:abc", album: "Álbum X" }, { name: "Evidências", artists: "Chitãozinho & Xororó", uri: "spotify:track:def", album: "Álbum Y" }];
+    expect(await new IntentService().pickTrack("evidencias", tracks)).toBe(1);
+    const sent = JSON.stringify(systemOne.mock.calls[0][0]);
+    expect(sent).toContain("Evidências — Legião Urbana");
+    expect(sent).not.toMatch(/spotify:track|Álbum/);
+  });
+
   it("assunto de nota: devolve o índice ou null", async () => {
     systemOne.mockResolvedValue({ answers: { escolha: { choice: "c0", confidence: 0.95 } } });
     expect(await new IntentService().pickNoteTopic("aluguel", [{ name: "Moradia" }])).toBe(0);

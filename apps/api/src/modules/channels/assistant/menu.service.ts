@@ -8,7 +8,7 @@ import { IntentService, acceptIntent, type IntentResult } from "./intent.service
 import { WeatherService } from "./weather.service";
 import { VaultService } from "../../vault/vault.service";
 import { isVaultHome, isVaultLock, looksLikeSharedSecret, vaultQuery } from "./vault-command";
-import { weatherDetail, weatherLines } from "./weather";
+import { describeCode, weatherDetail, weatherLines } from "./weather";
 import { isLocationQuery, isWeatherQuery, loadLocation, parseCityCommand, saveLocation, UserLocation } from "./location";
 import { todayItems, when as routineWhen } from "./routine";
 import { AssistantConfig, configKey, fmtInterval, IDLE_MENU_MS, intervalProblem, parseInterval, PRESETS } from "./chat-clean";
@@ -21,6 +21,9 @@ import { looksLikeEmailBookRefresh } from "./email-book";
 import { cleanSubject, ComposeSeed, composeSeed, extractAddresses, MAX_BODY, verbatimBody } from "./email-compose";
 import { carOptionEnabled, CAR_DISABLED_NOTICE, menuHiddenKey, MENU_ITEMS, sanitizeHidden } from "./menu-items";
 import { cleanTitle, dayStamp, looksLikeNoteAdd, looksLikeNoteCaption, looksLikeNoteSearch, looksLikeNotesHome, noteTerms, noteTextFrom, noteWithTopic, parseNotePlan, pickTopic, startsLikeNote, storageAccount, topicRequest } from "./notes";
+import { label as trackLabel, SpotifyAssistant } from "../spotify/spotify-assistant";
+import { SpotifyCmd, spotifyCommand } from "../spotify/spotify-commands";
+import type { SpotifyService } from "../spotify/spotify.service";
 import { applyTagEdit, docFileName, docQuery, isFileOriginNote, looksLikeDocsHome, looksLikeReclassify, looksLikeTagsList, RECLASSIFY_BATCH, RECLASSIFY_MAX_READS, parseDocPlan, parseTagEdit, searchDocs, searchTerms, tagsLine, topTags } from "./documents";
 import { catalogedDriveIds, createDocument, deleteDocument, getDocument, listDocuments, setDocumentTags } from "./documents-store";
 import { pdfPageCount } from "./media-limits";
@@ -110,7 +113,28 @@ export class MenuService {
     private weather?: WeatherService,
     private vault?: VaultService,
     private intents?: IntentService,
+    private spotify?: SpotifyService,
   ) {}
+
+  private spotifyAssistant?: SpotifyAssistant;
+
+  /** O assistente do Spotify, montado na primeira vez (a IA, o clima e o Jev vêm daqui). */
+  private spotifyBot(): SpotifyAssistant {
+    return (this.spotifyAssistant ??= new SpotifyAssistant(this.spotify!, {
+      ai: (system, user) => this.ai(system, user, true),
+      mood: async (ws) => {
+        if (!this.weather) return null;
+        try {
+          const loc = await loadLocation(this.state, ws);
+          const w = await this.weather.forecast(loc.lat, loc.lng);
+          return `${loc.name}, ${Math.round(w.temp)}°, ${describeCode(w.code, w.isDay).text}, ${w.isDay ? "de dia" : "de noite"}${w.rainNext6h >= 50 ? ", com chance de chuva" : ""}`;
+        } catch {
+          return null;
+        }
+      },
+      pickTrack: this.intents ? (query, tracks) => this.intents!.pickTrack(query, tracks) : undefined,
+    }));
+  }
 
   /** Última lista de arquivos montada por workspace, à espera de ser entregue junto com a resposta. */
   private readonly driveShown = new Map<string, any[]>();
@@ -174,6 +198,12 @@ export class MenuService {
         // Buscar e-mails no Gmail: "buscar e-mails do Marcos", "e-mails sobre contrato"
         const search = emailSearchSpec(flat);
         if (search && (await this.services(workspaceId)).includes("email")) return await this.emailSearchView(workspaceId, search);
+      }
+      // Spotify: "tocar catingueira", "pausar", "volume 40", "criar playlist para estudar". Só com o serviço liberado e o Spotify configurado;
+      // com ele ligado, "tocar/ouvir" vai para o Spotify (e "quero/baixe a música X" continua pedindo o ARQUIVO do Drive)
+      if (!isInput && !pending && this.spotify?.isConfigured() && (await this.services(workspaceId)).includes("spotify")) {
+        const cmd = spotifyCommand(flat);
+        if (cmd) return await this.spotifyRun(workspaceId, cmd);
       }
       // Documentos (PDFs com tags): "documentos", "documentos com a tag contrato", "tags"
       if (!isInput && !pending && (await this.services(workspaceId)).includes("drive")) {
@@ -389,6 +419,16 @@ export class MenuService {
         // A tela continua aberta: dá para pedir vários nomes em seguida
         const out = looksLikeEmailBookRefresh(flat) ? await this.emailBookRefresh(ws) : looksLikeContactsRefresh(flat) ? await this.contactsRefresh(ws) : await this.contactLookupView(ws, contactQuery(flat) ?? text.trim().slice(0, 60));
         return `${out}\n${DIV}\n💡 _Diga outro nome, ou 0 para voltar._`;
+      }
+      case "spotify_list": {
+        if (n === 0) return this.mainMenu(ws, false);
+        if (n === null) return null;
+        const t = d.tracks[n - 1];
+        return t ? (await this.spotifyBot().playTrack(ws, t)).text : this.invalid();
+      }
+      case "spotify_home": {
+        if (n === 0) return this.mainMenu(ws, false);
+        return n === null ? null : this.invalid();
       }
       case "docs_input": {
         if (n === 0) return this.mainMenu(ws, false);
@@ -791,6 +831,10 @@ export class MenuService {
       labels.push({ id: "car", icon: "🚗", label: "Modo carro" });
     }
     if (accounts.length && services.includes("drive")) {
+      if (this.spotify?.isConfigured() && services.includes("spotify")) {
+        options.push({ type: "spotify" });
+        labels.push({ id: "spotify", icon: "🎧", label: "Spotify", sub: "tocar, pausar e criar playlists" });
+      }
       options.push({ type: "drive" });
       labels.push({ id: "drive", icon: "📁", label: "Google Drive", sub: "pedir um arquivo" });
       options.push({ type: "notes" });
@@ -828,6 +872,7 @@ export class MenuService {
       contacts: google && services.includes("drive"),
       notes: google && services.includes("drive"),
       docs: google && services.includes("drive"),
+      spotify: !!this.spotify?.isConfigured() && services.includes("spotify"),
       vault: services.includes("vault"),
     };
     return MENU_ITEMS.filter((i) => (i.id !== "car" || carOptionEnabled()) && (available[i.id] ?? true)).map((i) => ({ id: i.id, icon: i.icon, label: i.label, hidden: hidden.has(i.id), locked: i.id === "config" }));
@@ -1005,6 +1050,7 @@ export class MenuService {
     if (opt.type === "contacts") return this.contactsEntry(ws);
     if (opt.type === "notes") return this.notesEntry(ws);
     if (opt.type === "docs") return this.docsEntry(ws);
+    if (opt.type === "spotify") return this.spotifyEntry(ws);
     if (opt.type === "routine") return this.routineList(ws);
     if (opt.type === "config") return this.configMenu(ws);
     if (opt.type === "vault") return this.vaultHome(ws);
@@ -1503,6 +1549,32 @@ export class MenuService {
       this.logger.warn(`Abrir nota falhou: ${e.message}`);
       return `😕 Não consegui abrir a nota: ${short(e.message, 200)}`;
     }
+  }
+
+  // ─── Spotify ──────────────────────────────────────────────────
+
+  private async spotifyEntry(ws: string): Promise<string> {
+    const st = await this.spotify!.status(ws);
+    await this.set(ws, "spotify_home");
+    return [
+      head("🎧", "Spotify", st.connected ? `conectado como ${st.name}${st.premium ? "" : " (sem Premium)"}` : "não conectado"),
+      st.connected
+        ? ["▶️ *tocar* catingueira · ⏸️ *pausar* · ⏭️ *pular música* · 🔊 *volume 40*", "🎶 *o que está tocando* · 🎧 *meus aparelhos*", "📝 *criar playlist para estudar*", "🔎 *músicas sobre saudade* · 🌦️ *música para o clima de hoje*"].join("\n")
+        : "Conecte a sua conta em *Canais*, no painel.",
+      ...(st.connected && !st.premium ? ["_Sem Premium, só dá para buscar e criar playlists: o Spotify não deixa controlar o player._"] : []),
+      DIV,
+      opts(BACK),
+    ].join("\n");
+  }
+
+  /** Executa o comando; quando há várias músicas, mostra a lista numerada (o número toca). */
+  private async spotifyRun(ws: string, cmd: SpotifyCmd): Promise<string> {
+    if (cmd.kind === "home") return this.spotifyEntry(ws);
+    const r = await this.spotifyBot().run(ws, cmd);
+    if (!r.list) return r.text;
+    await this.set(ws, "spotify_list", { tracks: r.list.tracks });
+    const rows = r.list.tracks.map((t, i) => `${key(i + 1)} 🎵 ${trackLabel(t)}${t.album ? `\n     _${short(t.album, 40)}_` : ""}`);
+    return [r.text, rows.join("\n"), foot("Responda com o número para tocar"), opts(BACK)].join("\n");
   }
 
   // ─── Documentos (PDFs com tags) ───────────────────────────────

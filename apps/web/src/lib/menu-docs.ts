@@ -138,6 +138,23 @@ export const MENU_DOCS: DocNode[] = [
     limits: "Ele recusa guardar senhas em notas: use o cofre. Só consegue apagar as notas que ele mesmo criou; uma nota que você colocou à mão na pasta deve ser apagada pelo Drive.",
   },
   {
+    id: "spotify",
+    icon: "🎧",
+    title: "Spotify",
+    summary: "Toca e controla o seu Spotify, acha músicas por nome ou assunto, cria playlists e sugere músicas pelo clima e pelo lugar onde você está.",
+    needs: "Spotify conectado em Canais (no painel) e o serviço Spotify liberado. Controlar a reprodução exige conta Premium e o app do Spotify aberto em algum aparelho.",
+    say: ["spotify", "meus aparelhos"],
+    children: [
+      { id: "spotify-tocar", icon: "▶️", title: "Tocar e controlar", summary: "Diga o nome da música ou do artista. Se houver dúvida entre resultados, ele mostra uma lista e o número toca. Sem aparelho ativo, passa a tocar no primeiro disponível.", say: ["tocar catingueira", "ouvir legião urbana", "pausar", "continuar", "pular música", "música anterior", "volume 40", "o que está tocando"] },
+      { id: "spotify-assunto", icon: "🔎", title: "Buscar música por assunto", summary: "A IA pensa em consultas para o assunto e o Spotify devolve as músicas reais; escolha pelo número para tocar.", say: ["músicas sobre saudade", "músicas que falam de viagem"] },
+      { id: "spotify-clima", icon: "🌦️", title: "Música pelo clima e lugar", summary: "Sugere músicas que combinam com o tempo e o lugar onde você está (o mesmo do menu de clima).", say: ["música para o clima de hoje", "toca alguma coisa"] },
+      { id: "spotify-playlist", icon: "📝", title: "Criar uma playlist", summary: "Monta uma playlist privada na sua conta com até 20 músicas e devolve o link.", say: ["criar playlist para estudar", "criar playlist de forró"], add: "Diga “criar playlist para <assunto>”. Ela aparece na sua biblioteca do Spotify." },
+    ],
+    add: "Conectar a conta em Canais e criar playlists (veja “Criar uma playlist”).",
+    remove: "Desconectar o Spotify em Canais. As playlists criadas ficam na sua conta: apague pelo próprio Spotify.",
+    limits: "Com “tocar” e “ouvir” o Spotify responde (quando está conectado); para receber um ARQUIVO de música do Drive, diga “quero a música X” ou “baixe a música X”. O assistente não apaga nem edita playlists existentes.",
+  },
+  {
     id: "docs",
     icon: "📚",
     title: "Documentos",

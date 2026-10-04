@@ -31,6 +31,7 @@ interface PickKind {
 const PICK_RULES = "Considere erro de digitação, falta de acento, palavras a mais ou a menos (artista, sufixo como Jr, extensão do arquivo) e apelido. Se mais de um servir igualmente, ou na dúvida, responda nenhum.";
 const PERSON: PickKind = { id: "pessoa", noun: "a pessoa pedida", question: "Qual destes contatos é a pessoa que o dono da secretária procura?" };
 const FILE: PickKind = { id: "arquivo", noun: "o arquivo pedido", question: "Qual destes arquivos do Google Drive (música, documento, planilha, foto...) é o que o dono pediu pelo nome ou descrição?" };
+const TRACK: PickKind = { id: "musica", noun: "a música ou o artista pedido", question: "Qual destes resultados do Spotify é a música (ou o artista) que o dono pediu para tocar?" };
 const TOPIC: PickKind = { id: "assunto", noun: "o assunto pedido", question: "Qual destes assuntos de nota é o que o dono quer abrir?" };
 
 /** Só aceita a resposta do Jev quando ele está seguro; "other" nunca desvia o fluxo. */
@@ -120,6 +121,11 @@ export class IntentService {
   /** Arquivo do Drive (música, documento, planilha...): só os nomes dos arquivos vão ao Jev. */
   pickFile(query: string, files: { nome: string }[]) {
     return this.pickOne(FILE, query, files.map((f) => f.nome));
+  }
+
+  /** Resultado do Spotify (só "nome — artistas" vai ao Jev). */
+  pickTrack(query: string, tracks: { name: string; artists: string }[]) {
+    return this.pickOne(TRACK, query, tracks.map((t) => `${t.name} — ${t.artists}`));
   }
 
   /** Assunto de nota entre os existentes. */

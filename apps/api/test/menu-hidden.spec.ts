@@ -105,8 +105,8 @@ describe("menuItems (tela do painel)", () => {
     const { menu } = build();
     await menu.setHiddenItems("w1", ["drive"]);
     const items = await menu.menuItems("w1");
-    // o "Modo carro" está desativado por padrão (CAR_MODE=on religa)
-    expect(items.map((i) => i.id)).toEqual(MENU_ITEMS.filter((i) => i.id !== "car").map((i) => i.id));
+    // "Modo carro" (CAR_MODE=on) e "Spotify" (precisa das chaves) só aparecem quando ligados
+    expect(items.map((i) => i.id)).toEqual(MENU_ITEMS.filter((i) => i.id !== "car" && i.id !== "spotify").map((i) => i.id));
     expect(items.find((i) => i.id === "drive")).toMatchObject({ hidden: true, locked: false });
     expect(items.find((i) => i.id === "agenda")).toMatchObject({ hidden: false });
     expect(items.find((i) => i.id === "config")).toMatchObject({ locked: true, hidden: false });
