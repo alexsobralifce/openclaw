@@ -4,34 +4,7 @@ Quando o dono pedir "adicione na fila", o item entra aqui, com o contexto, as de
 
 ## Próximas
 
-### 1. Catálogo de PDFs e documentos, com tags para buscar por assunto
-Pedido em 04/10/2026: a inserção de PDFs, assim como a documentação deles, precisa ser organizada e catalogada, com tags que identifiquem o assunto a buscar.
-
-**Como é hoje**
-- PDF ou foto enviado ao assistente é lido pelo Gemini, resumido e vira uma **nota** em `Assist.IA/Notas/<assunto>/` no Drive (`noteIngest`, `renderNote`).
-- O **arquivo original não é guardado**: só o resumo.
-- A nota tem no topo `assunto`, `criada`, `origem` e `tags: [<assunto>]`: ou seja, a única "tag" é o nome do assunto.
-- A busca (`noteSearch`) procura trechos de texto nas notas; não há busca por tag nem listagem de catálogo.
-
-**Decisões do dono** (04/10/2026)
-1. **Guardar o PDF original** no Drive (`Assist.IA/Documentos`), com uma **ficha de catálogo**: título, assunto, tags, data e resumo.
-2. **Tags: a IA sugere (3 a 6 por documento) e o dono edita** (acrescenta e tira, por exemplo "tags do documento 2: contrato, aluguel").
-3. **Catálogo no assistente e numa página de biblioteca no painel**, com filtro por tag e botão de baixar.
-4. **Reclassificar os PDFs que já viraram nota**: um comando passa pelas notas que vieram de PDF e acrescenta as tags, sem apagar nada.
-
-**Pontos técnicos a decidir ao começar** (não bloqueiam o pedido)
-- Onde guardar o catálogo para buscar por tag: propriedades do próprio arquivo no Drive (`appProperties`) ou uma tabela no Postgres (busca e filtro mais simples; precisa de índice comum, nunca `@unique`). A recomendação é Postgres para o índice e o Drive para o arquivo.
-- Limite de tamanho e de páginas do PDF (hoje 15 MB e o teto do plano, em `media-limits.ts`) e o que fazer com PDF escaneado, sem texto.
-- Com o escopo `drive.file`, o app só mexe em arquivos que ele mesmo criou: o PDF guardado por ele pode ser listado e apagado; PDFs que o dono já tinha no Drive entram no catálogo só por cópia ou por link.
-- Reclassificação: rodar em lotes pequenos e mostrar o progresso, porque cada nota custa uma chamada de IA.
-
-**Fecha o item quando**
-- todo PDF novo entra com título, assunto, tags e data, num lugar previsível;
-- dá para pedir "documentos com a tag X" / "o PDF sobre Y" e receber a lista (e o arquivo, se foi guardado);
-- dá para ver, acrescentar e tirar tags de um documento;
-- a página de ajuda (`lib/menu-docs.ts`) explica o fluxo, e há testes.
-
-### 2. Integração com o Spotify, com localização e tempo pelo Google
+### 1. Integração com o Spotify, com localização e tempo pelo Google
 Pedido em 04/10/2026 (feito no meio do catálogo de PDFs): "adicione integração com Spotify, com a localização e tempo através do Google".
 
 **Como é hoje**
@@ -51,6 +24,7 @@ Pedido em 04/10/2026 (feito no meio do catálogo de PDFs): "adicione integraçã
 - **Menu em árvore dentro do WhatsApp:** comando "ajuda" que responde com a árvore, além da página do painel.
 
 ## Feito
+- 04/10/2026: **catálogo de PDFs com tags** (PDF guardado no Drive em `Assist.IA/Documentos`, ficha no Postgres, tags sugeridas pela IA e editáveis, busca por tag, biblioteca no painel, reclassificação das notas antigas). Ficou de fora, por não ter sido pedido: enviar o PDF direto pela página do painel (hoje entra pelo chat, WhatsApp ou app) e catalogar PDFs recebidos pelo Telegram.
 - 04/10/2026: apagar evento da agenda e concluir/apagar nota; página de ajuda em árvore.
 - 04/10/2026: aviso curto de e-mail novo (sem despejar a fila); modo carro desativado.
 - 03/10/2026: chat do app (áudio, arquivo, botão de baixar), Telegram, login com Google, PWA, domínio próprio, memória de conversa de 24 h, Jev nas buscas.

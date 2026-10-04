@@ -52,6 +52,17 @@ export const nav: { href: string; label: string; icon: React.ReactNode; service?
     ),
   },
   {
+    href: "/dashboard/documentos",
+    label: "Documentos",
+    service: "drive",
+    icon: (
+      <svg width="20" height="20" fill="none" viewBox="0 0 24 24">
+        <path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8l-5-5Z" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
+        <path d="M14 3v5h5M9 13h6M9 17h4" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
+      </svg>
+    ),
+  },
+  {
     href: "/dashboard/channels",
     label: "Canais",
     service: "channels",

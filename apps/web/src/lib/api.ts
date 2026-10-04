@@ -99,6 +99,21 @@ export interface ChatListedFile {
   tamanho: number;
 }
 
+/** Documento do catálogo (PDF guardado no Drive, com tags). */
+export interface DocumentView {
+  id: string;
+  kind: "pdf" | "nota";
+  title: string;
+  topic: string;
+  tags: string[];
+  summary: string;
+  mime: string;
+  sizeBytes: number;
+  pages: number | null;
+  origin: string;
+  createdAt: string;
+}
+
 /** Mensagem do chat do assistente no app. */
 export interface ChatMessage {
   id: string;
@@ -110,6 +125,25 @@ export interface ChatMessage {
 }
 
 export const api = {
+  documents: {
+    list: (q?: string, tag?: string) => {
+      const p = new URLSearchParams();
+      if (q?.trim()) p.set("q", q.trim());
+      if (tag) p.set("tag", tag);
+      return request<{ documents: DocumentView[]; tags: { tag: string; count: number }[]; total: number }>(`/documents${p.size ? `?${p}` : ""}`);
+    },
+    update: (id: string, patch: { tags?: string[]; title?: string; topic?: string }) => request<DocumentView>(`/documents/${encodeURIComponent(id)}`, { method: "PATCH", body: JSON.stringify(patch) }),
+    remove: (id: string) => request<{ ok: boolean }>(`/documents/${encodeURIComponent(id)}`, { method: "DELETE" }),
+    /** Baixa na hora, do Drive do usuário. Arquivo grande demais: o erro traz o link do Drive em `link`. */
+    download: async (id: string): Promise<Blob> => {
+      const res = await fetch(`${API}/api/v1/documents/${encodeURIComponent(id)}/download`, { headers: { Authorization: `Bearer ${localStorage.getItem("oc_token") ?? ""}` } });
+      if (!res.ok) {
+        const err: any = await res.json().catch(() => ({}));
+        throw Object.assign(new Error(err.message || "Não consegui baixar o documento."), { link: typeof err.link === "string" ? err.link : null });
+      }
+      return res.blob();
+    },
+  },
   appChat: {
     messages: (after?: string) => request<ChatMessage[]>(`/app-chat/messages${after ? `?after=${encodeURIComponent(after)}` : ""}`),
     send: (text: string) => request<ChatMessage>("/app-chat/messages", { method: "POST", body: JSON.stringify({ text }) }),

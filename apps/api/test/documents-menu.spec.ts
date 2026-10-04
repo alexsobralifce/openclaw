@@ -32,7 +32,7 @@ import { MenuService } from "../src/modules/channels/assistant/menu.service";
 
 const plan = (over: Record<string, any> = {}) => JSON.stringify({ titulo: "Contrato de aluguel", assunto: "Contratos", tags: ["Contrato", "Aluguel", "Imóvel"], resumo: "Aluguel de 12 meses com reajuste anual.", erro: null, ...over });
 
-function build(opts: { gemini?: boolean; accounts?: string[]; extract?: string; pick?: number | null } = {}) {
+function build(opts: { gemini?: boolean; accounts?: string[]; extract?: string; pick?: number | null; google?: Record<string, any> } = {}) {
   const store = new Map<string, any>();
   const state = { get: async (k: string) => store.get(k) ?? null, set: async (k: string, v: any) => void store.set(k, v), del: async (k: string) => void store.delete(k) };
   const google: any = {
@@ -41,6 +41,7 @@ function build(opts: { gemini?: boolean; accounts?: string[]; extract?: string; 
     documentTrash: vi.fn(async () => {}),
     driveFile: vi.fn(async (_ws: string, id: string) => ({ nome: `arquivo-${id}.pdf`, mime: "application/pdf", base64: "QUJD" })),
   };
+  Object.assign(google, opts.google ?? {});
   const gemini: any = { enabled: () => opts.gemini ?? true, extract: vi.fn(async () => opts.extract ?? plan()) };
   const intents: any = { enabled: () => true, classify: async () => null, pickFile: vi.fn(async () => opts.pick ?? null) };
   const menu = new MenuService(google, {} as any, { promptBlock: async () => "", listRoutine: async () => [] } as any, state as any, gemini, undefined, undefined, intents);
@@ -275,5 +276,79 @@ describe("apagar documento", () => {
     await say("1");
     expect(google.documentTrash).not.toHaveBeenCalled();
     expect(rows).toHaveLength(0);
+  });
+});
+
+describe("reclassificar notas antigas de PDF", () => {
+  const note = (id: string, name: string, origem = "arquivo") => ({ id, name, content: `---\nassunto: Contratos\ncriada: 2026-09-01\norigem: ${origem}\ntags: [contratos]\n---\n# ${name}\n\nTexto da nota ${name}.` });
+
+  function setup(notes: ReturnType<typeof note>[], over: Record<string, any> = {}) {
+    const noteRead = vi.fn(async (_ws: string, id: string) => ({ name: id, topic: "Contratos", content: notes.find((n) => n.id === id)!.content }));
+    return build({
+      extract: JSON.stringify({ titulo: "x", assunto: "x", tags: ["Contrato", "Aluguel"], resumo: "Resumo curto da nota.", erro: null }),
+      google: { noteTopics: vi.fn(async () => [{ id: "topic0001", name: "Contratos" }]), notesIn: vi.fn(async () => notes.map((n) => ({ id: n.id, name: n.name, modified: "x", link: "y" }))), noteRead, ...over },
+    });
+  }
+
+  it("cataloga só as notas que vieram de arquivo, com tags, sem mexer nas notas", async () => {
+    const { say, google, gemini } = setup([note("note00001", "Contrato de aluguel"), note("note00002", "Anotação solta", "whatsapp")]);
+    const out = await say("reclassificar notas");
+    expect(out).toContain("Catalogadas agora: 1");
+    expect(out).toContain("Contrato de aluguel");
+    expect(out).toContain("Todas as notas que vieram de PDF já estão no catálogo");
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toMatchObject({ kind: "nota", title: "Contrato de aluguel", topic: "Contratos", tags: ["contrato", "aluguel"], mime: "text/markdown", origin: "reclassificada", driveFileId: "note00001" });
+    // a IA recebe só o texto da nota (sem as propriedades do topo) e a nota original não é regravada
+    expect(gemini.extract).toHaveBeenCalledTimes(1);
+    expect(gemini.extract.mock.calls[0][1].text).toContain("Texto da nota");
+    expect(gemini.extract.mock.calls[0][1].text).not.toContain("origem:");
+    expect(google.documentStore).not.toHaveBeenCalled();
+    expect(google.documentTrash).not.toHaveBeenCalled();
+  });
+
+  it("repetir o comando não refaz o que já está no catálogo nem relê as notas já descartadas", async () => {
+    const { say, google, gemini } = setup([note("note00001", "Contrato de aluguel"), note("note00002", "Anotação solta", "whatsapp")]);
+    await say("reclassificar notas");
+    const reads = google.noteRead.mock.calls.length;
+    const again = await say("reclassificar notas");
+    expect(again).toContain("Nenhuma nota nova");
+    expect(google.noteRead.mock.calls.length).toBe(reads); // nenhuma leitura a mais
+    expect(gemini.extract).toHaveBeenCalledTimes(1);
+    expect(rows).toHaveLength(1);
+  });
+
+  it("trabalha em lotes de 5 e 'continuar reclassificação' segue de onde parou", async () => {
+    const eight = Array.from({ length: 8 }, (_, i) => note(`note0000${i + 1}`, `Documento ${i + 1}`));
+    const { say } = setup(eight);
+    const first = await say("reclassificar documentos");
+    expect(first).toContain("Catalogadas agora: 5");
+    expect(first).toContain("Ainda faltam cerca de *3*");
+    expect(rows).toHaveLength(5);
+    const second = await say("continuar reclassificação");
+    expect(second).toContain("Catalogadas agora: 3");
+    expect(second).toContain("Todas as notas que vieram de PDF já estão no catálogo");
+    expect(rows).toHaveLength(8);
+  });
+
+  it("nota já catalogada é pulada; falha da IA numa nota não derruba as outras", async () => {
+    seed({ kind: "nota", driveFileId: "note00001", title: "Já catalogada" });
+    const ctx = setup([note("note00001", "Já catalogada"), note("note00002", "Segunda"), note("note00003", "Terceira")]);
+    ctx.gemini.extract.mockRejectedValueOnce(new Error("Gemini fora do ar"));
+    const out = await ctx.say("catalogar notas de pdf");
+    expect(out).toContain("Catalogadas agora: 1");
+    expect(rows.map((r) => r.title).sort()).toEqual(["Já catalogada", "Terceira"]);
+  });
+
+  it("as fichas reclassificadas passam a aparecer na busca por tag", async () => {
+    const { say } = setup([note("note00001", "Contrato de aluguel")]);
+    await say("reclassificar notas");
+    expect(await say("documentos com a tag aluguel")).toContain("Contrato de aluguel");
+  });
+
+  it("sem Gemini, sem Google ou sem notas, avisa e não quebra", async () => {
+    expect(await build({ gemini: false }).say("reclassificar notas")).toContain("GEMINI_API_KEY");
+    expect(await build({ accounts: [] }).say("reclassificar notas")).toContain("Google");
+    const none = build({ google: { noteTopics: vi.fn(async () => []) } });
+    expect(await none.say("reclassificar notas")).toContain("Nenhuma nota nova");
   });
 });

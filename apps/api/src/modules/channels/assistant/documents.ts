@@ -138,6 +138,21 @@ export function docQuery(flat: string): string | null {
   return q && searchTerms(q).length ? q : null;
 }
 
+/** "reclassificar notas", "catalogar meus pdfs antigos", "continuar reclassificação": passa pelas notas que vieram de arquivo e cria as fichas com tags. */
+export function looksLikeReclassify(flat: string): boolean {
+  return (
+    /^(?:por favor )?(?:reclassificar|reclassifica|catalogar|cataloga)\s+(?:as |minhas |meus |os |todas as |todos os )?(?:notas|documentos|pdfs)(?: antig\w+| de pdf| de pdfs| de arquivo| de arquivos| com tags)*$/.test(flat) ||
+    /^(?:continuar|continua|seguir) (?:a )?(?:reclassificacao|catalogacao)$/.test(flat)
+  );
+}
+
+/** A nota veio de um PDF ou foto? (`renderNote` grava "origem: arquivo" nas propriedades do topo). */
+export const isFileOriginNote = (content: string) => /^---\r?\n[\s\S]*?\borigem:\s*arquivo\b[\s\S]*?\r?\n---/.test(content);
+
+/** Quantas notas por rodada (cada uma custa uma chamada de IA) e quantas no máximo se abrem para checar a origem. */
+export const RECLASSIFY_BATCH = 5;
+export const RECLASSIFY_MAX_READS = 25;
+
 export interface TagEdit {
   mode: "set" | "add" | "remove";
   tags: string[];

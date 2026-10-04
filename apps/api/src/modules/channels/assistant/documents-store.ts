@@ -3,6 +3,7 @@
 
 import { prisma } from "@openclaw/database";
 import { DocFields, sanitizeTags } from "./documents";
+import { cleanTitle, cleanTopic } from "./notes";
 
 export interface NewDocument extends DocFields {
   workspaceId: string;
@@ -44,6 +45,17 @@ export const getDocument = (workspaceId: string, id: string) => prisma.document.
 /** Troca as tags (sempre limpas, sem repetir, no máximo 8). Devolve a ficha atualizada, ou null se não é deste workspace. */
 export async function setDocumentTags(workspaceId: string, id: string, tags: string[]) {
   const r = await prisma.document.updateMany({ where: { id, workspaceId }, data: { tags: sanitizeTags(tags) } });
+  return r.count ? getDocument(workspaceId, id) : null;
+}
+
+/** Muda título, assunto e/ou tags pelo painel (limpos e com tamanho máximo). Devolve a ficha atualizada, ou null se não é deste workspace. */
+export async function updateDocument(workspaceId: string, id: string, patch: { title?: string; topic?: string; tags?: string[] }) {
+  const data: Record<string, unknown> = {};
+  if (patch.title !== undefined) data.title = cleanTitle(patch.title, "Documento");
+  if (patch.topic !== undefined) data.topic = cleanTopic(patch.topic);
+  if (patch.tags !== undefined) data.tags = sanitizeTags(patch.tags);
+  if (!Object.keys(data).length) return getDocument(workspaceId, id);
+  const r = await prisma.document.updateMany({ where: { id, workspaceId }, data });
   return r.count ? getDocument(workspaceId, id) : null;
 }
 

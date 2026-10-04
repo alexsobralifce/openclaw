@@ -6,7 +6,9 @@ import {
   docQuery,
   DocLike,
   docScore,
+  isFileOriginNote,
   looksLikeDocsHome,
+  looksLikeReclassify,
   looksLikeTagsList,
   parseDocPlan,
   parseTagEdit,
@@ -139,5 +141,18 @@ describe("comandos do catálogo", () => {
   });
   it("frases que não são edição de tag", () => {
     for (const t of ["tags", "adicionar na agenda", "tirar spam", "apagar", "tags:", "documentos"]) expect(parseTagEdit((t)), t).toBeNull();
+  });
+});
+
+describe("reclassificar notas antigas", () => {
+  it("reconhece o pedido", () => {
+    for (const t of ["reclassificar notas", "reclassificar documentos", "catalogar meus pdfs antigos", "catalogar as notas de pdf", "continuar reclassificação", "reclassificar as notas antigas com tags"]) expect(looksLikeReclassify(flat(t)), t).toBe(true);
+    for (const t of ["notas", "documentos", "apagar notas", "classificar", "documentos com a tag contrato"]) expect(looksLikeReclassify(flat(t)), t).toBe(false);
+  });
+  it("só nota que veio de arquivo (PDF/foto) conta", () => {
+    expect(isFileOriginNote("---\nassunto: Contratos\ncriada: 2026-10-01\norigem: arquivo\ntags: [contratos]\n---\n# Contrato")).toBe(true);
+    expect(isFileOriginNote("---\nassunto: Geral\norigem: whatsapp\ntags: [geral]\n---\n# Nota")).toBe(false);
+    expect(isFileOriginNote("# Sem propriedades\norigem: arquivo")).toBe(false);
+    expect(isFileOriginNote("---\nassunto: A\n---\ntexto com origem: arquivo no corpo")).toBe(false);
   });
 });
