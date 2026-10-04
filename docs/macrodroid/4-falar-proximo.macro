@@ -1,0 +1,94 @@
+{
+  "macroExportVersion": 1,
+  "macro": {
+    "m_name": "Falar: próximo",
+    "m_description": "Continua para o próximo item do assistente pela API do assistente (sem Gemini/WhatsApp)",
+    "m_enabled": true,
+    "m_completed": true,
+    "m_GUID": 0,
+    "aiGenerated": 1,
+    "localVariables": [
+      {
+        "m_name": "resposta",
+        "m_type": 2,
+        "m_stringValue": "",
+        "isLocalVar": true
+      }
+    ],
+    "m_triggerList": [
+      {
+        "m_classType": "FloatingButtonTrigger",
+        "m_SIGUID": 112233445566771,
+        "identifier": "falar-proximo",
+        "iconType": 1,
+        "iconText": "próximo",
+        "m_comment": "Troque por outro gatilho se preferir (widget, botão do fone)"
+      }
+    ],
+    "m_actionList": [
+      {
+        "requestConfig": {
+          "allowAnyCertificate": false,
+          "basicAuthEnabled": false,
+          "basicAuthPassword": "",
+          "basicAuthUsername": "",
+          "blockNextAction": true,
+          "clientCertEnabled": false,
+          "clientCertKeyStoreDisplayName": "",
+          "clientCertKeyStoreUri": "",
+          "clientCertPassword": "",
+          "contentBodyDynamicFileName": "",
+          "contentBodyFileDisplayName": "",
+          "contentBodyFileUri": "",
+          "contentBodyFolderDisplayName": "",
+          "contentBodyFolderUri": "",
+          "contentBodySource": 0,
+          "contentBodyText": "{\"text\": \"próximo\"}",
+          "contentType": "application/json",
+          "followRedirects": true,
+          "headerParams": [
+            {
+              "paramName": "Authorization",
+              "paramValue": "Bearer {v=chave_api}"
+            },
+            {
+              "paramName": "Content-Type",
+              "paramValue": "application/json"
+            }
+          ],
+          "localFileUri": "",
+          "prettifyJson": false,
+          "queryParams": [],
+          "requestTimeOutSeconds": 30,
+          "requestType": 1,
+          "responseVariableName": "resposta",
+          "saveResponseFileName": "",
+          "saveResponseFolderPathDisplayName": "",
+          "saveResponseFolderPathUri": "",
+          "saveResponseType": 1,
+          "saveReturnCodeToVariable": false,
+          "saveReturnHeadersToVariable": false,
+          "urlToOpen": "https://api-production-f2743.up.railway.app/api/public/v1/assistant/command?formato=texto",
+          "useLocalFileUri": false,
+          "useStaticContentBodyFile": true
+        },
+        "disableLogging": false,
+        "m_SIGUID": 0,
+        "m_classType": "HttpRequestAction",
+        "m_constraintList": [],
+        "m_isDisabled": false,
+        "m_isOrCondition": false
+      }
+    ],
+    "m_constraintList": []
+  },
+  "globalVariables": [
+    {
+      "m_name": "chave_api",
+      "m_type": 2,
+      "m_stringValue": "COLE_A_CHAVE_AQUI",
+      "isLocalVar": false
+    }
+  ],
+  "userIcons": null
+}

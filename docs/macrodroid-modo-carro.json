@@ -70,7 +70,7 @@
         },
         {
           "tipo": "Speak Text",
-          "texto": "[variável resposta]"
+          "texto": "{lv=resposta}"
         }
       ]
     },
@@ -106,7 +106,7 @@
         },
         {
           "tipo": "Speak Text",
-          "texto": "[variável resposta]",
+          "texto": "{lv=resposta}",
           "observacao": "Com ?formato=texto a resposta já é só a frase falada: não precisa de JSON Parse."
         }
       ],
@@ -145,7 +145,7 @@
         },
         {
           "tipo": "Speak Text",
-          "texto": "[variável resposta]",
+          "texto": "{lv=resposta}",
           "observacao": "Com ?formato=texto a resposta já é só a frase falada: não precisa de JSON Parse."
         }
       ],
@@ -184,7 +184,7 @@
         },
         {
           "tipo": "Speak Text",
-          "texto": "[variável resposta]",
+          "texto": "{lv=resposta}",
           "observacao": "Com ?formato=texto a resposta já é só a frase falada: não precisa de JSON Parse."
         }
       ],
@@ -223,7 +223,7 @@
         },
         {
           "tipo": "Speak Text",
-          "texto": "[variável resposta]",
+          "texto": "{lv=resposta}",
           "observacao": "Com ?formato=texto a resposta já é só a frase falada: não precisa de JSON Parse."
         }
       ],

@@ -70,7 +70,7 @@ Cada macro tem **uma ação de requisição e uma de fala**. Não precisa de JSO
 | Bloquear a próxima ação até terminar | **ligado** |
 | Salvar a resposta em | uma variável de texto, ex.: `resposta` |
 
-**Ação 2: Speak Text**: texto = a variável `resposta` (pelo seletor de variáveis do MacroDroid).
+**Ação 2: Speak Text**: texto = `{lv=resposta}`. Use o seletor de magic text (botão `[...]` ao lado do campo → Variável local → `resposta`) em vez de digitar. Sem as chaves, o MacroDroid fala o texto literal "lv=resposta".
 
 Use **aspas retas** (`"`) no corpo. O `?formato=texto` no fim da URL faz o assistente devolver só a frase falada.
 
@@ -89,6 +89,20 @@ Separe com `;` (até 4). O assistente roda em ordem e fala só a última respost
 Dica: monte **uma** macro completa, teste, e duplique-a trocando só o corpo.
 
 Outros comandos que o menu entende (os mesmos do WhatsApp): `clima`, `agenda amanhã`, `sair do modo carro` etc. Teste no `curl` antes.
+
+### Anotar por voz (notas no Drive)
+
+Com o serviço **Drive** liberado e o Google reconectado (escopo de gravação), dá para ditar anotações e consultá-las:
+
+| Macro | Corpo (`text`) |
+|---|---|
+| Anotar | `anota no obsidian: {lv=ditado}` (use o texto ditado pelo *Voice Input*) |
+| O que anotei | `o que anotei sobre {lv=assunto}` |
+
+- A anotação vai para `Assist.IA/AAAA-MM-DD.md` no seu Drive (uma linha com a hora) e a resposta falada é só "Anotado!".
+- Use uma palavra explícita (`obsidian`, `diário`, `caderno` ou `nota:`). Um "anota ..." solto pode ser lido como compromisso de agenda.
+- Por esta rota só valem os comandos do menu: o pedido livre à IA não roda aqui (seção 2).
+- O Obsidian é opcional: abra a pasta `Assist.IA` do Drive nele se quiser links e grafo; o assistente só usa o Drive.
 
 ## 5.1 Abrir e fechar o assistente (sessão)
 
