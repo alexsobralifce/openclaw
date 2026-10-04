@@ -257,6 +257,11 @@ export const api = {
     changeMaster: (oldPassword: string, newPassword: string) =>
       request<any>("/vault/change-master", { method: "POST", body: JSON.stringify({ oldPassword, newPassword }) }),
   },
+  spotify: {
+    status: () => request<{ configured: boolean; connected: boolean; name?: string; premium?: boolean }>("/integrations/spotify/status"),
+    authUrl: () => request<{ url: string }>("/integrations/spotify/auth-url"),
+    disconnect: () => request<{ connected: boolean }>("/integrations/spotify", { method: "DELETE" }),
+  },
   google: {
     authUrl: () => request<{ url: string; connected: boolean }>("/integrations/google/auth-url"),
   },

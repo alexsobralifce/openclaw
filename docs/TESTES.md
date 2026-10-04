@@ -14,6 +14,19 @@ Meta: poucos testes, que pegam defeito de verdade. Cada teste novo precisa respo
 - **Bottom-up** (unitário primeiro) localiza o defeito: se a base passa e o fluxo quebra, o problema é a ligação entre as peças. **Top-down** (fluxo e fumaça) prova que a jornada do usuário funciona de ponta a ponta.
 - Retrato em 04/10/2026: 300 unitários, 499 de fluxo e 20 checagens de fumaça. A pirâmide está invertida (38% unitários, 62% fluxo): os fluxos custam mais para manter porque quebram a cada mudança de menu.
 
+## Quanto rodar, e quando (o número de testes não é a meta)
+
+Rodar os 826 a cada edição é desperdício de tempo e de atenção. Três ciclos:
+
+| Quando | O que rodar | Comando |
+|---|---|---|
+| **Enquanto codifica** | só os testes ligados ao que mudou (segundos) | `pnpm test:changed` |
+| **Antes de commitar** | a camada unitária inteira (rápida) | `pnpm test:unit` |
+| **Antes de subir (deploy)** | tudo, de baixo para cima, e o typecheck | `pnpm test` e `pnpm typecheck` |
+| **Depois de subir** | o sistema no ar | `pnpm smoke` |
+
+Como não há CI, a execução completa antes do deploy é o único portão: ela precisa estar 100% verde. Mas ela não precisa rodar a cada passo. Para crescer sem inchar, vale a regra do orçamento abaixo (poucos casos por funcionalidade).
+
 ## Regras para não exagerar
 
 1. **Lógica nova vai em função pura** com teste unitário. O fluxo só prova a ligação (no máximo 1 arquivo de fluxo por funcionalidade, com 4 a 8 casos: caminho feliz, cancelar, erro, permissão).

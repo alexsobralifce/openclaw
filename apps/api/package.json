@@ -13,7 +13,8 @@
     "test:flow": "vitest run --project flow",
     "test:layers": "vitest run --project unit && vitest run --project flow",
     "test:coverage": "vitest run --coverage",
-    "test:audit": "node ../../scripts/test-audit.mjs"
+    "test:audit": "node ../../scripts/test-audit.mjs",
+    "test:changed": "vitest run --changed"
   },
   "dependencies": {
     "@nestjs/bull": "^10.2.3",

@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { api } from "@/lib/api";
 import { WhatsappSetup } from "@/components/channels/WhatsappSetup";
+import { SpotifyCard } from "@/components/channels/SpotifyCard";
 
 export default function ChannelsPage() {
   const [channels, setChannels] = useState<any[]>([]);
@@ -31,6 +32,9 @@ export default function ChannelsPage() {
     const g = new URLSearchParams(window.location.search).get("google");
     if (g === "ok") setGoogleMsg("Google conectado com sucesso.");
     if (g === "error") setGoogleMsg((new URLSearchParams(window.location.search).get("motivo") ?? "").slice(0, 240) || "Não foi possível conectar o Google. Tente novamente.");
+    const sp = new URLSearchParams(window.location.search).get("spotify");
+    if (sp === "ok") setGoogleMsg("Spotify conectado com sucesso.");
+    if (sp === "error") setGoogleMsg("Não foi possível conectar o Spotify. Tente novamente.");
     const ig = new URLSearchParams(window.location.search).get("instagram");
     if (ig === "ok") setGoogleMsg("Instagram conectado com sucesso.");
     if (ig === "error") setGoogleMsg("Não foi possível conectar o Instagram. Tente novamente.");
@@ -62,6 +66,8 @@ export default function ChannelsPage() {
       {googleMsg && (
         <div className="mb-4 px-4 py-3 rounded-lg bg-gray-900 border border-gray-800 text-sm text-gray-300">{googleMsg}</div>
       )}
+
+      <SpotifyCard onMessage={setGoogleMsg} />
 
       {/* Canal cards */}
       {channels.length === 0 ? (

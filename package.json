@@ -10,7 +10,8 @@
     "db:push": "turbo run db:push",
     "db:migrate": "turbo run db:migrate",
     "test": "cd apps/api && pnpm test:layers",
-    "smoke": "node scripts/smoke.mjs"
+    "smoke": "node scripts/smoke.mjs",
+    "test:changed": "cd apps/api && pnpm test:changed"
   },
   "devDependencies": {
     "turbo": "^2.3.3",
