@@ -44,6 +44,10 @@ const clock = (s: number) => `${Math.floor(s / 60)}:${String(s % 60).padStart(2,
 export default function ChatPage() {
   const me = useMe();
   const [messages, setMessages] = useState<ChatMessage[]>([]);
+  // Abertura: enquanto as mensagens chegam e a tela vai até a última, mostra uma animação em vez da rolagem passando
+  const [loaded, setLoaded] = useState(false);
+  const [ready, setReady] = useState(false);
+  const firstScroll = useRef(true);
   const [text, setText] = useState("");
   const [typing, setTyping] = useState(false);
   const [error, setError] = useState("");
@@ -64,7 +68,7 @@ export default function ChatPage() {
   const add = useCallback((m: ChatMessage) => setMessages((prev) => (prev.some((p) => p.id === m.id) ? prev : [...prev, m])), []);
 
   useEffect(() => {
-    api.appChat.messages().then(setMessages).catch((e) => setError(e.message));
+    api.appChat.messages().then(setMessages).catch((e) => setError(e.message)).finally(() => setLoaded(true));
     api.telegram.status().then(setTg).catch(() => undefined);
     api.appChat.pushStatus().then(setPush).catch(() => undefined);
   }, []);
@@ -84,7 +88,15 @@ export default function ChatPage() {
     return () => { socket.disconnect(); };
   }, [add]);
 
-  useEffect(() => { bottom.current?.scrollIntoView({ behavior: "smooth" }); }, [messages, typing]);
+  useEffect(() => {
+    if (!loaded) return;
+    // Primeira vez: pula direto para o fim, sem rolagem animada; depois some a animação. Mensagens novas rolam suave.
+    bottom.current?.scrollIntoView({ behavior: firstScroll.current ? "auto" : "smooth" });
+    if (firstScroll.current) {
+      firstScroll.current = false;
+      requestAnimationFrame(() => setReady(true));
+    }
+  }, [messages, typing, loaded]);
 
   // Sair da tela com o microfone aberto não pode deixá-lo ligado
   useEffect(() => () => cleanupRec(), []);
@@ -294,7 +306,18 @@ export default function ChatPage() {
         )}
       </div>
 
-      <div className="flex-1 overflow-y-auto px-2.5 py-2 space-y-1.5" aria-live="polite">
+      <div className="relative flex-1 min-h-0">
+      {!ready && (
+        <div className="absolute inset-0 z-10 flex flex-col justify-end gap-2 px-2.5 py-3 bg-gray-950" role="status" aria-label="Carregando suas mensagens">
+          {[["w-2/3", "start"], ["w-1/2", "end"], ["w-3/4", "start"], ["w-2/5", "end"], ["w-3/5", "start"]].map(([w, side], i) => (
+            <div key={i} className={`flex ${side === "end" ? "justify-end" : "justify-start"}`}>
+              <div className={`${w} h-10 rounded-2xl bg-gray-800 animate-pulse`} style={{ animationDelay: `${i * 120}ms` }} />
+            </div>
+          ))}
+          <p className="text-center text-xs text-gray-500 pt-1">Carregando suas mensagens…</p>
+        </div>
+      )}
+      <div className={`h-full overflow-y-auto px-2.5 py-2 space-y-1.5 ${ready ? "" : "invisible"}`} aria-live="polite">
         {messages.length === 0 && <p className="text-sm text-gray-500 px-1">Escreva ou grave o que precisa, por exemplo “agenda de hoje” ou “ler e-mails”. Também aceito foto e PDF.</p>}
         {messages.map((m) => (
           <div key={m.id} className={`flex ${m.direction === "IN" ? "justify-end" : "justify-start"}`}>
@@ -336,6 +359,7 @@ export default function ChatPage() {
         ))}
         {(typing || busy) && <p className="text-xs text-gray-500 px-1">{busy && !typing ? "Enviando…" : "Digitando…"}</p>}
         <div ref={bottom} />
+      </div>
       </div>
 
       {error && <div className="mx-3 mb-1 text-xs rounded-lg px-3 py-2 bg-red-500/10 text-red-300" role="alert">{error}</div>}

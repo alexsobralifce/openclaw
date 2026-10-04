@@ -33,6 +33,9 @@ const ICONS = {
   chat: "M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2Z",
   shield: "M12 3 4 6v6c0 5 3.5 8 8 9 4.5-1 8-4 8-9V6Z M9 12l2 2 4-4",
   check: "m5 12 5 5L20 7",
+  doc: "M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8zM14 3v5h5M9 13h6M9 17h6",
+  grid: "M4 4h7v9H4zM13 4h7v5h-7zM13 11h7v9h-7zM4 15h7v5H4z",
+  lock: "M6 11h12v9H6zM8 11V8a4 4 0 0 1 8 0v3",
 };
 
 const BENEFITS = [
@@ -41,6 +44,9 @@ const BENEFITS = [
   { icon: ICONS.bell, title: "Aviso de e-mail na hora", text: "Chegou um e-mail? Você recebe quem mandou e decide em um toque: ler, apagar ou responder." },
   { icon: ICONS.cal, title: "Gmail e Google Agenda", text: "Conecte até duas contas Google, veja os compromissos de hoje e crie eventos falando do seu jeito." },
   { icon: ICONS.chat, title: "Clientes na mesma caixa", text: "As conversas dos clientes chegam num painel em tempo real. Responda pelo painel ou pelo próprio WhatsApp." },
+  { icon: ICONS.doc, title: "PDFs organizados", text: "Mande um PDF e ele vai para o seu Google Drive com título, categoria e tags sugeridas pela IA. Depois é só pedir pelo assunto." },
+  { icon: ICONS.grid, title: "Resumo do que você guarda", text: "Um painel com documentos, notas, contatos, rotina e o uso de IA do mês, no celular e no computador." },
+  { icon: ICONS.lock, title: "Notas, rotina e cofre", text: "Anote por assunto, mantenha sua rotina e guarde senhas num cofre protegido por senha mestra (rotina e cofre nos planos Mago e Arquimago)." },
   { icon: ICONS.shield, title: "Você no controle", text: "Nada é enviado sem o seu “1 - Confirmar”. E-mails com truques para enganar a IA são sinalizados." },
 ];
 
@@ -56,6 +62,7 @@ const FAQ = [
   ["Meus e-mails ficam seguros?", "Você autoriza o acesso pela tela do próprio Google e pode revogar quando quiser nas configurações da sua conta. O assistente nunca envia nada sem a sua confirmação."],
   ["O que acontece depois dos 7 dias?", "Você escolhe um plano: Aprendiz (R$ 9,90), Mago (R$ 29,90) ou Arquimago (R$ 69,90) por mês. Se cancelar antes do fim do teste, não paga nada. O teste tem um limite de uso de IA menor que o dos planos."],
   ["E se eu usar muito a IA?", "Cada plano tem um limite mensal de uso de IA. Ao chegar nele, o menu do assistente continua funcionando e a IA (respostas livres, áudio e leitura de arquivos) volta no mês seguinte. Em Configurações você acompanha quanto já usou."],
+  ["Onde ficam os PDFs que eu mando?", "No seu próprio Google Drive. O MagoBox guarda só a ficha de cada documento (título, categoria, tags e resumo) para você achar rápido. Ao apagar um documento, o PDF vai para a lixeira do Drive."],
   ["A IA responde meus clientes sozinha?", "Não. Ela escreve o rascunho a partir do que você diz em poucas palavras, e só envia depois do seu OK."],
   ["Funciona com outros canais além do WhatsApp?", "Hoje: WhatsApp, Gmail e Google Agenda. Instagram, e-mail por IMAP e webchat estão previstos."],
 ];
