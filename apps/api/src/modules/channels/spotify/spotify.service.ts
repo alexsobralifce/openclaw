@@ -29,6 +29,14 @@ export class SpotifyError extends Error {
   }
 }
 
+/** Resultado de busca com o link que abre no app do Spotify. */
+export interface FoundLink {
+  name: string;
+  /** artistas (música) ou dono (playlist) */
+  by: string;
+  url: string;
+}
+
 export interface Track {
   uri: string;
   name: string;
@@ -155,6 +163,54 @@ export class SpotifyService {
     const p = new URLSearchParams({ q: query.slice(0, 150), type: "track", limit: String(Math.min(Math.max(limit, 1), 10)), market: "from_token" });
     const j = await this.api<any>(ws, "GET", `/search?${p}`);
     return (j?.tracks?.items ?? []).filter(Boolean).map((t: any) => ({ uri: String(t.uri), name: String(t.name), artists: (t.artists ?? []).map((a: any) => a.name).join(", "), album: String(t.album?.name ?? "") }));
+  }
+
+  /**
+   * Busca músicas ou playlists SEM a conta do dono: usa o token do próprio app (client credentials), então não precisa conectar nem ter
+   * Premium. Devolve o link público (open.spotify.com), que abre direto no app do Spotify quando ele está instalado.
+   */
+  async searchLinks(query: string, what: "track" | "playlist", limit = 5): Promise<FoundLink[]> {
+    if (!this.isConfigured()) throw new SpotifyError("api", "O Spotify ainda não está configurado no servidor.");
+    const exec = async (retried = false): Promise<Response> => {
+      const res = await fetch(`${API}/search?${new URLSearchParams({ q: query.slice(0, 150), type: what, limit: String(Math.min(Math.max(limit, 1), 10)), market: "BR" })}`, {
+        headers: { Authorization: `Bearer ${await this.appToken()}` },
+        signal: AbortSignal.timeout(15_000),
+      });
+      if (res.status === 401 && !retried) {
+        this.appCache = undefined; // token do app vencido antes da hora: renova uma vez
+        return exec(true);
+      }
+      return res;
+    };
+    let res: Response;
+    try {
+      res = await exec();
+    } catch (e: any) {
+      if (e instanceof SpotifyError) throw e;
+      throw new SpotifyError("api", "Não consegui falar com o Spotify agora. Tente de novo em instantes.");
+    }
+    if (res.status === 429) throw new SpotifyError("rate_limit", "O Spotify pediu para esperar um pouco. Tente de novo em instantes.", Number(res.headers.get("retry-after")) || undefined);
+    const j: any = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      this.logger.warn(`Spotify busca ${res.status}: ${String(j?.error?.message ?? "").slice(0, 160)}`);
+      throw new SpotifyError("api", `O Spotify recusou a busca (${res.status}).`);
+    }
+    const items: any[] = (what === "track" ? j?.tracks?.items : j?.playlists?.items) ?? [];
+    return items
+      .filter((t) => t?.id)
+      .map((t) => ({
+        name: String(t.name),
+        by: what === "track" ? (t.artists ?? []).map((a: any) => a.name).join(", ") : String(t.owner?.display_name ?? ""),
+        url: String(t.external_urls?.spotify ?? `https://open.spotify.com/${what}/${t.id}`),
+      }));
+  }
+
+  private appCache?: { token: string; exp: number };
+  private async appToken(): Promise<string> {
+    if (this.appCache && this.appCache.exp > Date.now()) return this.appCache.token;
+    const t = await this.token({ grant_type: "client_credentials" });
+    this.appCache = { token: String(t.access_token), exp: Date.now() + (Number(t.expires_in) - 60) * 1000 };
+    return this.appCache.token;
   }
 
   // ─── Player (Premium) ─────────────────────────────────────────

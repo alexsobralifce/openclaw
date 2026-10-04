@@ -12,7 +12,9 @@ export type SpotifyCmd =
   | { kind: "devices" }
   | { kind: "playlist"; subject: string }
   | { kind: "about"; subject: string }
-  | { kind: "mood" };
+  | { kind: "mood" }
+  /** buscar música ou playlist e devolver o link (funciona sem conta conectada nem Premium) */
+  | { kind: "find"; what: "track" | "playlist"; query: string };
 
 /** Fala de outro assunto: arquivo do Drive, e-mail, agenda... Não é pedido de música. */
 const OTHER_TOPIC = /\b(drive|arquivo|arquivos|pdf|planilha|nota|notas|e-?mails?|agenda|evento|documentos?)\b/;
@@ -39,6 +41,11 @@ export function spotifyCommand(flat: string): SpotifyCmd | null {
   if ((m = t.match(/^(?:criar|crie|cria|montar|monta|monte|fazer|faz|faca)(?: uma| minha)? playlist(?: (?:de|do|da|para|pra|sobre|com|que|pro))?\s+(.{2,80})$/))) return { kind: "playlist", subject: m[1].trim() };
   if (/\b(?:musica|musicas|som|playlist)\b.*\b(?:clima|tempo de hoje|onde estou|lugar onde estou)\b|^(?:recomende|recomenda|recomendar|sugira|sugere|sugerir)(?: uma| alguma)?(?: musica| som)?$/.test(t)) return { kind: "mood" };
   if ((m = t.match(/^(?:buscar |procurar |achar |me )?(?:mostra |mostrar |ver |diz |dizer )?(?:as |algumas )?musicas? (?:sobre|que falam? (?:de|sobre)|com o tema|por assunto)\s+(.{2,60})$/))) return { kind: "about", subject: m[1].trim() };
+  // Link para abrir no Spotify: "buscar música catingueira", "buscar playlist de forró", "link da música X", "playlists para estudar"
+  if ((m = t.match(/^(?:por favor )?(?:me )?(?:(?:buscar|busca|busque|procurar|procura|procure|achar|acha|ache|encontrar|encontre|pesquisar|pesquise|mostrar|mostra|mostre)|(?:manda|mande|enviar|envia|envie|passa|passe)(?: o)? link d[aeo]s?)\s+(?:(?:a|o|as|os|uma|um) )?(musicas?|faixas?|playlists?)(?: (?:de|do|da|para|pra|com|sobre))?\s+(.{2,80}?)(?: no spotify)?$/)) || (m = t.match(/^link d[aeo]s? (musicas?|faixas?|playlists?)(?: (?:de|do|da))?\s+(.{2,80}?)(?: no spotify)?$/)) || (m = t.match(/^(playlists?)(?: (?:de|do|da|para|pra|com|sobre))\s+(.{2,80}?)(?: no spotify)?$/))) {
+    const q = m[2].trim();
+    if (!VAGUE.test(q)) return { kind: "find", what: m[1].startsWith("playlist") ? "playlist" : "track", query: q };
+  }
   if ((m = t.match(new RegExp(`^(?:por favor )?(?:me )?(?:(?:quero|queria|gostaria de|vou|deixa eu) )?${VERB_PLAY}\\s+${ARTICLE}${THING}(.{2,80}?)(?: no spotify)?$`)))) {
     const q = m[1].trim();
     return VAGUE.test(q) ? { kind: "mood" } : { kind: "play", query: q };

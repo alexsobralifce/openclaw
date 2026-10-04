@@ -860,7 +860,7 @@ export class MenuService {
     if (accounts.length && services.includes("drive")) {
       if (this.spotify?.isConfigured() && services.includes("spotify")) {
         options.push({ type: "spotify" });
-        labels.push({ id: "spotify", icon: "🎧", label: "Spotify", sub: "tocar, pausar e criar playlists" });
+        labels.push({ id: "spotify", icon: "🎧", label: "Spotify", sub: "buscar músicas e playlists com link" });
       }
       options.push({ type: "drive" });
       labels.push({ id: "drive", icon: "📁", label: "Google Drive", sub: "pedir um arquivo" });
@@ -1585,9 +1585,10 @@ export class MenuService {
     await this.set(ws, "spotify_home");
     return [
       head("🎧", "Spotify", st.connected ? `conectado como ${st.name}${st.premium ? "" : " (sem Premium)"}` : "não conectado"),
+      "🔎 *buscar música catingueira* · *buscar playlist de forró*\n_Eu respondo com o link: ao tocar, abre direto no Spotify._",
       st.connected
         ? ["▶️ *tocar* catingueira · ⏸️ *pausar* · ⏭️ *pular música* · 🔊 *volume 40*", "🎶 *o que está tocando* · 🎧 *meus aparelhos*", "📝 *criar playlist para estudar*", "🔎 *músicas sobre saudade* · 🌦️ *música para o clima de hoje*"].join("\n")
-        : "Conecte a sua conta em *Canais*, no painel.",
+        : "_Para tocar e controlar o player, conecte a sua conta em *Canais*, no painel (exige Premium)._",
       ...(st.connected && !st.premium ? ["_Sem Premium, só dá para buscar e criar playlists: o Spotify não deixa controlar o player._"] : []),
       DIV,
       opts(BACK),

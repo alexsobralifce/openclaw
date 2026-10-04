@@ -3,10 +3,11 @@ import { describe, expect, it, vi } from "vitest";
 vi.mock("@openclaw/database", () => ({ prisma: { workspaceMember: { findFirst: async () => ({ user: { role: "ROOT", services: [], name: "Ana" } }) } } }));
 
 import { MenuService } from "../src/modules/channels/assistant/menu.service";
+import { SpotifyError } from "../src/modules/channels/spotify/spotify.service";
 
 const T = (name: string, artists = "Marinês") => ({ uri: `spotify:track:${name.replace(/\W/g, "")}`, name, artists, album: "Coletânea" });
 
-function build(opts: { configured?: boolean; connected?: boolean; premium?: boolean; search?: any[] | ((q: string) => any[]); pick?: number | null; plan?: any } = {}) {
+function build(opts: { configured?: boolean; connected?: boolean; premium?: boolean; search?: any[] | ((q: string) => any[]); pick?: number | null; plan?: any; links?: any[] } = {}) {
   const store = new Map<string, any>();
   const state = { get: async (k: string) => store.get(k) ?? null, set: async (k: string, v: any) => void store.set(k, v), del: async (k: string) => void store.delete(k) };
   const search = vi.fn(async (_ws: string, q: string) => (typeof opts.search === "function" ? opts.search(q) : opts.search ?? [T("Catingueira")]));
@@ -14,6 +15,7 @@ function build(opts: { configured?: boolean; connected?: boolean; premium?: bool
     isConfigured: () => opts.configured ?? true,
     status: async () => ({ configured: opts.configured ?? true, connected: opts.connected ?? true, name: "Alexandre", premium: opts.premium ?? true }),
     search,
+    searchLinks: vi.fn(async (_q: string, what: string) => (opts.links ?? [{ name: what === "track" ? "Catingueira" : "Forró Raiz", by: "Marinês", url: `https://open.spotify.com/${what}/abc` }])),
     play: vi.fn(async () => {}),
     pause: vi.fn(async () => {}),
     next: vi.fn(async () => {}),
@@ -30,6 +32,28 @@ function build(opts: { configured?: boolean; connected?: boolean; premium?: bool
   const say = async (t: string) => String(await menu.respond("w1", t));
   return { say, spotify, search, google, ai, weather, intents, screen: () => store.get("menu:w1")?.screen };
 }
+
+describe("Spotify: buscar com link", () => {
+  it("música e playlist voltam com o link, mesmo sem a conta conectada e sem Premium", async () => {
+    const { say, spotify } = build({ connected: false, premium: false });
+    const m = await say("buscar música catingueira");
+    expect(m).toContain("Catingueira");
+    expect(m).toContain("https://open.spotify.com/track/abc");
+    expect(m).toContain("abrir no Spotify");
+    expect(spotify.searchLinks).toHaveBeenCalledWith("catingueira", "track", 5);
+    const p = await say("buscar playlist de forró");
+    expect(p).toContain("https://open.spotify.com/playlist/abc");
+    expect(spotify.searchLinks).toHaveBeenLastCalledWith("forro", "playlist", 5);
+    expect(spotify.play).not.toHaveBeenCalled();
+  });
+
+  it("sem resultado avisa; falha do Spotify vira mensagem", async () => {
+    expect(await build({ links: [] }).say("buscar playlist de nada")).toContain("Não achei");
+    const b = build();
+    b.spotify.searchLinks.mockRejectedValueOnce(new SpotifyError("rate_limit", "O Spotify pediu para esperar um pouco.", 5));
+    expect(await b.say("buscar música forró")).toContain("esperar um pouco");
+  });
+});
 
 describe("Spotify pelo assistente", () => {
   it("resultado claro toca na hora", async () => {

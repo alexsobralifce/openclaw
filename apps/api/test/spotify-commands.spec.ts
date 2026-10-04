@@ -29,12 +29,19 @@ describe("comandos do Spotify", () => {
       ["música para o clima de hoje", { kind: "mood" }],
       ["toca alguma coisa", { kind: "mood" }],
       ["spotify", { kind: "home" }],
+      ["buscar música catingueira", { kind: "find", what: "track", query: "catingueira" }],
+      ["procurar a música Evidências da Legião Urbana no Spotify", { kind: "find", what: "track", query: "evidencias da legiao urbana" }],
+      ["buscar playlist de forró", { kind: "find", what: "playlist", query: "forro" }],
+      ["playlists para estudar", { kind: "find", what: "playlist", query: "estudar" }],
+      ["buscar música sobre saudade", { kind: "about", subject: "saudade" }],
+      ["link da música Asa Branca", { kind: "find", what: "track", query: "asa branca" }],
+      ["me manda o link da playlist de rock", { kind: "find", what: "playlist", query: "rock" }],
     ];
     for (const [text, want] of table) expect(cmd(text), text).toEqual(want);
   });
 
   it("não sequestra o que é de outro assunto", () => {
-    for (const t of ["próximo", "o que tenho na agenda hoje", "quero a música catingueira", "baixe a música catingueira", "tocar a música do drive", "mandar o pdf da playlist", "anota tocar violão", "e-mails de hoje", "para quem é esse e-mail", "volume do contrato"]) {
+    for (const t of ["próximo", "o que tenho na agenda hoje", "quero a música catingueira", "baixe a música catingueira", "tocar a música do drive", "mandar o pdf da playlist", "anota tocar violão", "e-mails de hoje", "para quem é esse e-mail", "volume do contrato", "buscar arquivo do contrato"]) {
       expect(cmd(t), t).toBeNull();
     }
   });

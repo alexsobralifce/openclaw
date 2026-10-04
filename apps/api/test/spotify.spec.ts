@@ -186,3 +186,49 @@ describe("Spotify: callback do painel", () => {
     expect(() => off.ctrl.authUrl({ user: { workspaces: [{ workspaceId: "w1" }] } })).toThrow("configurado");
   });
 });
+
+describe("Spotify: buscar com link, sem conectar a conta", () => {
+  const tokenRoute = () => when("POST", /https:\/\/accounts\.spotify\.com\/api\/token/, () => reply(200, { access_token: "app1", expires_in: 3600 }));
+
+  it("usa o token do próprio app (sem conta conectada) e devolve o link de cada música", async () => {
+    tokenRoute();
+    when("GET", /https:\/\/api\.spotify\.com\/v1\/search\?.*/, () =>
+      reply(200, { tracks: { items: [{ id: "t1", name: "Catingueira", artists: [{ name: "Marinês" }, { name: "Gonzaga" }], external_urls: { spotify: "https://open.spotify.com/track/t1" } }, null, { id: "t2", name: "Outra", artists: [] }] } }),
+    );
+    const { svc } = setup();
+    const r = await svc.searchLinks("catingueira", "track", 5);
+    expect(r).toEqual([{ name: "Catingueira", by: "Marinês, Gonzaga", url: "https://open.spotify.com/track/t1" }, { name: "Outra", by: "", url: "https://open.spotify.com/track/t2" }]);
+    const tok = calls.find((c) => c.url.includes("/api/token"))!;
+    expect(String(tok.body)).toContain("grant_type=client_credentials");
+    const search = calls.find((c) => c.url.includes("/search"))!;
+    expect(search.url).toContain("type=track");
+    expect(search.url).toContain("market=BR");
+    expect(search.auth).toBe("Bearer app1");
+  });
+
+  it("playlists: nome, dono e link; item vazio é ignorado; o token do app é reaproveitado", async () => {
+    tokenRoute();
+    when("GET", /https:\/\/api\.spotify\.com\/v1\/search\?.*/, () => reply(200, { playlists: { items: [null, { id: "p1", name: "Forró Raiz", owner: { display_name: "Fulano" }, external_urls: { spotify: "https://open.spotify.com/playlist/p1" } }] } }));
+    const { svc } = setup();
+    expect(await svc.searchLinks("forro", "playlist")).toEqual([{ name: "Forró Raiz", by: "Fulano", url: "https://open.spotify.com/playlist/p1" }]);
+    await svc.searchLinks("rock", "playlist");
+    expect(calls.filter((c) => c.url.includes("/api/token"))).toHaveLength(1);
+  });
+
+  it("token vencido (401): renova uma vez e repete; sem chaves ou com limite, avisa em português", async () => {
+    let n = 0;
+    tokenRoute();
+    when("GET", /https:\/\/api\.spotify\.com\/v1\/search\?.*/, () => (++n === 1 ? reply(401, {}) : reply(200, { tracks: { items: [] } })));
+    const { svc } = setup();
+    expect(await svc.searchLinks("x", "track")).toEqual([]);
+    expect(calls.filter((c) => c.url.includes("/api/token"))).toHaveLength(2);
+
+    routes = [];
+    tokenRoute();
+    when("GET", /https:\/\/api\.spotify\.com\/v1\/search\?.*/, () => reply(429, {}, { "retry-after": "7" }));
+    await expect(setup().svc.searchLinks("x", "track")).rejects.toMatchObject({ code: "rate_limit", retryAfter: 7 });
+
+    delete process.env.SPOTIFY_CLIENT_SECRET;
+    await expect(setup().svc.searchLinks("x", "track")).rejects.toBeInstanceOf(SpotifyError);
+  });
+});
