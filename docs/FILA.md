@@ -13,11 +13,17 @@ Pedido em 04/10/2026: a inserção de PDFs, assim como a documentação deles, p
 - A nota tem no topo `assunto`, `criada`, `origem` e `tags: [<assunto>]`: ou seja, a única "tag" é o nome do assunto.
 - A busca (`noteSearch`) procura trechos de texto nas notas; não há busca por tag nem listagem de catálogo.
 
-**Decisões em aberto** (perguntadas ao dono em 04/10/2026)
-1. Guardar o PDF original no Drive (com uma ficha de catálogo) ou só o resumo, como hoje?
-2. Tags: geradas pela IA (3 a 6 por documento) e editáveis pelo dono?
-3. Onde ver o catálogo: só no assistente, ou também uma página de biblioteca no painel, com filtro por tag?
-4. O que fazer com as notas que já vieram de PDF: reclassificar com tags?
+**Decisões do dono** (04/10/2026)
+1. **Guardar o PDF original** no Drive (`Assist.IA/Documentos`), com uma **ficha de catálogo**: título, assunto, tags, data e resumo.
+2. **Tags: a IA sugere (3 a 6 por documento) e o dono edita** (acrescenta e tira, por exemplo "tags do documento 2: contrato, aluguel").
+3. **Catálogo no assistente e numa página de biblioteca no painel**, com filtro por tag e botão de baixar.
+4. **Reclassificar os PDFs que já viraram nota**: um comando passa pelas notas que vieram de PDF e acrescenta as tags, sem apagar nada.
+
+**Pontos técnicos a decidir ao começar** (não bloqueiam o pedido)
+- Onde guardar o catálogo para buscar por tag: propriedades do próprio arquivo no Drive (`appProperties`) ou uma tabela no Postgres (busca e filtro mais simples; precisa de índice comum, nunca `@unique`). A recomendação é Postgres para o índice e o Drive para o arquivo.
+- Limite de tamanho e de páginas do PDF (hoje 15 MB e o teto do plano, em `media-limits.ts`) e o que fazer com PDF escaneado, sem texto.
+- Com o escopo `drive.file`, o app só mexe em arquivos que ele mesmo criou: o PDF guardado por ele pode ser listado e apagado; PDFs que o dono já tinha no Drive entram no catálogo só por cópia ou por link.
+- Reclassificação: rodar em lotes pequenos e mostrar o progresso, porque cada nota custa uma chamada de IA.
 
 **Fecha o item quando**
 - todo PDF novo entra com título, assunto, tags e data, num lugar previsível;
