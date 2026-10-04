@@ -4,6 +4,7 @@ import { isSealed, openToken, sealToken } from "../../webhooks/crypto";
 import { nextDay } from "../../channels/assistant/agenda-events";
 import { DriveKind, KIND_Q, wordVariants } from "../../channels/assistant/drive";
 import { buildBook, parseAddresses, SeenAddress } from "../../channels/assistant/email-book";
+import { DOCS_FOLDER } from "../../channels/assistant/documents";
 import { CONTACTS_FOLDER, Contact, EMAIL_BOOK_FOLDER, fileOfLetter, findContacts, fuzzyCandidates, fromPerson, groupByLetter, parseLetterFile, renderLetterFile } from "../../channels/assistant/contacts";
 import { planOf } from "../../auth/plans";
 import { appendEntry, dailyFileName, dayStamp, formatEntry, NoteDraft, noteFileName, NOTES_FOLDER, renderNote, snippets, storageAccount, TOPICS_FOLDER } from "../../channels/assistant/notes";
@@ -624,6 +625,49 @@ export class GoogleService implements OnModuleInit {
       if (/Google API 40[34]\b/.test(String(e?.message))) {
         throw new Error("Não tenho permissão para apagar essa nota (só apago as que eu mesmo criei). Apague pelo Google Drive.");
       }
+      throw this.noteError(e);
+    }
+  }
+
+  // ─── Documentos (PDFs) guardados em Assist.IA/Documentos ───────
+
+  /** Guarda o PDF em Assist.IA/Documentos (a pasta é criada se preciso) e devolve o id do arquivo no Drive. */
+  documentStore(workspaceId: string, bytes: Buffer, name: string, mime: string, account?: string): Promise<{ id: string; link?: string }> {
+    return this.serial(`${workspaceId}:${account ?? ""}`, async () => {
+      try {
+        const folder = await this.driveEnsureFolder(workspaceId, account, DOCS_FOLDER, await this.noteFolder(workspaceId, account));
+        const token = await this.accessToken(workspaceId, account);
+        const boundary = `oc${Date.now().toString(36)}${Math.random().toString(36).slice(2)}`;
+        const head = Buffer.from(`--${boundary}\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n${JSON.stringify({ name, parents: [folder] })}\r\n--${boundary}\r\nContent-Type: ${mime}\r\n\r\n`);
+        const res = await fetch("https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id,webViewLink", {
+          method: "POST",
+          headers: { Authorization: `Bearer ${token}`, "Content-Type": `multipart/related; boundary=${boundary}` },
+          body: Buffer.concat([head, bytes, Buffer.from(`\r\n--${boundary}--`)]),
+          signal: AbortSignal.timeout(60_000),
+        });
+        if (!res.ok) throw new Error(`Google API ${res.status}: ${(await res.text()).slice(0, 300)}`);
+        const f: any = await res.json();
+        return { id: String(f.id), link: f.webViewLink };
+      } catch (e) {
+        throw this.noteError(e);
+      }
+    });
+  }
+
+  /**
+   * Manda um PDF guardado para a LIXEIRA do Drive (30 dias para recuperar). Só mexe em arquivo que está dentro de
+   * Assist.IA/Documentos; com o escopo drive.file, só os que o próprio app criou.
+   */
+  async documentTrash(workspaceId: string, fileId: string, account?: string): Promise<void> {
+    if (!/^[\w-]{8,100}$/.test(fileId)) throw new Error("Documento inválido.");
+    try {
+      const root = await this.driveFirst(workspaceId, account, `name='${NOTES_FOLDER}' and mimeType='${FOLDER_MIME}' and trashed=false`);
+      const docs = root && (await this.driveFirst(workspaceId, account, `name='${DOCS_FOLDER}' and mimeType='${FOLDER_MIME}' and '${root}' in parents and trashed=false`));
+      const f = await this.g<any>(workspaceId, account, `https://www.googleapis.com/drive/v3/files/${encodeURIComponent(fileId)}?fields=parents,trashed,mimeType`);
+      if (!docs || f.trashed || f.mimeType === FOLDER_MIME || !(f.parents ?? []).includes(docs)) throw new Error("Esse documento não está na sua pasta de documentos.");
+      await this.g(workspaceId, account, `https://www.googleapis.com/drive/v3/files/${encodeURIComponent(fileId)}`, { method: "PATCH", body: JSON.stringify({ trashed: true }) });
+    } catch (e: any) {
+      if (/Google API 40[34]\b/.test(String(e?.message))) throw new Error("Não tenho permissão para apagar esse arquivo (só apago os que eu mesmo guardei). Apague pelo Google Drive.");
       throw this.noteError(e);
     }
   }

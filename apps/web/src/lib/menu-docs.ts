@@ -138,6 +138,22 @@ export const MENU_DOCS: DocNode[] = [
     limits: "Ele recusa guardar senhas em notas: use o cofre. Só consegue apagar as notas que ele mesmo criou; uma nota que você colocou à mão na pasta deve ser apagada pelo Drive.",
   },
   {
+    id: "docs",
+    icon: "📚",
+    title: "Documentos",
+    summary: "Seus PDFs guardados no Drive e catalogados com título, assunto, tags e resumo, para achar depois pelo assunto.",
+    needs: "Conta Google conectada e o serviço Drive liberado. Os arquivos ficam em Assist.IA/Documentos, na conta @gmail.",
+    say: ["documentos", "documentos com a tag contrato", "tags"],
+    children: [
+      { id: "docs-guardar", icon: "📄", title: "Guardar um PDF", summary: "Mande o PDF no chat. A IA lê, sugere título, assunto e de 3 a 6 tags, e o arquivo vai para o Drive com a ficha no catálogo. Na legenda você pode dizer o assunto ou as tags.", add: "Envie o PDF (pelo WhatsApp, pelo app ou pelo clipe do chat). Se quiser uma nota em vez de documento, ponha “nota” na legenda; para criar eventos, “adicionar na agenda”." },
+      { id: "docs-buscar", icon: "🔎", title: "Buscar por tag ou assunto", summary: "Acha pela tag, pelo título, pelo assunto e pelo resumo, sem acento. Um resultado só já abre o documento e manda o PDF; vários viram lista numerada (no app, com botão de baixar em cada um).", say: ["documentos com a tag aluguel", "documentos sobre plano de saúde", "tag contrato", "todos"] },
+      { id: "docs-tags", icon: "🏷️", title: "Ver e editar as tags", summary: "“Tags” mostra as tags e quantos documentos cada uma tem. A IA sugere as tags ao guardar; você muda quando quiser.", say: ["tags", "tags: contrato, aluguel", "adicionar tag imóvel", "tirar tag antigo", "tags do documento 2: saúde"], add: "Com o documento aberto: “adicionar tag imóvel” acrescenta; “tags: contrato, aluguel” troca todas. Até 8 tags por documento, sem acento.", remove: "“tirar tag antigo” remove só essa tag." },
+    ],
+    add: "Guardar um PDF novo (veja “Guardar um PDF”).",
+    remove: "Abra o documento e escolha “3 Apagar”, e confirme: o PDF vai para a lixeira do Google Drive (30 dias) e a ficha sai do catálogo.",
+    limits: "PDF de até 15 MB e o teto de páginas do seu plano. Só apaga os PDFs que o assistente guardou; um arquivo seu no Drive deve ser apagado pelo Drive.",
+  },
+  {
     id: "contacts",
     icon: "📇",
     title: "Contatos",

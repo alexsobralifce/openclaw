@@ -26,6 +26,7 @@ model Workspace {
   apiKeys       ApiKey[]
   webhooks      WebhookEndpoint[]
   memories      Memory[]
+  documents     Document[]
 }
 
 enum Plan {
@@ -465,4 +466,34 @@ model PushSubscription {
   createdAt DateTime @default(now())
 
   @@index([userId])
+}
+
+// ─── CATÁLOGO DE DOCUMENTOS (PDFs com tags) ──────────────────────
+
+// Ficha de cada documento que o dono guardou pelo assistente. O arquivo fica no Drive dele (Assist.IA/Documentos); aqui ficam título,
+// assunto, tags e resumo para buscar e filtrar. `kind`: pdf (arquivo guardado) ou nota (nota antiga reclassificada, sem PDF original).
+// Sem @unique de propósito (o `db push` de produção trava com índice único em coluna nova): a unicidade de (workspaceId, driveFileId) é do código.
+model Document {
+  id          String   @id @default(cuid())
+  kind        String   @default("pdf")
+  title       String
+  topic       String
+  // minúsculas, sem acento, com hífen no lugar de espaço (ex.: plano-de-saude)
+  tags        String[] @default([])
+  summary     String   @default("")
+  driveFileId String
+  account     String
+  mime        String   @default("application/pdf")
+  sizeBytes   Int      @default(0)
+  pages       Int?
+  // whatsapp | app | telegram | reclassificada
+  origin      String   @default("whatsapp")
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  workspaceId String
+
+  @@index([workspaceId, createdAt])
+  @@index([workspaceId, driveFileId])
 }

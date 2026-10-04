@@ -31,6 +31,18 @@ Pedido em 04/10/2026: a inserção de PDFs, assim como a documentação deles, p
 - dá para ver, acrescentar e tirar tags de um documento;
 - a página de ajuda (`lib/menu-docs.ts`) explica o fluxo, e há testes.
 
+### 2. Integração com o Spotify, com localização e tempo pelo Google
+Pedido em 04/10/2026 (feito no meio do catálogo de PDFs): "adicione integração com Spotify, com a localização e tempo através do Google".
+
+**Como é hoje**
+- Não há nada do Spotify no sistema (o assistente só acha músicas como **arquivos de áudio no Drive**).
+- Localização e tempo (clima): o dono manda a localização (📎) ou diz "minha cidade é Recife"; o clima vem do Open-Meteo (`weather.service.ts`), sem Google.
+
+**Perguntas em aberto**
+1. O que o assistente deve fazer no Spotify? (tocar/pausar num aparelho, buscar e tocar música ou artista, mostrar o que está tocando, criar/abrir playlists, recomendar.) Controlar a reprodução exige conta **Premium** e um app registrado no Spotify for Developers (client id e secret), com login do usuário (OAuth).
+2. "Localização e tempo através do Google" é para trocar o Open-Meteo por APIs do Google (Weather, Geocoding, Time Zone), ou para outra coisa, como sugerir música pelo clima e pelo lugar? As APIs do Google precisam ser ativadas no projeto do Google Cloud (pode ter custo).
+3. Como a localização do usuário deve ser obtida: pela localização que ele já manda, ou pelo navegador/celular?
+
 ## Pendências já combinadas (dependem do dono ou de uma decisão)
 - **Search Console:** verificar `magobox.com.br`, enviar o sitemap e pedir indexação (passo a passo em `DOMINIO_MAGOBOX.md`).
 - **Instagram (Meta):** cadastrar `https://api.magobox.com.br/api/v1/channels/instagram/callback` e depois trocar `INSTAGRAM_REDIRECT_URI`.
