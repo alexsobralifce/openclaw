@@ -40,10 +40,10 @@ describe("Spotify: buscar com link", () => {
     expect(m).toContain("Catingueira");
     expect(m).toContain("https://open.spotify.com/track/abc");
     expect(m).toContain("abrir no Spotify");
-    expect(spotify.searchLinks).toHaveBeenCalledWith("catingueira", "track", 5);
+    expect(spotify.searchLinks).toHaveBeenCalledWith("catingueira", "track", 5, "w1");
     const p = await say("buscar playlist de forró");
     expect(p).toContain("https://open.spotify.com/playlist/abc");
-    expect(spotify.searchLinks).toHaveBeenLastCalledWith("forro", "playlist", 5);
+    expect(spotify.searchLinks).toHaveBeenLastCalledWith("forro", "playlist", 5, "w1");
     expect(spotify.play).not.toHaveBeenCalled();
   });
 

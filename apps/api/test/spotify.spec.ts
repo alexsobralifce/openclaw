@@ -232,3 +232,26 @@ describe("Spotify: buscar com link, sem conectar a conta", () => {
     await expect(setup().svc.searchLinks("x", "track")).rejects.toBeInstanceOf(SpotifyError);
   });
 });
+
+describe("Spotify: busca com link usando a conta conectada", () => {
+  it("conectado: busca com o login do usuário (market=from_token); sem conta: token do app", async () => {
+    const { svc } = await connected();
+    when("GET", /https:\/\/api\.spotify\.com\/v1\/search\?.*/, () => reply(200, { tracks: { items: [{ id: "t9", name: "Do usuário", artists: [{ name: "A" }] }] } }));
+    const mine = await svc.searchLinks("x y", "track", 5, "w1");
+    expect(mine).toEqual([{ name: "Do usuário", by: "A", url: "https://open.spotify.com/track/t9" }]);
+    const call = calls.find((c) => c.url.includes("/search"))!;
+    expect(call.url).toContain("market=from_token");
+    expect(call.auth).toBe("Bearer acc1");
+
+    calls = [];
+    await svc.searchLinks("x y", "track", 5, "w2"); // outro workspace, sem conexão
+    const other = calls.find((c) => c.url.includes("/search"))!;
+    expect(other.url).toContain("market=BR");
+  });
+
+  it("conta fora da lista do app (modo de desenvolvimento): erro claro, não genérico", async () => {
+    const { svc } = await connected();
+    when("GET", /https:\/\/api\.spotify\.com\/v1\/search\?.*/, () => reply(403, { error: { status: 403, message: "User not registered in the Developer Dashboard" } }));
+    await expect(svc.searchLinks("x y", "track", 5, "w1")).rejects.toMatchObject({ code: "not_allowed" });
+  });
+});

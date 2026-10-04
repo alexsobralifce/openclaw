@@ -20,7 +20,7 @@ const ACCOUNTS = "https://accounts.spotify.com";
 const API = "https://api.spotify.com/v1";
 const MAX_ITEMS_PER_ADD = 100;
 
-export type SpotifyErrorCode = "not_connected" | "premium" | "no_device" | "rate_limit" | "api";
+export type SpotifyErrorCode = "not_connected" | "premium" | "no_device" | "rate_limit" | "not_allowed" | "api";
 
 /** Erro com código, para o assistente responder em português claro. */
 export class SpotifyError extends Error {
@@ -151,6 +151,8 @@ export class SpotifyService {
     const reason = String(j?.error?.reason ?? "");
     if (res.status === 429) throw new SpotifyError("rate_limit", "O Spotify pediu para esperar um pouco. Tente de novo em instantes.", Number(res.headers.get("retry-after")) || undefined);
     if (res.status === 403 && /PREMIUM/i.test(reason + String(j?.error?.message))) throw new SpotifyError("premium", "Controlar a reprodução exige conta Spotify Premium.");
+    // Modo de desenvolvimento do Spotify: só as contas cadastradas no painel do app (até 5) conseguem usar
+    if (res.status === 403 && /not registered|allowlist|developer dashboard/i.test(String(j?.error?.message))) throw new SpotifyError("not_allowed", "O Spotify só libera contas cadastradas neste app (limite de 5 no modo de desenvolvimento). A sua ainda não foi liberada.");
     if (res.status === 404 && reason === "NO_ACTIVE_DEVICE") throw new SpotifyError("no_device", "Não há nenhum aparelho com o Spotify aberto. Abra o app no celular ou no computador e tente de novo.");
     this.logger.warn(`Spotify ${method} ${path.split("?")[0]} ${res.status}: ${String(j?.error?.message ?? text).slice(0, 160)}`);
     throw new SpotifyError("api", `O Spotify recusou o pedido (${res.status}).`);
@@ -166,13 +168,22 @@ export class SpotifyService {
   }
 
   /**
-   * Busca músicas ou playlists SEM a conta do dono: usa o token do próprio app (client credentials), então não precisa conectar nem ter
-   * Premium. Devolve o link público (open.spotify.com), que abre direto no app do Spotify quando ele está instalado.
+   * Músicas ou playlists com o link público (open.spotify.com), que abre direto no app do Spotify.
+   * Com `ws` e a conta conectada, busca com o login do usuário (mercado e idioma dele). Sem conta, ou se a conexão caiu, usa o token do
+   * próprio app (client credentials): não precisa conectar nem ter Premium.
    */
-  async searchLinks(query: string, what: "track" | "playlist", limit = 5): Promise<FoundLink[]> {
+  async searchLinks(query: string, what: "track" | "playlist", limit = 5, ws?: string): Promise<FoundLink[]> {
     if (!this.isConfigured()) throw new SpotifyError("api", "O Spotify ainda não está configurado no servidor.");
+    const params = (market: string) => new URLSearchParams({ q: query.slice(0, 150), type: what, limit: String(Math.min(Math.max(limit, 1), 10)), market });
+    if (ws && (await this.state.get(key(ws)))) {
+      try {
+        return this.links(await this.api<any>(ws, "GET", `/search?${params("from_token")}`), what);
+      } catch (e: any) {
+        if (!(e instanceof SpotifyError && e.code === "not_connected")) throw e; // conexão revogada: cai para a busca do app
+      }
+    }
     const exec = async (retried = false): Promise<Response> => {
-      const res = await fetch(`${API}/search?${new URLSearchParams({ q: query.slice(0, 150), type: what, limit: String(Math.min(Math.max(limit, 1), 10)), market: "BR" })}`, {
+      const res = await fetch(`${API}/search?${params("BR")}`, {
         headers: { Authorization: `Bearer ${await this.appToken()}` },
         signal: AbortSignal.timeout(15_000),
       });
@@ -195,6 +206,10 @@ export class SpotifyService {
       this.logger.warn(`Spotify busca ${res.status}: ${String(j?.error?.message ?? "").slice(0, 160)}`);
       throw new SpotifyError("api", `O Spotify recusou a busca (${res.status}).`);
     }
+    return this.links(j, what);
+  }
+
+  private links(j: any, what: "track" | "playlist"): FoundLink[] {
     const items: any[] = (what === "track" ? j?.tracks?.items : j?.playlists?.items) ?? [];
     return items
       .filter((t) => t?.id)

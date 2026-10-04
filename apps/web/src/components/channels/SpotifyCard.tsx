@@ -46,8 +46,9 @@ export function SpotifyCard({ onMessage }: { onMessage: (m: string) => void }) {
       <div className="min-w-0 flex-1">
         <p className="text-sm font-medium text-gray-200">Spotify</p>
         <p className="text-xs text-gray-500">
-          {st.connected ? `Conectado como ${st.name}${st.premium ? " (Premium)" : " — sem Premium: só dá para buscar e criar playlists"}` : "Toque e controle a sua música pelo assistente: “tocar catingueira”, “criar playlist para estudar”."}
+          {st.connected ? `Conectado como ${st.name}${st.premium ? " (Premium)" : " — sem Premium: só dá para buscar e criar playlists"}` : "Conecte a sua conta para buscar, tocar e criar playlists pelo assistente: “buscar música catingueira”, “tocar catingueira”."}
         </p>
+        {!st.connected && <p className="mt-1 text-[11px] text-gray-500">Neste momento o Spotify libera até 5 contas neste app, cadastradas pelo administrador. Sem conectar, o assistente ainda busca músicas e playlists e manda o link.</p>}
       </div>
       {st.connected ? (
         <button onClick={() => void disconnect()} disabled={busy} className="px-3 py-1.5 rounded-lg text-xs font-medium bg-gray-800 text-gray-300 hover:bg-gray-700 disabled:opacity-50">Desconectar</button>

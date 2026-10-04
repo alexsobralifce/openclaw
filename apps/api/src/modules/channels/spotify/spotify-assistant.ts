@@ -34,10 +34,10 @@ export class SpotifyAssistant {
   constructor(private sp: SpotifyService, private deps: SpotifyDeps) {}
 
   /** Música ou playlist com link: não precisa da conta conectada. O link abre no app do Spotify. */
-  private async find(what: "track" | "playlist", query: string): Promise<SpotifyReply> {
+  private async find(ws: string, what: "track" | "playlist", query: string): Promise<SpotifyReply> {
     const noun = what === "track" ? "músicas" : "playlists";
     try {
-      const found = await this.sp.searchLinks(query, what, 5);
+      const found = await this.sp.searchLinks(query, what, 5, ws);
       if (!found.length) return { text: `🤔 Não achei ${noun} para *${query}* no Spotify. Tente outras palavras.` };
       const rows = found.map((f, i) => `${i + 1}. ${what === "track" ? "🎵" : "📝"} *${f.name}*${f.by ? ` — ${f.by}` : ""}\n   🔗 ${f.url}`);
       return { text: [`🎧 *${noun[0].toUpperCase()}${noun.slice(1)} para "${query}"*`, rows.join("\n"), "_Toque no link para abrir no Spotify._"].join("\n") };
@@ -48,7 +48,7 @@ export class SpotifyAssistant {
   }
 
   async run(ws: string, cmd: SpotifyCmd): Promise<SpotifyReply> {
-    if (cmd.kind === "find") return this.find(cmd.what, cmd.query);
+    if (cmd.kind === "find") return this.find(ws, cmd.what, cmd.query);
     const st = await this.sp.status(ws);
     if (!st.connected) return { text: NOT_CONNECTED };
     if (CONTROL.includes(cmd.kind) && !st.premium) return { text: PREMIUM };
@@ -107,7 +107,7 @@ export class SpotifyAssistant {
       case "mood":
         return this.mood(ws);
       case "find":
-        return this.find(cmd.what, cmd.query);
+        return this.find(ws, cmd.what, cmd.query);
     }
   }
 

@@ -35,6 +35,7 @@ export default function ChannelsPage() {
     const sp = new URLSearchParams(window.location.search).get("spotify");
     if (sp === "ok") setGoogleMsg("Spotify conectado com sucesso.");
     if (sp === "error") setGoogleMsg("Não foi possível conectar o Spotify. Tente novamente.");
+    if (sp === "limit") setGoogleMsg("O Spotify só libera contas cadastradas neste app (até 5 por enquanto) e a sua ainda não foi liberada. Peça ao administrador para cadastrar o seu e-mail do Spotify.");
     const ig = new URLSearchParams(window.location.search).get("instagram");
     if (ig === "ok") setGoogleMsg("Instagram conectado com sucesso.");
     if (ig === "error") setGoogleMsg("Não foi possível conectar o Instagram. Tente novamente.");

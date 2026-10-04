@@ -1,7 +1,7 @@
 import { BadRequestException, Controller, Delete, Get, Query, Request, Res } from "@nestjs/common";
 import { JwtService } from "@nestjs/jwt";
 import { Access } from "../../auth/access";
-import { SpotifyService } from "./spotify.service";
+import { SpotifyError, SpotifyService } from "./spotify.service";
 
 /** Conexão do Spotify pelo painel (Canais). O callback é público, mas só aceita o `state` assinado por esta API (vale 10 minutos). */
 @Controller("integrations/spotify")
@@ -41,8 +41,8 @@ export class SpotifyController {
       if (payload.purpose !== "spotify-oauth") throw new Error("state inválido");
       await this.spotify.connect(payload.workspaceId, code);
       return back("ok");
-    } catch {
-      return back("error");
+    } catch (e: any) {
+      return back(e instanceof SpotifyError && e.code === "not_allowed" ? "limit" : "error");
     }
   }
 }
