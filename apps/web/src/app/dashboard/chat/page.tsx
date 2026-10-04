@@ -5,7 +5,7 @@ import { io } from "socket.io-client";
 import { api, type ChatListedFile, type ChatMessage } from "@/lib/api";
 import { useMe } from "@/hooks/useMe";
 import { disablePush, enablePush } from "@/lib/push";
-import { parseWaRich, type WaSeg } from "@/lib/wa-markup";
+import { parseWaRich, splitOptions, type WaSeg } from "@/lib/wa-markup";
 import { fileEmoji, fileExpired, fileSizeLabel, isAutoFileNote } from "@/lib/chat-file";
 import { MobileMenu } from "@/components/layout/MobileMenu";
 
@@ -65,6 +65,7 @@ export default function ChatPage() {
   const field = useRef<HTMLTextAreaElement>(null);
   const rec = useRef<{ recorder: MediaRecorder; chunks: Blob[]; stream: MediaStream; timer: ReturnType<typeof setInterval>; started: number; cancelled: boolean } | null>(null);
 
+  const lastBotId = [...messages].reverse().find((x) => x.direction === "OUT")?.id;
   const add = useCallback((m: ChatMessage) => setMessages((prev) => (prev.some((p) => p.id === m.id) ? prev : [...prev, m])), []);
 
   useEffect(() => {
@@ -119,6 +120,16 @@ export default function ChatPage() {
       add(await api.appChat.send(t));
     } catch (e: any) {
       setText(t);
+      setError(e.message);
+    }
+  }
+
+  /** Toque numa opção do menu: manda o número, como se tivesse sido digitado. */
+  async function pick(n: number) {
+    setError("");
+    try {
+      add(await api.appChat.send(String(n)));
+    } catch (e: any) {
       setError(e.message);
     }
   }
@@ -322,7 +333,26 @@ export default function ChatPage() {
         {messages.map((m) => (
           <div key={m.id} className={`flex ${m.direction === "IN" ? "justify-end" : "justify-start"}`}>
             <div className={`max-w-[92%] rounded-2xl px-3 py-1.5 text-[15px] leading-snug whitespace-pre-wrap break-words ${m.direction === "IN" ? "bg-violet-500 text-white" : "bg-gray-800 text-gray-200"}`}>
-              {!(m.kind === "FILE" && isAutoFileNote(m.text, m.meta?.fileName)) && <Rich segs={parseWaRich(m.text)} />}
+              {!(m.kind === "FILE" && isAutoFileNote(m.text, m.meta?.fileName)) && (
+                m.direction === "OUT"
+                  ? splitOptions(m.text).map((b, i) =>
+                      b.kind === "text" ? (
+                        <div key={i}><Rich segs={parseWaRich(b.text)} /></div>
+                      ) : m.id === lastBotId ? (
+                        // Só a última resposta tem botões ativos: as anteriores são de telas que já mudaram
+                        <button key={i} onClick={() => void pick(b.n)} disabled={busy || typing} className="my-1 flex w-full items-center gap-3 rounded-xl bg-black/20 px-3 py-2 text-left active:bg-black/30 hover:bg-black/25 disabled:opacity-60">
+                          <span className="grid h-6 w-6 flex-shrink-0 place-items-center rounded-full bg-violet-500/40 text-xs font-semibold tabular-nums" aria-hidden>{b.n}</span>
+                          <span className="min-w-0 flex-1">
+                            <span className="block"><Rich segs={parseWaRich(b.label)} /></span>
+                            {b.sub && <span className="block text-xs opacity-70"><Rich segs={parseWaRich(b.sub)} /></span>}
+                          </span>
+                        </button>
+                      ) : (
+                        <div key={i}><Rich segs={parseWaRich(`${b.n}. ${b.label}${b.sub ? ` — ${b.sub}` : ""}`)} /></div>
+                      ),
+                    )
+                  : <Rich segs={parseWaRich(m.text)} />
+              )}
               {m.kind === "FILE" && m.meta?.fileId && (
                 fileExpired(m.createdAt) ? (
                   <p className="mt-1 text-xs opacity-70">{fileEmoji(m.meta.mime)} {m.meta.fileName ?? "Arquivo"} · expirou (fica disponível por 1 hora). Peça de novo.</p>
