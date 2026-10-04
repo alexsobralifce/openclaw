@@ -8,7 +8,12 @@
     "start": "node dist/main",
     "lint": "eslint src --ext .ts",
     "typecheck": "tsc --noEmit",
-    "test": "vitest run"
+    "test": "vitest run",
+    "test:unit": "vitest run --project unit",
+    "test:flow": "vitest run --project flow",
+    "test:layers": "vitest run --project unit && vitest run --project flow",
+    "test:coverage": "vitest run --coverage",
+    "test:audit": "node ../../scripts/test-audit.mjs"
   },
   "dependencies": {
     "@nestjs/bull": "^10.2.3",
@@ -45,6 +50,7 @@
     "@types/node": "^22.10.1",
     "@types/passport-jwt": "^4.0.1",
     "@types/web-push": "^3.6.4",
+    "@vitest/coverage-v8": "^3.2.7",
     "typescript": "^5.7.2",
     "vitest": "^3.2.7"
   }

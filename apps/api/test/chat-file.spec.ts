@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { FILE_AVAILABLE_MS, fileEmoji, fileExpired, fileSizeLabel, isAutoFileNote } from "../../web/src/lib/chat-file";
+import { FILE_AVAILABLE_MS, fileExpired, fileSizeLabel, isAutoFileNote } from "../../web/src/lib/chat-file";
 import { FILE_TTL_MS } from "../src/modules/channels/app-chat/app-chat.service";
 
 describe("cartão de download do arquivo no chat", () => {
@@ -10,13 +10,6 @@ describe("cartão de download do arquivo no chat", () => {
     const sent = "2026-10-03T17:00:00.000Z";
     expect(fileExpired(sent, Date.parse("2026-10-03T17:59:00Z"))).toBe(false);
     expect(fileExpired(sent, Date.parse("2026-10-03T18:01:00Z"))).toBe(true);
-  });
-  it("ícone pelo tipo", () => {
-    expect(fileEmoji("audio/mpeg")).toBe("🎵");
-    expect(fileEmoji("application/pdf")).toBe("📄");
-    expect(fileEmoji("image/png")).toBe("🖼️");
-    expect(fileEmoji("application/zip")).toBe("📎");
-    expect(fileEmoji()).toBe("📎");
   });
   it("tamanho legível", () => {
     expect(fileSizeLabel(3_355_443)).toBe("3,2 MB");

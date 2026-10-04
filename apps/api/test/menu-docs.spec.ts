@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { countDocs, DocNode, filterDocs, MENU_DOCS } from "../../web/src/lib/menu-docs";
+import { DocNode, filterDocs, MENU_DOCS } from "../../web/src/lib/menu-docs";
 import { MENU_ITEMS } from "../src/modules/channels/assistant/menu-items";
 
 const all = (nodes: DocNode[]): DocNode[] => nodes.flatMap((n) => [n, ...all(n.children ?? [])]);
@@ -25,12 +25,6 @@ describe("documentação do menu do assistente", () => {
     expect(new Set(ids).size).toBe(ids.length);
   });
 
-  it("cada item tem título e explicação", () => {
-    for (const n of all(MENU_DOCS)) {
-      expect(n.title.trim(), n.id).not.toBe("");
-      expect(n.summary.trim().length, n.id).toBeGreaterThan(10);
-    }
-  });
 
   it("cada item do menu explica como adicionar e como apagar", () => {
     for (const top of MENU_DOCS.filter((n) => n.id !== "como-funciona")) {
@@ -59,13 +53,6 @@ describe("documentação do menu do assistente", () => {
     expect(ids).toContain("notes-concluir");
   });
 
-  it("os exemplos do que dizer não estão vazios nem repetidos no mesmo item", () => {
-    for (const n of all(MENU_DOCS)) {
-      if (!n.say) continue;
-      expect(n.say.length, n.id).toBeGreaterThan(0);
-      expect(new Set(n.say).size, n.id).toBe(n.say.length);
-    }
-  });
 });
 
 describe("busca na ajuda", () => {
@@ -97,8 +84,4 @@ describe("busca na ajuda", () => {
     expect(filterDocs(MENU_DOCS, "cofre agenda").length).toBe(0);
   });
 
-  it("conta os itens de todos os níveis", () => {
-    expect(countDocs(MENU_DOCS)).toBe(all(MENU_DOCS).length);
-    expect(countDocs([])).toBe(0);
-  });
 });

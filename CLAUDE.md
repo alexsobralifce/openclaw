@@ -11,7 +11,7 @@ Para arquitetura, fluxos, gotchas e guia de navegação, veja [docs/CODEBASE_MAP
 
 ## Comandos
 
-- Testes: `cd apps/api && pnpm test` (a raiz não tem tarefa `test`).
+- Testes: `pnpm test` (camadas, de baixo para cima: unitários e depois fluxos), `pnpm smoke` (confere o sistema no ar). Estratégia e regras para não exagerar em `docs/TESTES.md`.
 - Typecheck: `pnpm typecheck`. Prisma: `pnpm --filter @openclaw/database db:generate|db:push` (com `DATABASE_URL` exportada; o turbo não repassa env).
 - Deploy manual: `railway up --service api --detach` e `railway up --service web --detach`.
 
