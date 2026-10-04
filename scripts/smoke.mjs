@@ -14,6 +14,11 @@ const checks = [
   ["API lê JSON (login inválido = 401, não 400 de corpo vazio)", async () => { const r = await get(`${API}/api/v1/auth/login`, json({ email: "smoke@example.com", password: "x" })); return r.status === 401 ? "" : `esperado 401, veio ${r.status}`; }],
   ["API recusa ticket do Google inválido (400)", async () => { const r = await get(`${API}/api/v1/auth/google/exchange`, json({ ticket: "x" })); return r.status === 400 ? "" : `esperado 400, veio ${r.status}`; }],
   ...["/api/v1/auth/me", "/api/v1/documents", "/api/v1/app-chat/messages", "/api/v1/users", "/api/v1/vault/status"].map((p) => [`Rota protegida sem login: ${p}`, async () => { const r = await get(`${API}${p}`); return r.status === 401 ? "" : `esperado 401, veio ${r.status}`; }]),
+  ["Spotify: rota protegida sem login (401) e callback sem código volta ao painel com erro", async () => {
+    const a = await get(`${API}/api/v1/integrations/spotify/status`);
+    const b = await get(`${API}/api/v1/integrations/spotify/callback`);
+    return a.status === 401 && b.status === 302 && (b.headers.get("location") || "").endsWith("/dashboard/channels?spotify=error") ? "" : `status=${a.status} callback=${b.status} ${b.headers.get("location")}`;
+  }],
   ["Webhook do Telegram sem o segredo (403)", async () => { const r = await get(`${API}/api/v1/channels/telegram/webhook`, json({ message: {} })); return r.status === 403 ? "" : `esperado 403, veio ${r.status}`; }],
   ["CORS: o painel é aceito e um site qualquer não", async () => {
     const ask = (origin) => get(`${API}/api/v1/auth/login`, { method: "OPTIONS", headers: { Origin: origin, "Access-Control-Request-Method": "POST" } });

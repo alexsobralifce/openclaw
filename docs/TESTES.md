@@ -22,7 +22,7 @@ Rodar os 826 a cada edição é desperdício de tempo e de atenção. Três cicl
 |---|---|---|
 | **Enquanto codifica** | só os testes ligados ao que mudou (segundos) | `pnpm test:changed` |
 | **Antes de commitar** | a camada unitária inteira (rápida) | `pnpm test:unit` |
-| **Antes de subir (deploy)** | tudo, de baixo para cima, e o typecheck | `pnpm test` e `pnpm typecheck` |
+| **Antes de subir (deploy)** | tudo, de baixo para cima, o typecheck e **a API subindo** | `pnpm test`, `pnpm typecheck` e `pnpm boot-check` |
 | **Depois de subir** | o sistema no ar | `pnpm smoke` |
 
 Como não há CI, a execução completa antes do deploy é o único portão: ela precisa estar 100% verde. Mas ela não precisa rodar a cada passo. Para crescer sem inchar, vale a regra do orçamento abaixo (poucos casos por funcionalidade).
@@ -53,4 +53,6 @@ De [qa-skills](https://github.com/petrkindlmann/qa-skills) (MIT), só três, com
 
 ## Antes de subir
 
-`pnpm typecheck`, `pnpm test` e, depois do deploy, `pnpm smoke`.
+`pnpm typecheck`, `pnpm test`, `pnpm boot-check` e, depois do deploy, `pnpm smoke`.
+
+Por que o `boot-check`: os testes montam as classes à mão, então não veem um erro de injeção do Nest. Em 04/10/2026 um `import type` num parâmetro de construtor teria derrubado a API em produção; só o boot real pegou.

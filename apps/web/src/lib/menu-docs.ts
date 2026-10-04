@@ -212,7 +212,7 @@ export const MENU_DOCS: DocNode[] = [
     children: [
       { id: "config-limpeza", icon: "🧹", title: "Limpeza do chat", summary: "Apaga automaticamente as respostas do assistente no WhatsApp a cada intervalo que você escolher, ou na hora (“Limpar agora”).", limits: "Só apaga mensagens enviadas pelo número conectado, de até 2 dias. As suas mensagens para ele o WhatsApp não deixa apagar: limpe por lá." },
       { id: "config-itens", icon: "🙈", title: "Itens do menu", summary: "Esconda do menu os itens que você não usa. O comando escrito ou falado continua valendo.", add: "Painel web › Configurações › Menu do WhatsApp: desmarque para mostrar de novo.", remove: "No mesmo lugar, marque os itens que quer esconder." },
-      { id: "config-cidade", icon: "🌦️", title: "Cidade do clima", summary: "O menu mostra o clima do lugar onde você está.", say: ["minha cidade é Recife"], add: "Diga a cidade ou envie a sua localização (📎 › Localização)." },
+      { id: "config-cidade", icon: "🌦️", title: "Cidade do clima", summary: "O menu mostra o clima do lugar onde você está (pelo Google, quando o servidor tem a chave; senão, pelo Open-Meteo).", say: ["minha cidade é Recife"], add: "Diga a cidade ou envie a sua localização (📎 › Localização)." },
       { id: "config-canal", icon: "🔔", title: "Canal dos avisos", summary: "Onde o assistente fala primeiro com você (e-mail novo, lembretes): WhatsApp, app ou Telegram.", add: "No app: Assistente › engrenagem › escolha o canal." },
     ],
   },

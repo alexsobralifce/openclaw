@@ -11,7 +11,8 @@
     "db:migrate": "turbo run db:migrate",
     "test": "cd apps/api && pnpm test:layers",
     "smoke": "node scripts/smoke.mjs",
-    "test:changed": "cd apps/api && pnpm test:changed"
+    "test:changed": "cd apps/api && pnpm test:changed",
+    "boot-check": "node scripts/boot-check.mjs"
   },
   "devDependencies": {
     "turbo": "^2.3.3",

@@ -60,6 +60,71 @@ export function parseForecast(j: any): Weather {
   };
 }
 
+// ─── Google (Weather API e Geocoding API) ─────────────────────────
+
+/** Condição do Google (`weatherCondition.type`) → código WMO que o resto do sistema já entende (ícone e texto). */
+export function googleCondition(type: unknown): number {
+  const t = String(type ?? "").toUpperCase();
+  if (/THUNDER/.test(t)) return 95;
+  if (/HAIL/.test(t)) return 77;
+  if (/SNOW|BLIZZARD/.test(t)) return /HEAVY|STORM|PERIODICALLY/.test(t) ? 75 : /LIGHT/.test(t) ? 71 : 73;
+  if (/RAIN_AND_SNOW/.test(t)) return 67;
+  if (/RAIN|SHOWERS/.test(t)) {
+    if (/HEAVY|PERIODICALLY/.test(t)) return /SHOWERS/.test(t) ? 82 : 65;
+    if (/SHOWERS/.test(t)) return 80;
+    return /LIGHT/.test(t) ? 61 : 63;
+  }
+  if (/^CLEAR$/.test(t)) return 0;
+  if (/MOSTLY_CLEAR/.test(t)) return 1;
+  if (/PARTLY_CLOUDY/.test(t)) return 2;
+  if (/CLOUDY|WINDY|FOG|HAZE/.test(t)) return /FOG|HAZE/.test(t) ? 45 : 3;
+  return -1; // desconhecida: a tela mostra "Tempo indefinido"
+}
+
+const pct = (x: any) => n(x?.probability?.percent);
+const kmh = (w: any) => {
+  const v = n(w?.speed?.value);
+  return /MILES/.test(String(w?.speed?.unit)) ? v * 1.609 : /METERS_PER_SECOND/.test(String(w?.speed?.unit)) ? v * 3.6 : v;
+};
+
+/**
+ * Junta as três respostas do Google (condições atuais, próximas horas e dias) no mesmo formato do Open-Meteo.
+ * Formato conferido na documentação do Weather API (04/10/2026); lança erro se faltar o essencial.
+ */
+export function mapGoogleWeather(current: any, hours: any, days: any): Weather {
+  const temp = current?.temperature?.degrees;
+  const today = days?.forecastDays?.[0];
+  if (typeof temp !== "number" || !today) throw new Error("previsão do Google indisponível");
+  const dayRain = (d: any) => Math.max(pct(d?.daytimeForecast?.precipitation), pct(d?.nighttimeForecast?.precipitation));
+  const next: number[] = (hours?.forecastHours ?? []).slice(0, 6).map((h: any) => pct(h?.precipitation));
+  const tmr = days?.forecastDays?.[1];
+  return {
+    temp,
+    feels: n(current?.feelsLikeTemperature?.degrees, temp),
+    humidity: n(current?.relativeHumidity),
+    wind: kmh(current?.wind),
+    code: googleCondition(current?.weatherCondition?.type),
+    isDay: current?.isDaytime !== false,
+    max: n(today?.maxTemperature?.degrees),
+    min: n(today?.minTemperature?.degrees),
+    rainProb: Math.max(dayRain(today), pct(current?.precipitation)),
+    rainNext6h: next.length ? Math.max(...next) : dayRain(today),
+    tomorrow: tmr ? { max: n(tmr?.maxTemperature?.degrees), min: n(tmr?.minTemperature?.degrees), rainProb: dayRain(tmr), code: googleCondition(tmr?.daytimeForecast?.weatherCondition?.type) } : undefined,
+  };
+}
+
+/** Resposta do Geocoding API → lugar ("Recife, Pernambuco"); null se não achou. */
+export function parseGoogleGeocode(j: any): { lat: number; lng: number; name: string } | null {
+  const r = j?.status === "OK" ? j?.results?.[0] : null;
+  const loc = r?.geometry?.location;
+  if (!r || typeof loc?.lat !== "number" || typeof loc?.lng !== "number") return null;
+  const part = (type: string) => (r.address_components ?? []).find((c: any) => (c.types ?? []).includes(type))?.long_name;
+  const city = part("locality") ?? part("administrative_area_level_2") ?? part("sublocality") ?? part("administrative_area_level_1");
+  const state = part("administrative_area_level_1");
+  const name = city ? [city, state && state !== city ? state : null].filter(Boolean).join(", ") : String(r.formatted_address ?? "").split(",").slice(0, 2).join(",").trim();
+  return name ? { lat: loc.lat, lng: loc.lng, name } : null;
+}
+
 /** Dica prática, só quando vale a pena. */
 export function weatherTip(w: Weather): string {
   if (w.rainNext6h >= 60 || (w.rainProb >= 70 && w.code >= 51)) return "☔ Leve o guarda-chuva";

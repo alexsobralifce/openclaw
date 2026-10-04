@@ -23,7 +23,8 @@ import { carOptionEnabled, CAR_DISABLED_NOTICE, menuHiddenKey, MENU_ITEMS, sanit
 import { cleanTitle, dayStamp, looksLikeNoteAdd, looksLikeNoteCaption, looksLikeNoteSearch, looksLikeNotesHome, noteTerms, noteTextFrom, noteWithTopic, parseNotePlan, pickTopic, startsLikeNote, storageAccount, topicRequest } from "./notes";
 import { label as trackLabel, SpotifyAssistant } from "../spotify/spotify-assistant";
 import { SpotifyCmd, spotifyCommand } from "../spotify/spotify-commands";
-import type { SpotifyService } from "../spotify/spotify.service";
+// import normal (não `import type`): o Nest precisa da classe em tempo de execução para injetar
+import { SpotifyService } from "../spotify/spotify.service";
 import { applyTagEdit, docFileName, docQuery, isFileOriginNote, looksLikeDocsHome, looksLikeReclassify, looksLikeTagsList, RECLASSIFY_BATCH, RECLASSIFY_MAX_READS, parseDocPlan, parseTagEdit, searchDocs, searchTerms, tagsLine, topTags } from "./documents";
 import { catalogedDriveIds, createDocument, deleteDocument, getDocument, listDocuments, setDocumentTags } from "./documents-store";
 import { pdfPageCount } from "./media-limits";
@@ -1102,7 +1103,7 @@ export class MenuService {
     try {
       const w = await this.weather.forecast(loc.lat, loc.lng);
       const hint = loc.source === "default" ? "\n💡 _Não sei onde você está: envie sua localização ou diga *minha cidade é Recife*._" : "";
-      return [head("🌦️", "Clima"), ...weatherDetail(w, loc.name), `_Fonte: Open-Meteo_${hint}`].join("\n");
+      return [head("🌦️", "Clima"), ...weatherDetail(w, loc.name), `_Fonte: ${this.weather.source ?? "Open-Meteo"}_${hint}`].join("\n");
     } catch (e: any) {
       this.logger.warn(`Clima indisponível: ${e.message}`);
       return "😕 Não consegui consultar o clima agora. Tente de novo em instantes.";
