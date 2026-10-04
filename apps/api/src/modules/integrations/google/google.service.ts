@@ -11,7 +11,8 @@ import { appendEntry, dailyFileName, dayStamp, formatEntry, NoteDraft, noteFileN
 
 const SCOPES = [
   "https://www.googleapis.com/auth/gmail.modify",
-  "https://www.googleapis.com/auth/calendar",
+  // Só eventos da agenda principal (listar, criar e apagar); não mexe nas agendas em si
+  "https://www.googleapis.com/auth/calendar.events",
   // Lê qualquer arquivo (buscar e baixar), mas só grava nos arquivos que ele mesmo criou (notas em Assist.IA/); nunca apaga
   "https://www.googleapis.com/auth/drive.readonly",
   "https://www.googleapis.com/auth/drive.file",
