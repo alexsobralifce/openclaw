@@ -56,3 +56,31 @@ Dicas: não mostre dados reais de terceiros, deixe a tela de permissão parada p
 - Endereço do app e da política em `https://www.magobox.com.br` (o domínio sem `www` ainda não resolve no DNS).
 - E-mail de contato do projeto que você monitora: o Google responde por ele.
 - Gmail e Drive (`drive.readonly`) são escopos restritos: o Google pode exigir a avaliação de segurança anual (CASA). Confirme prazo e custo no formulário.
+
+## Gravar o vídeo sem falar inglês (cartões de legenda)
+
+Use `docs/video-verificacao-google.html`: ele mostra um cartão em inglês por cena. Não precisa de narração: o vídeo é só a tela, com os cartões entre as cenas.
+
+**Preparação**
+1. Abra duas abas no navegador: a **aba 1** com `docs/video-verificacao-google.html` (abra o arquivo direto, em tela cheia com F11) e a **aba 2** com `https://app.magobox.com.br`, logada com uma **conta Google de teste**.
+2. Deixe o Gmail da conta de teste com 3 ou 4 e-mails fictícios e uma agenda vazia. Nada de dados de terceiros.
+3. Comece a gravar a tela (Mac: `Cmd + Shift + 5`).
+
+**Roteiro (para cada cena: mostre o cartão por ~5 s, com a seta direita, e troque para o app)**
+
+| Cena | Cartão | O que fazer no app | Frases para digitar |
+|---|---|---|---|
+| 0 | Abertura | Mostre a landing `www.magobox.com.br` e o rodapé com a política de privacidade. | |
+| 1 | Step 1 | Em *Canais*, clique em **Conectar Google**. **Pare 5 segundos na tela de permissão do Google**, com a URL e o `client_id` visíveis. Clique em Permitir. | |
+| 2 | Step 2 · Gmail | No chat: ler e-mails, abrir um, marcar como lido, arquivar um, apagar um, responder com a confirmação. | `ler e-mails`, depois os números do menu |
+| 3 | Step 3 · Calendar | Crie um evento, confirme e mostre-o no Google Agenda (outra aba). | `adicionar na agenda: dentista sexta às 15h`, depois `1` para confirmar |
+| 4 | Step 4 · Drive (leitura) | Peça um arquivo que já está no Drive e mostre-o chegando no chat. | `drive`, depois o nome do arquivo |
+| 5 | Step 5 · Drive (arquivos do app) | Crie uma nota, envie um PDF e mostre a pasta *Assist.IA* no Drive com os arquivos criados. | `nota sobre Teste: reunião às 10h`; anexe um PDF |
+| 6 | Step 6 · Contatos | Peça o telefone de um contato. | `contatos`, depois o nome |
+| 7 | Step 7 | Em *Canais*, clique em **Desconectar Google** e mostre em `myaccount.google.com/permissions` que o app saiu da lista. | |
+
+**Depois**
+1. Pare a gravação, corte o que sobrar no começo e no fim (o próprio QuickTime ou o iMovie servem).
+2. Suba no YouTube como **Não listado** e cole o link na Central de verificação.
+
+Se o roteiro de algum passo não funcionar com a frase indicada, use o menu numerado do assistente (digite `menu` e toque nas opções): o importante é o Google ver cada permissão sendo usada.
