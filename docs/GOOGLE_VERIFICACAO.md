@@ -16,7 +16,7 @@ Escopos pedidos: `gmail.modify` (restrito), `calendar.events` (sensível), `cale
 
 **https://www.googleapis.com/auth/calendar.events** (sensível)
 
-> The user asks the assistant to show today's, tomorrow's or this week's events and to create events from a sentence, a photo or a PDF (for example "add the dentist on Friday at 3 pm"). Creating events requires write access to calendar events (we use calendar.events, not the broader calendar scope, because the app only reads, creates and deletes events in the user's primary calendar and never manages calendars or sharing). Events are only created after the user confirms them in chat, and the assistant can also delete an event only when the user explicitly asks and confirms.
+> The user asks the assistant to show today's, tomorrow's or this week's events and to create events from a sentence, a photo or a PDF (for example "add the dentist on Friday at 3 pm"). Creating events requires write access to calendar events (we use calendar.events, not the broader calendar scope, because the app only reads, creates and deletes events, in the calendars the user has enabled in Google Calendar, and never manages calendars or sharing). Events are only created after the user confirms them in chat, and the assistant can also delete an event only when the user explicitly asks and confirms.
 
 **https://www.googleapis.com/auth/calendar.calendarlist.readonly** (sensível)
 
@@ -122,3 +122,15 @@ Contexto fixo (use estas informações, sem acrescentar outras):
 ```
 
 Depois: salve o SRT como `legendas.srt` e, no YouTube Studio, abra o vídeo, vá em **Legendas > Adicionar > Enviar arquivo**. Confira os tempos e o texto antes de enviar: a IA pode errar o tempo ou descrever o que não está na tela.
+
+## Contestação e "Mais informações" (formulário de envio)
+
+**Página inicial:** o app usava `https://magobox.com.br` (sem `www`), que não resolve no DNS. Corrija em **Branding** para `https://www.magobox.com.br` e, se possível, crie o registro da raiz no DNS com redirecionamento 301 para o `www`. Só depois conteste, descrevendo o estado real.
+
+**"O domínio não está registrado para você":** o Google exige que o domínio de nível superior (`magobox.com.br`) esteja verificado no Search Console por um proprietário do projeto. A propriedade atual é "Prefixo do URL" do `www`. Adicione também uma propriedade do tipo **Domínio** para `magobox.com.br`, verificada com registro TXT no DNS.
+
+**Mais informações (modelo; troque os dados da conta de teste pelos reais):**
+
+> MagoBox is a personal assistant that users talk to through WhatsApp or a web/mobile chat. Public site: https://www.magobox.com.br. Privacy policy (includes the Google API Services User Data Policy Limited Use statement): https://www.magobox.com.br/privacidade. Terms: https://www.magobox.com.br/termos. Data deletion: https://www.magobox.com.br/exclusao-de-dados.
+> Reviewers can sign in at https://app.magobox.com.br with the test account below (already approved, with Gmail, Calendar, Drive and Contacts connected): e-mail: [CONTA DE TESTE] / password: [SENHA]. To see the OAuth consent screen, go to Channels > Connect Google. The demo video shows every scope in use.
+> Contact: [SEU E-MAIL]. This is the only project that uses this OAuth client.
