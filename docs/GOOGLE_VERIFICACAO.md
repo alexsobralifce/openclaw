@@ -84,3 +84,37 @@ Use `docs/video-verificacao-google.html`: ele mostra um cartão em inglês por c
 2. Suba no YouTube como **Não listado** e cole o link na Central de verificação.
 
 Se o roteiro de algum passo não funcionar com a frase indicada, use o menu numerado do assistente (digite `menu` e toque nas opções): o importante é o Google ver cada permissão sendo usada.
+
+## Legendas e narração em inglês com o Gemini (a partir da gravação real)
+
+O vídeo precisa ser a gravação real do app. O Gemini só ajuda com o inglês: ele gera as legendas (SRT) e o texto da narração a partir do vídeo gravado. Não use IA para gerar imagens do app nem da tela de permissão do Google.
+
+Anexe o vídeo gravado ao Gemini (app ou aistudio.google.com) e cole:
+
+```
+Você é editor de legendas. Em anexo está uma gravação de tela REAL do app MagoBox (assistente pessoal por WhatsApp e chat web), feita para o vídeo de demonstração da verificação OAuth do Google. NÃO altere, não gere nem invente imagens: só trabalhe sobre o vídeo anexado.
+
+Tarefa:
+1. Assista ao vídeo e identifique as cenas, na ordem:
+   - Abertura: página inicial www.magobox.com.br e rodapé com a política de privacidade.
+   - Conexão: o usuário conecta a conta Google; tela de consentimento do Google.
+   - Gmail (gmail.modify): ler e-mails, marcar como lido, arquivar, apagar, responder com confirmação antes de enviar.
+   - Agenda (calendar.events): criar um evento por uma frase, com confirmação.
+   - Drive (drive.readonly): pedir um arquivo que já existe; o app só lê.
+   - Drive (drive.file): salvar nota e PDF na pasta própria do app (Assist.IA).
+   - Contatos (contacts.readonly): consultar o telefone de um contato; só leitura.
+   - Desconexão: remover o acesso do Google.
+2. Gere um arquivo de legendas em inglês no formato SRT, com tempos (HH:MM:SS,mmm) alinhados ao que aparece na tela, descrevendo em frases curtas o que o usuário faz e qual permissão está sendo usada. Frases de até 2 linhas, no máximo 42 caracteres por linha.
+3. Gere também o texto de uma narração em inglês, uma frase por cena, com o tempo de início de cada cena.
+4. Não descreva nada que não apareça no vídeo. Se uma cena estiver faltando ou pouco clara, diga qual e não preencha com suposições.
+
+Entregue: (a) o SRT completo em um bloco de código; (b) a narração por cena; (c) uma lista de cenas que faltaram ou que precisam ser regravadas.
+
+Contexto fixo (use estas informações, sem acrescentar outras):
+- App: MagoBox, https://www.magobox.com.br
+- Escopos: gmail.modify, calendar.events, drive.readonly, drive.file, contacts.readonly, openid, email.
+- Envio de e-mail, exclusão de e-mail e criação de evento só acontecem depois da confirmação do usuário.
+- O app nunca altera nem apaga arquivos existentes do Drive.
+```
+
+Depois: salve o SRT como `legendas.srt` e, no YouTube Studio, abra o vídeo, vá em **Legendas > Adicionar > Enviar arquivo**. Confira os tempos e o texto antes de enviar: a IA pode errar o tempo ou descrever o que não está na tela.
