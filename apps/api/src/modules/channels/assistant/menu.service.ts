@@ -715,7 +715,7 @@ export class MenuService {
         if (n === 0) return this.eventDeletePick(ws);
         if (n !== 1) return n === null ? null : this.invalid();
         try {
-          await this.google.calendarDelete(ws, d.item.id, d.item.account);
+          await this.google.calendarDelete(ws, d.item.id, d.item.account, d.item.calId);
         } catch (e: any) {
           this.logger.warn(`Apagar evento falhou: ${e.message}`);
           return `😕 Não consegui apagar o evento: ${short(e.message, 160)}\n${DIV}\n${opts(BACK)}`;
@@ -2640,7 +2640,7 @@ export class MenuService {
       }
     }
     all.sort((a, b) => String(a.inicio).localeCompare(String(b.inicio)));
-    const items = all.slice(0, await this.listSize(ws, 8)).map((e) => ({ id: e.id, account: e.account, titulo: e.titulo, inicio: e.inicio, fim: e.fim, recorrente: !!e.recorrente }));
+    const items = all.slice(0, await this.listSize(ws, 8)).map((e) => ({ id: e.id, account: e.account, titulo: e.titulo, inicio: e.inicio, fim: e.fim, recorrente: !!e.recorrente, calId: e.calId, agenda: e.agenda }));
     if (!items.length) {
       await this.set(ws, "agenda");
       return [head("🗑️", "Apagar evento"), "🙌 Não há eventos nos próximos 7 dias.", DIV, this.agendaOptions()].join("\n");

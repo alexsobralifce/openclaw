@@ -2,7 +2,7 @@
 
 Textos para colar em **Google Auth Platform > Central de verificação > Acesso a dados** (justificativa de cada escopo, uso pretendido dos dados e vídeo de demonstração). O formulário do Google costuma ser lido em inglês, por isso os textos abaixo estão em inglês. Confira cada afirmação com o comportamento real do app antes de enviar (fonte: `apps/api/src/modules/integrations/google/google.service.ts`, escopos em `SCOPES`).
 
-Escopos pedidos: `gmail.modify` (restrito), `calendar.events` (sensível), `drive.readonly` (restrito), `drive.file` (não sensível), `contacts.readonly` (sensível), mais `openid` e `email`.
+Escopos pedidos: `gmail.modify` (restrito), `calendar.events` (sensível), `calendar.calendarlist.readonly` (sensível), `drive.readonly` (restrito), `drive.file` (não sensível), `contacts.readonly` (sensível), mais `openid` e `email`.
 
 ## Uso pretendido dos dados (campo "how will the app use the data")
 
@@ -17,6 +17,10 @@ Escopos pedidos: `gmail.modify` (restrito), `calendar.events` (sensível), `driv
 **https://www.googleapis.com/auth/calendar.events** (sensível)
 
 > The user asks the assistant to show today's, tomorrow's or this week's events and to create events from a sentence, a photo or a PDF (for example "add the dentist on Friday at 3 pm"). Creating events requires write access to calendar events (we use calendar.events, not the broader calendar scope, because the app only reads, creates and deletes events in the user's primary calendar and never manages calendars or sharing). Events are only created after the user confirms them in chat, and the assistant can also delete an event only when the user explicitly asks and confirms.
+
+**https://www.googleapis.com/auth/calendar.calendarlist.readonly** (sensível)
+
+> Users keep several calendars in their Google account (for example a class calendar or a shared one). When the user asks the assistant "what is on my agenda this week", we need to know which calendars the user has enabled, so that events from all of them are shown, not only the primary one. This scope is used only to list the names and ids of the calendars (read-only); event data is read and written through the calendar.events scope. We never create, edit, delete or share calendars.
 
 **https://www.googleapis.com/auth/drive.readonly** (restrito)
 

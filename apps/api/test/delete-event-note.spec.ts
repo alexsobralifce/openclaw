@@ -11,7 +11,7 @@ function build(over: Record<string, any> = {}) {
   const soon = (h: number) => new Date(Date.now() + h * 3600_000).toISOString();
   const events = [
     { id: "evt-aaaaaa1", titulo: "Reunião com João", inicio: soon(2), fim: soon(3), recorrente: false },
-    { id: "evt-aaaaaa2", titulo: "Aula de cálculo", inicio: soon(30), fim: soon(31), recorrente: true },
+    { id: "evt-aaaaaa2", titulo: "Aula de cálculo", inicio: soon(30), fim: soon(31), recorrente: true, calId: "turma@group.calendar.google.com" },
   ];
   const google: any = {
     listAccounts: async () => ["pessoal@gmail.com"],
@@ -47,7 +47,7 @@ describe("apagar evento da agenda", () => {
     expect(screen()).toBe("event_delete_confirm");
 
     const done = await say("1");
-    expect(google.calendarDelete).toHaveBeenCalledWith("w1", "evt-aaaaaa2", "pessoal@gmail.com");
+    expect(google.calendarDelete).toHaveBeenCalledWith("w1", "evt-aaaaaa2", "pessoal@gmail.com", "turma@group.calendar.google.com");
     expect(done).toContain("Evento apagado");
     expect(done).toContain("Aula de cálculo");
     expect(screen()).toBe("agenda");

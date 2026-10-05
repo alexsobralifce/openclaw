@@ -13,6 +13,8 @@ const SCOPES = [
   "https://www.googleapis.com/auth/gmail.modify",
   // Só eventos da agenda principal (listar, criar e apagar); não mexe nas agendas em si
   "https://www.googleapis.com/auth/calendar.events",
+  // Só para saber quais agendas a conta tem (a principal e as secundárias marcadas como visíveis); não lê nem altera nada nelas
+  "https://www.googleapis.com/auth/calendar.calendarlist.readonly",
   // Lê qualquer arquivo (buscar e baixar), mas só grava nos arquivos que ele mesmo criou (notas em Assist.IA/); nunca apaga
   "https://www.googleapis.com/auth/drive.readonly",
   "https://www.googleapis.com/auth/drive.file",
@@ -897,27 +899,77 @@ export class GoogleService implements OnModuleInit {
 
   // ─── Calendar ─────────────────────────────────────────────────
 
+  private calendarsCache = new Map<string, { at: number; list: { id: string; name: string; primary: boolean }[] }>();
+
+  /**
+   * Agendas da conta que o usuário mantém visíveis no Google Agenda (a principal e as secundárias marcadas). Sem permissão para listá-las
+   * (conexão antiga ou escopo menor) ou em caso de erro, devolve só a principal, que é o que sempre funcionou.
+   */
+  private async calendarIds(workspaceId: string, account?: string): Promise<{ id: string; name: string; primary: boolean }[]> {
+    const only = [{ id: "primary", name: "", primary: true }];
+    const key = `${workspaceId}:${account ?? ""}`;
+    const hit = this.calendarsCache.get(key);
+    if (hit && Date.now() - hit.at < 5 * 60_000) return hit.list;
+    let list = only;
+    try {
+      const r = await this.g<any>(workspaceId, account, "https://www.googleapis.com/calendar/v3/users/me/calendarList?minAccessRole=reader&maxResults=50&fields=items(id,summary,summaryOverride,selected,primary)");
+      const found = (r.items ?? [])
+        .filter((c: any) => c.primary || c.selected)
+        .map((c: any) => ({ id: c.primary ? "primary" : String(c.id), name: c.primary ? "" : String(c.summaryOverride || c.summary || ""), primary: !!c.primary }))
+        .slice(0, 10);
+      if (found.some((c: any) => c.primary)) list = found;
+    } catch (e: any) {
+      this.logger.warn(`Listar agendas falhou (${account ?? "conta"}): só a principal. ${String(e?.message).slice(0, 120)}`);
+    }
+    this.calendarsCache.set(key, { at: Date.now(), list });
+    return list;
+  }
+
   async calendarList(workspaceId: string, timeMin: string, timeMax: string, account?: string) {
     const p = new URLSearchParams({ timeMin, timeMax, singleEvents: "true", orderBy: "startTime", maxResults: "25" });
-    const r = await this.g<any>(workspaceId, account, `https://www.googleapis.com/calendar/v3/calendars/primary/events?${p}`);
-    return (r.items ?? []).map((e: any) => ({
-      id: e.id,
-      titulo: e.summary,
-      inicio: e.start?.dateTime ?? e.start?.date,
-      fim: e.end?.dateTime ?? e.end?.date,
-      local: e.location,
-      recorrente: !!e.recurringEventId,
-    }));
+    const cals = await this.calendarIds(workspaceId, account);
+    const per = await Promise.all(
+      cals.map(async (c) => {
+        try {
+          const r = await this.g<any>(workspaceId, account, `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(c.id)}/events?${p}`);
+          return (r.items ?? []).map((e: any) => ({
+            id: e.id,
+            titulo: e.summary,
+            inicio: e.start?.dateTime ?? e.start?.date,
+            fim: e.end?.dateTime ?? e.end?.date,
+            local: e.location,
+            recorrente: !!e.recurringEventId,
+            calId: c.id,
+            agenda: c.name,
+            uid: e.iCalUID as string | undefined,
+          }));
+        } catch (e) {
+          if (c.primary) throw e; // a principal falhando é erro de verdade; uma secundária indisponível só some da lista
+          return [];
+        }
+      }),
+    );
+    // O mesmo convite pode estar em duas agendas: fica um só
+    const seen = new Set<string>();
+    return per
+      .flat()
+      .filter((e) => {
+        const k = e.uid ? `${e.uid}|${e.inicio}` : `${e.calId}|${e.id}`;
+        return seen.has(k) ? false : (seen.add(k), true);
+      })
+      .sort((a, b) => String(a.inicio).localeCompare(String(b.inicio)))
+      .slice(0, 40)
+      .map(({ uid, ...e }) => e);
   }
 
   /**
    * Apaga um evento da agenda principal da conta. Em evento que se repete, a lista traz cada ocorrência separada (singleEvents),
    * então só aquela ocorrência some. Evento que já não existe (404/410) conta como apagado.
    */
-  async calendarDelete(workspaceId: string, eventId: string, account?: string): Promise<void> {
+  async calendarDelete(workspaceId: string, eventId: string, account?: string, calendarId = "primary"): Promise<void> {
     if (!/^[\w-]{5,1024}$/.test(eventId)) throw new Error("Evento inválido.");
     try {
-      await this.g(workspaceId, account, `https://www.googleapis.com/calendar/v3/calendars/primary/events/${encodeURIComponent(eventId)}?sendUpdates=none`, { method: "DELETE" });
+      await this.g(workspaceId, account, `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(calendarId)}/events/${encodeURIComponent(eventId)}?sendUpdates=none`, { method: "DELETE" });
     } catch (e: any) {
       if (/Google API (404|410)\b/.test(String(e?.message))) return;
       throw e;
