@@ -9,10 +9,13 @@ export const TELEGRAM_INSTANCE = "telegram";
 export const isChannelKind = (v: unknown): v is ChannelKind => typeof v === "string" && (CHANNELS as string[]).includes(v);
 export const channelOfInstance = (instance: string): ChannelKind => (instance === APP_INSTANCE ? "app" : instance === TELEGRAM_INSTANCE ? "telegram" : "whatsapp");
 
-/** Ordem de tentativa: o canal preferido primeiro, depois os outros (o app antes do Telegram, por estar sempre disponível). */
+/**
+ * Ordem de tentativa: o canal preferido primeiro, depois os outros. Sem preferência, o padrão é o app (sempre disponível);
+ * o WhatsApp só é usado por quem escolher esse canal.
+ */
 export function channelOrder(preferred: ChannelKind | null | undefined): ChannelKind[] {
-  const first: ChannelKind = isChannelKind(preferred) ? preferred : "whatsapp";
-  return [first, ...(["whatsapp", "app", "telegram"] as ChannelKind[]).filter((c) => c !== first)];
+  const first: ChannelKind = isChannelKind(preferred) ? preferred : "app";
+  return [first, ...(["app", "whatsapp", "telegram"] as ChannelKind[]).filter((c) => c !== first)];
 }
 
 /** Primeiro canal disponível pela ordem de preferência; null se nenhum. */

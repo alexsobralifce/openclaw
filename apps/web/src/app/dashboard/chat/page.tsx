@@ -59,7 +59,7 @@ export default function ChatPage() {
   const [tgLink, setTgLink] = useState<{ code: string; url: string | null; bot: string } | null>(null);
   const [push, setPush] = useState<{ enabled: boolean; publicKey: string; subscribed: boolean } | null>(null);
   const [channel, setChannel] = useState<string | null>(null);
-  const active = channel ?? me?.assistantChannel ?? "whatsapp";
+  const active = channel ?? me?.assistantChannel ?? "app";
   const bottom = useRef<HTMLDivElement>(null);
   const fileInput = useRef<HTMLInputElement>(null);
   const field = useRef<HTMLTextAreaElement>(null);

@@ -14,7 +14,7 @@ export interface Commander {
   role?: string;
   /** Plano comercial (nulo = sem plano: valem os limites gerais do ambiente). */
   plan?: string | null;
-  /** Canal principal escolhido pelo usuário (nulo = WhatsApp). */
+  /** Canal principal escolhido pelo usuário (nulo = app). */
   channel?: ChannelKind | null;
   /** Chat do Telegram vinculado (nulo = sem Telegram). */
   telegramChatId?: string | null;
