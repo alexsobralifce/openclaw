@@ -464,7 +464,7 @@ export class MenuService {
         return c ? this.categoryDocsView(ws, c) : this.invalid();
       }
       case "docs_newcat_input": {
-        if (n === 0) return d.mode === "pick" ? this.categoryPickAgain(ws, d.id) : this.categoriesView(ws);
+        if (n === 0) return d.mode === "pick" ? this.categoryPickAgain(ws, d.id, !!d.change) : this.categoriesView(ws);
         const name = cleanCategory(text);
         if (name.length < 2) return "🤔 Diga um nome com pelo menos 2 letras, ou 0 para voltar.";
         return d.mode === "pick" ? this.docSetCategory(ws, d.id, name) : this.categoryCreate(ws, name);
@@ -474,8 +474,8 @@ export class MenuService {
         if (n === null) return null;
         const doc = await getDocument(ws, d.id);
         if (!doc) return this.docsEntry(ws);
-        if (n === 0) return this.docCardView(ws, doc, `✅ *Guardado em* ${short(doc.topic, 30)}`);
-        if (n === (d.items?.length ?? 0) + 1) return this.categoryNewAsk(ws, { mode: "pick", id: d.id });
+        if (n === 0) return this.docCardView(ws, doc, d.change ? "" : `✅ *Guardado em* ${short(doc.topic, 30)}`);
+        if (n === (d.items?.length ?? 0) + 1) return this.categoryNewAsk(ws, { mode: "pick", id: d.id, change: !!d.change });
         const name = d.items?.[n - 1];
         return name ? this.docSetCategory(ws, d.id, name) : this.invalid();
       }
@@ -1691,14 +1691,14 @@ export class MenuService {
   private async docsEntry(ws: string): Promise<string> {
     const docs = await listDocuments(ws);
     await this.set(ws, "docs_input");
-    const tags = topTags(docs, 8).map((t) => `#${t.tag} (${t.count})`).join("  ");
     const cats = topCategories(docs).slice(0, 6).map((c) => `${c.name} (${c.count})`).join(" · ");
     return [
       head("📚", "Documentos", "PDFs guardados, com categorias e tags"),
-      docs.length ? `Você tem *${docs.length}* ${docs.length === 1 ? "documento" : "documentos"}.${cats ? `\n📂 ${cats}` : ""}${tags ? `\n🏷️ ${tags}` : ""}` : "Ainda não há documentos guardados.",
-      "📄 *Guardar:* mande um PDF aqui. Na legenda você pode dizer a categoria ou as tags.",
+      docs.length ? `Você tem *${docs.length}* ${docs.length === 1 ? "documento" : "documentos"}.${cats ? `\n📂 ${cats}` : ""}` : "Ainda não há documentos guardados.",
+      "📄 *Guardar:* mande um PDF aqui. Depois eu pergunto em qual categoria guardar (ou você cria uma).",
       "🔎 *Buscar:* diga o assunto ou a tag, ex.: _contrato_ ou _documentos com a tag aluguel_. Para ver todos, diga _todos_.",
       "📂 *Categorias:* diga _categorias_ para listar, criar ou apagar; _categoria saúde_ abre uma.",
+      "🔄 *Mudar a categoria de um documento:* busque o documento, abra e escolha *Mudar categoria*.",
       DIV,
       opts(BACK),
     ].join("\n");
@@ -1781,7 +1781,7 @@ export class MenuService {
     return [head("📂", "Categorias dos documentos"), header, list, DIV, actions, foot("Responda com o número, ou diga: criar categoria Saúde · apagar categoria Saúde")].filter(Boolean).join("\n");
   }
 
-  private async categoryNewAsk(ws: string, data: { mode: "create" | "pick"; id?: string }): Promise<string> {
+  private async categoryNewAsk(ws: string, data: { mode: "create" | "pick"; id?: string; change?: boolean }): Promise<string> {
     await this.set(ws, "docs_newcat_input", data);
     return [head("➕", "Nova categoria"), "Diga o nome da categoria, ex.: _Saúde_ ou _Faculdade_.", DIV, opts(BACK)].join("\n");
   }
@@ -1824,26 +1824,30 @@ export class MenuService {
   }
 
   /** Depois de guardar um PDF: pergunta a categoria (a sugerida pela IA vem primeiro) e deixa criar uma nova. */
-  private async categoryPickView(ws: string, d: any, header: string): Promise<string> {
+  private async categoryPickView(ws: string, d: any, header: string, change = false): Promise<string> {
     const cats = await this.allCategories(ws);
     const sk = categoryKey(d.topic);
-    const ordered = [...cats.filter((c) => categoryKey(c.name) === sk), ...cats.filter((c) => categoryKey(c.name) !== sk && categoryKey(c.name) !== categoryKey(NO_CATEGORY))].slice(0, 8);
-    await this.set(ws, "docs_pick_cat", { id: d.id, items: ordered.map((c) => c.name) });
-    const rows = ordered.map((c, i) => [i + 1, "📂", `${short(c.name, 30)} · ${c.count}${categoryKey(c.name) === sk ? " 💡 sugerida" : ""}`] as [number, string, string]);
+    const first = cats.filter((c) => categoryKey(c.name) === sk);
+    // Ao guardar, "Sem categoria" não é opção (é só o destino das apagadas); ao mudar, vale para tirar o documento de uma categoria
+    const rest = cats.filter((c) => categoryKey(c.name) !== sk && (change || categoryKey(c.name) !== categoryKey(NO_CATEGORY)));
+    const ordered = [...first, ...rest].slice(0, 8);
+    await this.set(ws, "docs_pick_cat", { id: d.id, items: ordered.map((c) => c.name), change });
+    const mark = change ? " (atual)" : " 💡 sugerida";
+    const rows = ordered.map((c, i) => [i + 1, "📂", `${short(c.name, 30)} · ${c.count}${categoryKey(c.name) === sk ? mark : ""}`] as [number, string, string]);
     return [
       header,
-      `📄 *${short(d.title, 60)}*`,
-      d.tags?.length ? `🏷️ ${tagsLine(d.tags)}` : "",
-      head("📂", "Em qual categoria guardar?"),
+      change ? "" : `📄 *${short(d.title, 60)}*`,
+      !change && d.tags?.length ? `🏷️ ${tagsLine(d.tags)}` : "",
+      head("📂", change ? "Para qual categoria mover?" : "Em qual categoria guardar?"),
       opts(...rows, [ordered.length + 1, "➕", "Nova categoria"]),
       DIV,
-      opts([0, "✅", `Manter em ${short(d.topic, 24)}`]),
+      change ? opts([0, "⬅️", "Cancelar"]) : opts([0, "✅", `Manter em ${short(d.topic, 24)}`]),
     ].filter(Boolean).join("\n");
   }
 
-  private async categoryPickAgain(ws: string, id: string): Promise<string> {
+  private async categoryPickAgain(ws: string, id: string, change = false): Promise<string> {
     const doc = await getDocument(ws, id);
-    return doc ? this.categoryPickView(ws, doc, "📂 *Categoria do documento*") : this.docsEntry(ws);
+    return doc ? this.categoryPickView(ws, doc, "📂 *Categoria do documento*", change) : this.docsEntry(ws);
   }
 
   /** Documentos de uma categoria (pelo nome, sem diferenciar acento ou maiúscula). */
@@ -1861,10 +1865,9 @@ export class MenuService {
     return found.length === 1 ? this.docOpen(ws, found[0]) : this.docsListView(ws, found, cat.name, `📂 ${short(cat.name, 30)}`);
   }
 
-  private async docCategoryAsk(ws: string, d: any): Promise<string> {
-    const cats = (await this.allCategories(ws)).slice(0, 8).map((c) => c.name).join(", ");
-    await this.set(ws, "docs_view", { id: d.id });
-    return [head("📂", "Categoria do documento", short(d.title, 40)), `Atual: *${d.topic || "sem categoria"}*`, cats ? `Já existem: ${cats}` : "", "Diga a nova, ex.: _categoria: Saúde_ (pode ser uma nova).", DIV, opts(BACK)].filter(Boolean).join("\n");
+  /** "Mudar categoria": lista numerada das categorias (a atual marcada) e a opção de criar uma nova. */
+  private docCategoryAsk(ws: string, d: any): Promise<string> {
+    return this.categoryPickView(ws, d, `📂 *Mudar a categoria de* ${short(d.title, 40)}`, true);
   }
 
   private async docSetCategory(ws: string, id: string, name: string): Promise<string> {

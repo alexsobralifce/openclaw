@@ -163,13 +163,14 @@ describe("buscar no catálogo", () => {
     expect(none).toContain("#contrato");
   });
 
-  it("'documentos' abre o catálogo com a contagem e as tags; 'tags' lista todas; 'todos' lista tudo", async () => {
+  it("'documentos' abre o catálogo com a contagem (sem as tags); 'tags' lista todas; 'todos' lista tudo", async () => {
     const { say } = build();
     seed({ tags: ["contrato", "aluguel"] });
     seed({ tags: ["contrato"], title: "Outro" });
     const home = await say("documentos");
     expect(home).toContain("*2* documentos");
-    expect(home).toContain("#contrato (2)");
+    expect(home).not.toContain("#contrato");
+    expect(home).toContain("Mudar a categoria de um documento");
     expect(await say("tags")).toContain("#contrato · 2");
     // a tela de documentos segue aberta: "todos" lista tudo
     expect(await say("todos")).toContain("2 documentos");
@@ -390,16 +391,38 @@ describe("categorias no menu Documentos", () => {
     expect(rows.find((r) => r.title === "Contrato")?.topic).toBe("Saúde");
   });
 
-  it("o botão 4 pergunta a nova categoria; em outro workspace não mexe", async () => {
+  it("o botão 4 lista as categorias para escolher pelo número (ou criar); em outro workspace não mexe", async () => {
     const mine = seed({ title: "Exame", topic: "Saúde" });
     const other = seed({ title: "Alheio", topic: "Saúde", workspaceId: "w2" });
     const { say } = build();
     await say("documentos");
     await say("exame");
-    expect(await say("4")).toContain("Diga a nova");
-    await say("categoria: Casa");
+    seed({ title: "Aluguel", topic: "Casa" });
+    const ask = await say("4");
+    expect(ask).toContain("Para qual categoria mover?");
+    expect(ask).toContain("Saúde · 1 (atual)");
+    expect(ask).toContain("Nova categoria");
+    await say("2"); // Casa
     expect(mine.topic).toBe("Casa");
     expect(other.topic).toBe("Saúde");
+    // por texto continua valendo
+    await say("categoria: Trabalho");
+    expect(mine.topic).toBe("Trabalho");
+  });
+
+  it("ao mudar, 0 cancela e a opção de nova categoria cria e move", async () => {
+    const mine = seed({ title: "Exame", topic: "Saúde" });
+    const { say, screen } = build();
+    await say("documentos");
+    await say("exame");
+    await say("4");
+    expect(await say("0")).toContain("Exame");
+    expect(mine.topic).toBe("Saúde");
+    expect(screen()).toBe("docs_view");
+    await say("4");
+    await say("2"); // só há Saúde: 2 é "Nova categoria"
+    expect(await say("Viagens")).toContain("Categoria atualizada");
+    expect(mine.topic).toBe("Viagens");
   });
 });
 
