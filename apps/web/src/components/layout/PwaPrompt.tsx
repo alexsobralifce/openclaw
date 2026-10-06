@@ -2,7 +2,10 @@
 
 import { useEffect, useState } from "react";
 import { api } from "@/lib/api";
-import { PWA_DISMISS_KEY } from "@/lib/auth";
+import Link from "next/link";
+import { usePathname } from "next/navigation";
+import { PWA_DISMISS_KEY, WA_DISMISS_KEY } from "@/lib/auth";
+import { hasService, useMe } from "@/hooks/useMe";
 import { enablePush, pushSupported, registerServiceWorker } from "@/lib/push";
 
 
@@ -26,6 +29,7 @@ const detectPlatform = (): Platform => {
  * A cada login, se o app ainda não está instalado: no Android pede para instalar o app e no iPhone para criar o atalho; também oferece ligar as notificações.
  * O navegador só concede instalação e notificação depois de um toque do usuário, então o aviso traz os botões.
  * "Agora não" vale só até o próximo login (o login apaga a marca, ver `setToken`).
+ * Resolvido o aviso de instalação, pergunta se quer conectar o WhatsApp (só a quem ainda não tem um) e leva para Canais.
  */
 export function PwaPrompt() {
   const [installEvt, setInstallEvt] = useState<InstallEvent | null>(null);
@@ -37,6 +41,15 @@ export function PwaPrompt() {
   const [waited, setWaited] = useState(false); // dá tempo ao Chrome de oferecer o botão de instalar antes de mostrar o passo a passo manual
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  const me = useMe();
+  const pathname = usePathname();
+  const [hasWhatsapp, setHasWhatsapp] = useState<boolean | null>(null); // null: ainda não sabemos
+  const [waHidden, setWaHidden] = useState(true);
+
+  useEffect(() => {
+    setWaHidden(!!read(WA_DISMISS_KEY));
+    api.channels.list().then((l) => setHasWhatsapp(l.some((c) => c.type === "WHATSAPP"))).catch(() => undefined);
+  }, []);
 
   useEffect(() => {
     void registerServiceWorker();
@@ -62,7 +75,9 @@ export function PwaPrompt() {
   const iosInstall = !standalone && platform === "ios"; // iPhone não tem botão: é pelo menu Compartilhar
   const androidManual = !standalone && platform === "android" && !installEvt && waited; // navegador que não ofereceu o botão: pelo menu
   const canPush = !!push?.enabled && pushSupported() && !push.subscribed && perm !== "denied";
-  if (hidden || (!canInstall && !iosInstall && !androidManual && !canPush)) return null;
+  const pwaOffer = !hidden && (canInstall || iosInstall || androidManual || canPush);
+  const waOffer = !waHidden && hasWhatsapp === false && hasService(me, "channels") && pathname !== "/dashboard/channels" && waited;
+  if (!pwaOffer) return waOffer ? <WhatsappAsk onDismiss={() => { try { localStorage.setItem(WA_DISMISS_KEY, "1"); } catch {} setWaHidden(true); }} /> : null;
 
   const later = () => {
     try { localStorage.setItem(PWA_DISMISS_KEY, "1"); } catch {}
@@ -116,6 +131,20 @@ export function PwaPrompt() {
         {canInstall && <button onClick={install} className={`${btn} bg-violet-500 text-white`}>{platform === "android" ? "Instalar app" : "Criar atalho"}</button>}
         {canPush && <button onClick={notify} disabled={busy} className={`${btn} bg-violet-500 text-white disabled:opacity-50`}>{busy ? "Ativando…" : "Ativar notificações"}</button>}
         <button onClick={later} className={`${btn} bg-gray-800 text-gray-300 hover:bg-gray-700`}>Agora não</button>
+      </div>
+    </div>
+  );
+}
+
+function WhatsappAsk({ onDismiss }: { onDismiss: () => void }) {
+  const btn = "px-3 py-1.5 rounded-lg text-xs font-medium";
+  return (
+    <div role="dialog" aria-label="Conectar o WhatsApp" className="fixed z-40 inset-x-3 top-[calc(3rem+env(safe-area-inset-top))] md:inset-x-auto md:top-auto md:right-4 md:bottom-4 md:w-96 bg-gray-900 border border-gray-700 rounded-xl p-4 shadow-xl space-y-3">
+      <p className="text-sm font-medium text-gray-200">Quer conectar o seu WhatsApp?</p>
+      <p className="text-xs text-gray-400">Conectando, você conversa com o assistente e atende seus clientes pelo próprio WhatsApp. Leva um minuto: é só ler um QR Code.</p>
+      <div className="flex flex-wrap gap-2">
+        <Link href="/dashboard/channels" onClick={onDismiss} className={`${btn} bg-violet-500 text-white`}>Conectar agora</Link>
+        <button onClick={onDismiss} className={`${btn} bg-gray-800 text-gray-300 hover:bg-gray-700`}>Agora não</button>
       </div>
     </div>
   );
