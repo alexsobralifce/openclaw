@@ -15,7 +15,7 @@ vi.mock("@openclaw/database", () => ({
       },
       update: async ({ where, data }: any) => Object.assign(rows.find((r) => r.id === where.id), data),
       updateMany: async ({ where, data }: any) => {
-        const hit = rows.filter((r) => r.id === where.id && r.workspaceId === where.workspaceId);
+        const hit = rows.filter((r) => (where.id?.in ? where.id.in.includes(r.id) : r.id === where.id) && r.workspaceId === where.workspaceId);
         hit.forEach((r) => Object.assign(r, data));
         return { count: hit.length };
       },
@@ -78,7 +78,8 @@ describe("guardar um PDF no catálogo", () => {
     expect(rows[0]).toMatchObject({ workspaceId: "w1", kind: "pdf", title: "Contrato de aluguel", topic: "Contratos", tags: ["contrato", "aluguel", "imovel"], driveFileId: "drivefile01", origin: "app" });
     expect(out).toContain("Documento guardado");
     expect(out).toContain("#contrato #aluguel #imovel");
-    expect(screen()).toBe("docs_view");
+    expect(out).toContain("Em qual categoria guardar?");
+    expect(screen()).toBe("docs_pick_cat");
   });
 
   it("a legenda do dono chega à IA e as tags e assuntos já usados são oferecidos para reaproveitar", async () => {
@@ -399,5 +400,77 @@ describe("categorias no menu Documentos", () => {
     await say("categoria: Casa");
     expect(mine.topic).toBe("Casa");
     expect(other.topic).toBe("Saúde");
+  });
+});
+
+describe("categorias: escolher ao guardar, criar, listar e apagar", () => {
+  it("depois de guardar o PDF pergunta a categoria, com a sugerida da IA primeiro", async () => {
+    seed({ topic: "Saúde" });
+    const { menu, pdf, say } = build();
+    const out = await menu.documentIngest("w1", { media: [pdf] });
+    expect(out).toMatch(/1️⃣ 📂 Contratos · 1 💡 sugerida/);
+    expect(out).toContain("📂 Saúde");
+    expect(out).toContain("Nova categoria");
+    expect(out).toContain("Manter em Contratos");
+    // escolher uma que já existe
+    expect(await say("2")).toContain("Categoria atualizada");
+    expect(rows.find((r) => r.driveFileId === "drivefile01")?.topic).toBe("Saúde");
+  });
+
+  it("0 mantém a categoria sugerida", async () => {
+    const { menu, pdf, say, screen } = build();
+    await menu.documentIngest("w1", { media: [pdf] });
+    expect(await say("0")).toContain("Guardado em");
+    expect(rows[0].topic).toBe("Contratos");
+    expect(screen()).toBe("docs_view");
+  });
+
+  it("se a categoria não existe, cria uma nova e guarda o arquivo nela", async () => {
+    const { menu, pdf, say, screen } = build();
+    await menu.documentIngest("w1", { media: [pdf] });
+    expect(await say("2")).toContain("nome da categoria"); // só há Contratos: 2 é "Nova categoria"
+    expect(screen()).toBe("docs_newcat_input");
+    expect(await say("viagens de trabalho")).toContain("Categoria atualizada");
+    expect(rows[0].topic).toBe("Viagens de trabalho");
+  });
+
+  it("criar categoria vazia, listar e apagar (os documentos vão para Sem categoria)", async () => {
+    seed({ topic: "Saúde" });
+    const { say, screen } = build();
+    expect(await say("criar categoria Faculdade")).toContain("Categoria criada");
+    const list = await say("categorias");
+    expect(list).toContain("Faculdade · 0");
+    expect(list).toContain("Saúde · 1");
+    expect(await say("criar categoria faculdade")).toContain("já existe");
+    // apagar a categoria que tem documento: pede confirmação e não apaga o documento
+    expect(await say("apagar categoria saúde")).toContain("1 documento");
+    expect(screen()).toBe("docs_catdel_confirm");
+    expect(await say("1")).toContain("Categoria apagada");
+    expect(rows).toHaveLength(1);
+    expect(rows[0].topic).toBe("Sem categoria");
+    // a vazia some sem mover nada
+    await say("apagar categoria faculdade");
+    expect(await say("sim")).toContain("Categoria apagada");
+    expect(await say("categorias")).not.toContain("Faculdade");
+  });
+
+  it("pelo menu de categorias: criar e apagar por número", async () => {
+    seed({ topic: "Saúde" });
+    const { say, screen } = build();
+    await say("categorias"); // 1 Saúde, 2 Criar, 3 Apagar
+    expect(await say("2")).toContain("Nova categoria");
+    expect(await say("Finanças")).toContain("Categoria criada");
+    await say("categorias"); // Saúde (1 doc) primeiro, Finanças vazia
+    expect(await say("4")).toContain("Apagar categoria");
+    expect(screen()).toBe("docs_catdel");
+    expect(await say("2")).toContain("Apagar esta categoria?");
+    await say("1");
+    expect(await say("categorias")).not.toContain("Finanças");
+  });
+
+  it("Sem categoria não pode ser apagada", async () => {
+    seed({ topic: "Sem categoria" });
+    const { say } = build();
+    expect(await say("apagar categoria sem categoria")).toContain("não pode ser apagada");
   });
 });

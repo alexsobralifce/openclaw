@@ -7,6 +7,9 @@ import {
   looksLikeCategoriesList,
   matchCategory,
   parseCategoryEdit,
+  parseCategoryCreate,
+  parseCategoryDelete,
+  mergeCategories,
   topCategories,
   cleanTag,
   docFileName,
@@ -203,5 +206,23 @@ describe("categorias dos documentos", () => {
     expect(parseCategoryEdit("mudar categoria para Trabalho")).toEqual({ name: "Trabalho" });
     expect(parseCategoryEdit("categoria educação")).toBeNull();
     expect(parseCategoryEdit("tags: saúde")).toBeNull();
+  });
+});
+
+describe("criar e apagar categorias (texto)", () => {
+  it("entende criar e apagar, com o nome limpo", () => {
+    expect(parseCategoryCreate("criar categoria saúde")).toBe("Saúde");
+    expect(parseCategoryCreate("Nova categoria: Viagens")).toBe("Viagens");
+    expect(parseCategoryCreate("adicionar uma nova categoria chamada Faculdade")).toBe("Faculdade");
+    expect(parseCategoryCreate("criar categoria")).toBeNull();
+    expect(parseCategoryCreate("categoria saúde")).toBeNull();
+    expect(parseCategoryDelete("apagar categoria saude")).toBe("saude");
+    expect(parseCategoryDelete("excluir a categoria: viagens")).toBe("viagens");
+    expect(parseCategoryDelete("apagar documento")).toBeNull();
+  });
+
+  it("junta as categorias dos documentos com as criadas à mão, sem repetir", () => {
+    const merged = mergeCategories([{ name: "Saúde", count: 2 }], ["saude", "Faculdade"]);
+    expect(merged).toEqual([{ name: "Saúde", count: 2 }, { name: "Faculdade", count: 0 }]);
   });
 });

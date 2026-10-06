@@ -59,6 +59,12 @@ export async function updateDocument(workspaceId: string, id: string, patch: { t
   return r.count ? getDocument(workspaceId, id) : null;
 }
 
+/** Muda a categoria (o campo `topic`) de vários documentos de uma vez; devolve quantos mudaram. */
+export async function setDocumentsTopic(workspaceId: string, ids: string[], topic: string): Promise<number> {
+  if (!ids.length) return 0;
+  return (await prisma.document.updateMany({ where: { id: { in: ids }, workspaceId }, data: { topic: cleanTopic(topic) } })).count;
+}
+
 export async function deleteDocument(workspaceId: string, id: string): Promise<boolean> {
   return (await prisma.document.deleteMany({ where: { id, workspaceId } })).count > 0;
 }

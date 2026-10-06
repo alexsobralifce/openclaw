@@ -161,6 +161,41 @@ export function cleanCategory(raw: unknown): string {
   return t ? t[0].toUpperCase() + t.slice(1) : "";
 }
 
+/** Onde ficam os documentos de uma categoria apagada (apagar a categoria nunca apaga o documento). */
+export const NO_CATEGORY = "Sem categoria";
+
+export const categoryKey = (name: string) => normalize(name);
+export const categoriesStateKey = (ws: string) => `doccats:${ws}`;
+/** Teto de categorias criadas à mão (as dos documentos não contam). */
+export const MAX_CUSTOM_CATEGORIES = 50;
+
+/** Junta as categorias dos documentos com as criadas à mão, que podem estar vazias (contagem 0). */
+export function mergeCategories(fromDocs: Category[], custom: string[]): Category[] {
+  const out = [...fromDocs];
+  const seen = new Set(out.map((c) => categoryKey(c.name)));
+  for (const name of custom) {
+    const k = categoryKey(name);
+    if (!k || seen.has(k)) continue;
+    seen.add(k);
+    out.push({ name, count: 0 });
+  }
+  return out.sort((a, b) => b.count - a.count || a.name.localeCompare(b.name));
+}
+
+/** "criar categoria Saúde", "nova categoria: Saúde", "adicionar categoria Viagens". Recebe o texto ORIGINAL (guarda acento e maiúscula). */
+export function parseCategoryCreate(text: string): string | null {
+  const m = text.trim().match(/^(?:por favor\s+)?(?:criar|crie|nova|novo|adicionar|adicione|cadastrar|cadastre)\s+(?:uma\s+)?(?:nova\s+)?categoria(?:\s+(?:chamada|com o nome|de nome))?\s*[:=-]?\s*(.{2,40})$/i);
+  const name = cleanCategory(m?.[1]);
+  return name.length >= 2 ? name : null;
+}
+
+/** "apagar categoria Saúde", "excluir a categoria: Viagens". Recebe o texto já normalizado (sem acento). Devolve o nome citado, ou null. */
+export function parseCategoryDelete(flat: string): string | null {
+  const m = flat.match(/^(?:por favor )?(?:apagar|apague|excluir|exclua|remover|remova|deletar|delete)\s+(?:a\s+)?categoria\s*[:=]?\s*(?:de |da |do )?(.{2,40})$/);
+  const q = m?.[1].replace(/\s+(por favor|pfv)$/, "").trim();
+  return q || null;
+}
+
 /** "categorias" / "minhas categorias": mostra as categorias com a contagem. */
 export function looksLikeCategoriesList(flat: string): boolean {
   return /^(?:ver |mostrar |listar |quais sao )?(?:as |minhas )?categorias(?: dos documentos)?$/.test(flat);

@@ -25,8 +25,8 @@ import { label as trackLabel, SpotifyAssistant } from "../spotify/spotify-assist
 import { SpotifyCmd, spotifyCommand } from "../spotify/spotify-commands";
 // import normal (não `import type`): o Nest precisa da classe em tempo de execução para injetar
 import { SpotifyService } from "../spotify/spotify.service";
-import { applyTagEdit, categoryQuery, docFileName, docQuery, docsInCategory, looksLikeCategoriesList, matchCategory, parseCategoryEdit, topCategories, isFileOriginNote, looksLikeDocsHome, looksLikeReclassify, looksLikeTagsList, RECLASSIFY_BATCH, RECLASSIFY_MAX_READS, parseDocPlan, parseTagEdit, searchDocs, searchTerms, tagsLine, topTags } from "./documents";
-import { catalogedDriveIds, createDocument, deleteDocument, getDocument, listDocuments, setDocumentTags, updateDocument } from "./documents-store";
+import { applyTagEdit, categoriesStateKey, categoryKey, categoryQuery, cleanCategory, MAX_CUSTOM_CATEGORIES, mergeCategories, NO_CATEGORY, parseCategoryCreate, parseCategoryDelete, docFileName, docQuery, docsInCategory, looksLikeCategoriesList, matchCategory, parseCategoryEdit, topCategories, isFileOriginNote, looksLikeDocsHome, looksLikeReclassify, looksLikeTagsList, RECLASSIFY_BATCH, RECLASSIFY_MAX_READS, parseDocPlan, parseTagEdit, searchDocs, searchTerms, tagsLine, topTags } from "./documents";
+import { catalogedDriveIds, createDocument, deleteDocument, getDocument, listDocuments, setDocumentsTopic, setDocumentTags, updateDocument } from "./documents-store";
 import { pdfPageCount } from "./media-limits";
 import { chatCompletion } from "./openai-chat";
 import { StateService } from "../../state/state.service";
@@ -69,6 +69,7 @@ const ALIASES: Record<string, Record<string, number>> = {
   event_confirm: { confirmar: 1, confirma: 1, sim: 1, criar: 1, refazer: 2, cancelar: 0, nao: 0 },
   docs_view: { "editar tags": 1, receber: 2, enviar: 2, baixar: 2, apagar: 3, excluir: 3, "mudar categoria": 4, "trocar categoria": 4, categoria: 4 },
   docs_delete_confirm: { apagar: 1, excluir: 1, confirmar: 1, confirma: 1, sim: 1, cancelar: 0, nao: 0, voltar: 0 },
+  docs_catdel_confirm: { apagar: 1, excluir: 1, confirmar: 1, confirma: 1, sim: 1, cancelar: 0, nao: 0, voltar: 0 },
   event_delete_confirm: { apagar: 1, excluir: 1, confirmar: 1, confirma: 1, sim: 1, cancelar: 0, nao: 0, voltar: 0 },
   notes_note: { concluir: 1, "concluir e apagar": 1, concluida: 1, apagar: 1, excluir: 1 },
   notes_delete_confirm: { apagar: 1, excluir: 1, concluir: 1, confirmar: 1, confirma: 1, sim: 1, cancelar: 0, nao: 0, voltar: 0 },
@@ -210,6 +211,8 @@ export class MenuService {
       if (!isInput && !pending && (await this.services(workspaceId)).includes("drive")) {
         if (looksLikeDocsHome(flat)) return await this.docsEntry(workspaceId);
         if (looksLikeCategoriesList(flat)) return await this.categoriesView(workspaceId);
+        const catCmd = this.categoryCommand(workspaceId, text);
+        if (catCmd) return await catCmd;
         if (looksLikeTagsList(flat)) return await this.tagsView(workspaceId);
         if (looksLikeReclassify(flat)) return await this.docsReclassify(workspaceId);
         // "tags: contrato, aluguel" é edição (tratada nas telas de documentos), não busca: a normalização apaga o ":" e as duas ficariam iguais
@@ -439,6 +442,8 @@ export class MenuService {
         const f = normalize(text);
         if (looksLikeTagsList(f)) return this.tagsView(ws);
         if (looksLikeCategoriesList(f)) return this.categoriesView(ws);
+        const catCmd = this.categoryCommand(ws, text);
+        if (catCmd) return catCmd;
         if (looksLikeReclassify(f)) return this.docsReclassify(ws);
         if (parseTagEdit(text) || parseCategoryEdit(text)) return "🤔 Abra primeiro o documento (busque e escolha o número) e então diga as tags ou a categoria.";
         const cat = categoryQuery(f);
@@ -447,13 +452,42 @@ export class MenuService {
       }
       case "docs_cats": {
         if (n === 0) return this.docsEntry(ws);
+        const k: number = d.cats?.length ?? 0;
         if (n === null) {
-          const f = normalize(text);
-          if (looksLikeTagsList(f)) return this.tagsView(ws);
-          return null;
+          if (looksLikeTagsList(normalize(text))) return this.tagsView(ws);
+          return this.categoryCommand(ws, text);
         }
+        if (n === k + 1) return this.categoryNewAsk(ws, { mode: "create" });
+        if (n === k + 2 && k > 0) return this.categoryDeletePick(ws);
         const c = d.cats?.[n - 1];
         return c ? this.categoryDocsView(ws, c) : this.invalid();
+      }
+      case "docs_newcat_input": {
+        if (n === 0) return d.mode === "pick" ? this.categoryPickAgain(ws, d.id) : this.categoriesView(ws);
+        const name = cleanCategory(text);
+        if (name.length < 2) return "🤔 Diga um nome com pelo menos 2 letras, ou 0 para voltar.";
+        return d.mode === "pick" ? this.docSetCategory(ws, d.id, name) : this.categoryCreate(ws, name);
+      }
+      case "docs_pick_cat": {
+        if (n === null) n = pickByLabel(text, d.items ?? []);
+        if (n === null) return null;
+        const doc = await getDocument(ws, d.id);
+        if (!doc) return this.docsEntry(ws);
+        if (n === 0) return this.docCardView(ws, doc, `✅ *Guardado em* ${short(doc.topic, 30)}`);
+        if (n === (d.items?.length ?? 0) + 1) return this.categoryNewAsk(ws, { mode: "pick", id: d.id });
+        const name = d.items?.[n - 1];
+        return name ? this.docSetCategory(ws, d.id, name) : this.invalid();
+      }
+      case "docs_catdel": {
+        if (n === 0) return this.categoriesView(ws);
+        if (n === null) return this.categoryCommand(ws, text);
+        const name = d.items?.[n - 1];
+        return name ? this.categoryDeleteAsk(ws, name) : this.invalid();
+      }
+      case "docs_catdel_confirm": {
+        if (n === 0) return this.categoriesView(ws);
+        if (n !== 1) return n === null ? null : this.invalid();
+        return this.categoryDelete(ws, d.name);
       }
       case "docs_list": {
         if (n === 0) return this.docsEntry(ws);
@@ -1663,7 +1697,7 @@ export class MenuService {
       docs.length ? `Você tem *${docs.length}* ${docs.length === 1 ? "documento" : "documentos"}.${cats ? `\n📂 ${cats}` : ""}${tags ? `\n🏷️ ${tags}` : ""}` : "Ainda não há documentos guardados.",
       "📄 *Guardar:* mande um PDF aqui. Na legenda você pode dizer a categoria ou as tags.",
       "🔎 *Buscar:* diga o assunto ou a tag, ex.: _contrato_ ou _documentos com a tag aluguel_. Para ver todos, diga _todos_.",
-      "📂 *Categorias:* diga _categorias_, ou _categoria saúde_ para abrir uma.",
+      "📂 *Categorias:* diga _categorias_ para listar, criar ou apagar; _categoria saúde_ abre uma.",
       DIV,
       opts(BACK),
     ].join("\n");
@@ -1717,36 +1751,126 @@ export class MenuService {
     if (parseCategoryEdit(text)) return null; // "categoria: Saúde" é troca, não busca (normalize tira os dois-pontos)
     const f = normalize(text);
     if (looksLikeCategoriesList(f)) return this.categoriesView(ws);
+    const manage = this.categoryCommand(ws, text);
+    if (manage) return manage;
     const cat = categoryQuery(f);
     return cat ? this.categoryDocsView(ws, cat) : null;
   }
 
-  /** Categorias com a contagem; o número abre a lista da categoria. */
-  private async categoriesView(ws: string): Promise<string> {
-    const cats = topCategories(await listDocuments(ws)).slice(0, 15);
-    if (!cats.length) {
-      await this.set(ws, "docs_input");
-      return [head("📂", "Categorias dos documentos"), "Ainda não há categorias: elas aparecem quando você guarda um PDF.", DIV, opts(BACK)].join("\n");
-    }
+  /** Categorias criadas à mão (podem estar vazias); as dos documentos vêm das próprias fichas. */
+  private async customCategories(ws: string): Promise<string[]> {
+    return (await this.state.get<{ names: string[] }>(categoriesStateKey(ws)))?.names ?? [];
+  }
+
+  /** Todas as categorias com a contagem: as dos documentos mais as criadas à mão. */
+  private async allCategories(ws: string, docs?: any[]) {
+    return mergeCategories(topCategories(docs ?? (await listDocuments(ws))), await this.customCategories(ws));
+  }
+
+  /** "criar categoria Saúde" e "apagar categoria Saúde"; null quando o texto não é nenhum dos dois. */
+  private categoryCommand(ws: string, text: string): Promise<string> | null {
+    const create = parseCategoryCreate(text);
+    if (create) return this.categoryCreate(ws, create);
+    const del = parseCategoryDelete(normalize(text));
+    return del ? this.categoryDeleteAsk(ws, del) : null;
+  }
+
+  /** Lista as categorias com a contagem: o número abre a lista; depois delas vêm criar e apagar. */
+  private async categoriesView(ws: string, header = ""): Promise<string> {
+    const cats = (await this.allCategories(ws)).slice(0, 15);
     await this.set(ws, "docs_cats", { cats: cats.map((c) => c.name) });
-    return [head("📂", "Categorias dos documentos"), cats.map((c, i) => `${key(i + 1)} 📂 ${short(c.name, 30)} · ${c.count}`).join("\n"), foot("Responda com o número ou diga *tags* para ver as tags"), opts(BACK)].join("\n");
+    const k = cats.length;
+    const list = k ? cats.map((c, i) => `${key(i + 1)} 📂 ${short(c.name, 30)} · ${c.count}`).join("\n") : "_Ainda não há categorias._";
+    const actions = opts([k + 1, "➕", "Criar categoria"], ...(k ? ([[k + 2, "🗑️", "Apagar categoria"]] as [number, string, string][]) : []), BACK);
+    return [head("📂", "Categorias dos documentos"), header, list, DIV, actions, foot("Responda com o número, ou diga: criar categoria Saúde · apagar categoria Saúde")].filter(Boolean).join("\n");
+  }
+
+  private async categoryNewAsk(ws: string, data: { mode: "create" | "pick"; id?: string }): Promise<string> {
+    await this.set(ws, "docs_newcat_input", data);
+    return [head("➕", "Nova categoria"), "Diga o nome da categoria, ex.: _Saúde_ ou _Faculdade_.", DIV, opts(BACK)].join("\n");
+  }
+
+  private async categoryCreate(ws: string, raw: string): Promise<string> {
+    const name = cleanCategory(raw);
+    if (name.length < 2) return "🤔 Diga um nome com pelo menos 2 letras.";
+    if (categoryKey(name) === categoryKey(NO_CATEGORY)) return this.categoriesView(ws, `ℹ️ *${NO_CATEGORY}* já existe: é onde ficam os documentos de categorias apagadas.`);
+    const exists = (await this.allCategories(ws)).find((c) => categoryKey(c.name) === categoryKey(name));
+    if (exists) return this.categoriesView(ws, `ℹ️ A categoria *${short(exists.name, 30)}* já existe.`);
+    const custom = await this.customCategories(ws);
+    if (custom.length >= MAX_CUSTOM_CATEGORIES) return this.categoriesView(ws, `⚠️ Você já tem ${MAX_CUSTOM_CATEGORIES} categorias criadas. Apague alguma antes de criar outra.`);
+    await this.state.set(categoriesStateKey(ws), { names: [...custom, name] });
+    return this.categoriesView(ws, `✅ *Categoria criada:* ${short(name, 30)}`);
+  }
+
+  private async categoryDeletePick(ws: string): Promise<string> {
+    const cats = (await this.allCategories(ws)).filter((c) => categoryKey(c.name) !== categoryKey(NO_CATEGORY)).slice(0, 15);
+    if (!cats.length) return this.categoriesView(ws, "🤔 Não há categorias para apagar.");
+    await this.set(ws, "docs_catdel", { items: cats.map((c) => c.name) });
+    return [head("🗑️", "Apagar categoria", "os documentos não são apagados"), cats.map((c, i) => `${key(i + 1)} 📂 ${short(c.name, 30)} · ${c.count}`).join("\n"), foot("Responda com o número da categoria"), opts(BACK)].join("\n");
+  }
+
+  private async categoryDeleteAsk(ws: string, name: string): Promise<string> {
+    const cats = await this.allCategories(ws);
+    const cat = matchCategory(cats, name);
+    if (!cat) return this.categoriesView(ws, `🤔 Não achei a categoria *${short(name, 30)}*.`);
+    if (categoryKey(cat.name) === categoryKey(NO_CATEGORY)) return this.categoriesView(ws, `ℹ️ *${NO_CATEGORY}* não pode ser apagada: é onde ficam os documentos de categorias apagadas.`);
+    await this.set(ws, "docs_catdel_confirm", { name: cat.name });
+    return [
+      head("🗑️", "Apagar esta categoria?"),
+      `📂 *${short(cat.name, 40)}*`,
+      cat.count ? `_Os ${cat.count} ${cat.count === 1 ? "documento" : "documentos"} não serão apagados: ${cat.count === 1 ? "vai" : "vão"} para *${NO_CATEGORY}*._` : "_Ela está vazia._",
+      DIV,
+      opts([1, "🗑️", "Apagar"], [0, "❌", "Cancelar"]),
+    ].join("\n");
+  }
+
+  private async categoryDelete(ws: string, name: string): Promise<string> {
+    const k = categoryKey(name);
+    await this.state.set(categoriesStateKey(ws), { names: (await this.customCategories(ws)).filter((c) => categoryKey(c) !== k) });
+    const moved = await setDocumentsTopic(ws, docsInCategory(await listDocuments(ws), name).map((d) => d.id), NO_CATEGORY);
+    return this.categoriesView(ws, `✅ *Categoria apagada:* ${short(name, 30)}${moved ? `\n📄 ${moved} ${moved === 1 ? "documento foi" : "documentos foram"} para *${NO_CATEGORY}*.` : ""}`);
+  }
+
+  /** Depois de guardar um PDF: pergunta a categoria (a sugerida pela IA vem primeiro) e deixa criar uma nova. */
+  private async categoryPickView(ws: string, d: any, header: string): Promise<string> {
+    const cats = await this.allCategories(ws);
+    const sk = categoryKey(d.topic);
+    const ordered = [...cats.filter((c) => categoryKey(c.name) === sk), ...cats.filter((c) => categoryKey(c.name) !== sk && categoryKey(c.name) !== categoryKey(NO_CATEGORY))].slice(0, 8);
+    await this.set(ws, "docs_pick_cat", { id: d.id, items: ordered.map((c) => c.name) });
+    const rows = ordered.map((c, i) => [i + 1, "📂", `${short(c.name, 30)} · ${c.count}${categoryKey(c.name) === sk ? " 💡 sugerida" : ""}`] as [number, string, string]);
+    return [
+      header,
+      `📄 *${short(d.title, 60)}*`,
+      d.tags?.length ? `🏷️ ${tagsLine(d.tags)}` : "",
+      head("📂", "Em qual categoria guardar?"),
+      opts(...rows, [ordered.length + 1, "➕", "Nova categoria"]),
+      DIV,
+      opts([0, "✅", `Manter em ${short(d.topic, 24)}`]),
+    ].filter(Boolean).join("\n");
+  }
+
+  private async categoryPickAgain(ws: string, id: string): Promise<string> {
+    const doc = await getDocument(ws, id);
+    return doc ? this.categoryPickView(ws, doc, "📂 *Categoria do documento*") : this.docsEntry(ws);
   }
 
   /** Documentos de uma categoria (pelo nome, sem diferenciar acento ou maiúscula). */
   private async categoryDocsView(ws: string, name: string): Promise<string> {
     const docs = await listDocuments(ws);
-    const cat = matchCategory(topCategories(docs), name);
+    const all = await this.allCategories(ws, docs);
+    const cat = matchCategory(all, name);
     if (!cat) {
-      const cats = topCategories(docs).slice(0, 8).map((c) => c.name).join(", ");
+      const cats = all.slice(0, 8).map((c) => c.name).join(", ");
       await this.set(ws, "docs_input");
       return [head("📂", "Categorias"), `🤔 Não achei a categoria *${short(name, 40)}*.`, cats ? `📂 Categorias que existem: ${cats}` : "", DIV, "_Diga outra categoria, ou 0 para voltar._"].filter(Boolean).join("\n");
     }
     const found = docsInCategory(docs, cat.name);
+    if (!found.length) return this.categoriesView(ws, `📂 A categoria *${short(cat.name, 30)}* ainda está vazia.`);
     return found.length === 1 ? this.docOpen(ws, found[0]) : this.docsListView(ws, found, cat.name, `📂 ${short(cat.name, 30)}`);
   }
 
   private async docCategoryAsk(ws: string, d: any): Promise<string> {
-    const cats = topCategories(await listDocuments(ws)).slice(0, 8).map((c) => c.name).join(", ");
+    const cats = (await this.allCategories(ws)).slice(0, 8).map((c) => c.name).join(", ");
     await this.set(ws, "docs_view", { id: d.id });
     return [head("📂", "Categoria do documento", short(d.title, 40)), `Atual: *${d.topic || "sem categoria"}*`, cats ? `Já existem: ${cats}` : "", "Diga a nova, ex.: _categoria: Saúde_ (pode ser uma nova).", DIV, opts(BACK)].filter(Boolean).join("\n");
   }
@@ -1755,7 +1879,7 @@ export class MenuService {
     const doc = await getDocument(ws, id);
     if (!doc) return this.invalid();
     // Reaproveita a grafia de uma categoria que já existe ("saude" → "Saúde")
-    const known = matchCategory(topCategories(await listDocuments(ws)), name);
+    const known = (await this.allCategories(ws)).find((c) => categoryKey(c.name) === categoryKey(name));
     const updated = await updateDocument(ws, id, { topic: known?.name ?? name });
     return this.docCardView(ws, updated ?? doc, updated ? "✅ *Categoria atualizada*" : "😕 _Não consegui mudar a categoria._");
   }
@@ -1914,7 +2038,7 @@ export class MenuService {
     try {
       const stored = await this.google.documentStore(ws, bytes, docFileName(dayStamp(new Date(), TZ), plan.doc.title), file.mime || "application/pdf", target);
       const row = await createDocument({ ...plan.doc, workspaceId: ws, driveFileId: stored.id, account: target, mime: file.mime || "application/pdf", sizeBytes: bytes.length, pages: pdfPageCount(bytes) || null, origin });
-      return this.docCardView(ws, row, "✅ *Documento guardado no Drive e catalogado*\n💡 _Para mudar as tags, diga *tags: contrato, aluguel*._");
+      return this.categoryPickView(ws, row, "✅ *Documento guardado no Drive e catalogado*");
     } catch (e: any) {
       this.logger.warn(`Guardar documento falhou: ${e.message}`);
       return `😕 Li o PDF, mas não consegui guardar no Drive: ${short(e.message, 200)}`;
