@@ -1059,7 +1059,8 @@ export class MenuService {
     const [icon, saud] = h < 12 ? ["☀️", "Bom dia"] : h < 18 ? ["🌤️", "Boa tarde"] : ["🌙", "Boa noite"];
     const title = greet ? `${saud}! Sou o MagoBox` : "Menu principal";
     const items = labels.map((l, i) => `${key(i + 1)} ${l.icon} ${l.label}${l.sub ? `\n     _${l.sub}_` : ""}`);
-    return [head(greet ? icon : "🏠", title, "O que vamos ver agora?"), ...(await this.contextLines(ws, greet)), items.join("\n"), foot("Responda com o número, escreva ou mande um áudio 🎙️")].join("\n");
+    // Linha em branco entre os itens: no WhatsApp cada opção vira um "cartão", como no app (o app ignora as linhas vazias)
+    return [head(greet ? icon : "🏠", title, "O que vamos ver agora?"), ...(await this.contextLines(ws, greet)), items.join("\n\n"), foot("Responda com o número, escreva ou mande um áudio 🎙️")].join("\n");
   }
 
   /** Volta à tela principal guardando opções e rótulos (os rótulos permitem escolher falando o nome). */
@@ -1089,7 +1090,7 @@ export class MenuService {
       return turnOn && !carOptionEnabled() ? CAR_DISABLED_NOTICE : this.carSet(ws, turnOn);
     }
     await this.set(ws, "free");
-    return [head("🤖", "Assistente livre"), "Pode falar! Escreva ou mande um áudio 🎙️ com o que precisa.", DIV, opts(BACK)].join("\n");
+    return [head("🤖", "Assistente livre"), "Pode falar! Escreva ou mande um áudio 🎙️ com o que precisa.", '_Ex.: "o que tenho amanhã?", "responda o e-mail do João dizendo que confirmo" ou "me lembre de pagar a luz sexta às 9h"_', DIV, opts(BACK)].join("\n");
   }
 
   // Hora, lugar, clima e rotina do dia (no topo do menu)
@@ -2190,7 +2191,7 @@ export class MenuService {
       return [head("🧠", "Minha memória"), "Ainda não guardei nada sobre você.", '_Diga, por exemplo: "lembre que respondo o João de forma informal"._', DIV, opts(BACK)].join("\n");
     }
     const lines = items.map((m, i) => `${key(i + 1)} 📌 ${short(m.content, 90)}`);
-    return [head("🧠", "O que eu sei sobre você"), lines.join("\n"), foot("Digite o número para eu esquecer aquele item"), opts(BACK)].join("\n");
+    return [head("🧠", "O que eu sei sobre você"), lines.join("\n"), foot("Digite o número para eu esquecer aquele item. Para guardar algo novo: lembre que respondo o João de forma informal"), opts(BACK)].join("\n");
   }
 
   private actionLabel(a: { name: string; args: any }) {
@@ -2583,7 +2584,7 @@ export class MenuService {
 
   private async agendaMenu(ws: string) {
     await this.set(ws, "agenda");
-    return `${head("📅", "Google Agenda", "O que você quer ver?")}\n${this.agendaOptions()}`;
+    return [head("📅", "Google Agenda", "O que você quer ver?"), '_Ou escreva direto, ex.: "o que tenho sexta?" ou "reunião com Marcos amanhã às 15h"_', this.agendaOptions()].join("\n");
   }
 
   private agendaOptions() {
