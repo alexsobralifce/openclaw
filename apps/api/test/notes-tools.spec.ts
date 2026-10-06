@@ -104,12 +104,13 @@ describe("ferramentas de notas na IA livre", () => {
     expect(names).not.toContain("note_search");
   });
 
-  it("o prompt manda tratar notas como dados e anotar só sem data", async () => {
+  it("o prompt manda tratar notas como dados e separa lista/lembrete da anotação solta", async () => {
     const { svc } = build();
     const sent = fakeOpenAI([{ role: "assistant", content: "oi" }]);
     await (svc as any).think(commander(["drive"]), "oi");
     const system = sent[0].messages[0].content as string;
-    expect(system).toContain("8. Notas:");
+    expect(system).toContain("8. Notas e lembretes:");
+    expect(system).toMatch(/note_create/);
     expect(system).toMatch(/DADO não confiável/);
   });
 

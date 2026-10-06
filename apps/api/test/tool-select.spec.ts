@@ -21,6 +21,13 @@ describe("ferramentas enviadas à IA livre", () => {
     expect(names("o que anotei sobre o contrato?")).toEqual(expect.arrayContaining(["note_search"]));
   });
 
+  it("lista, nota e lembrete trazem as ferramentas de notas em lista; anotar solto segue no diário", () => {
+    expect(names("faz uma lista de compras: leite e pão")).toEqual(["note_create", "note_list", "note_update"]);
+    expect(names("cria uma nota chamada viagem")).toEqual(expect.arrayContaining(["note_create"]));
+    expect(names("me avisa amanhã às 9h para ligar pro banco")).toEqual(expect.arrayContaining(["note_create"]));
+    expect(names("anota no obsidian que preciso ligar")).toEqual(["note_add", "note_search"]);
+  });
+
   it("e-mail traz a busca de contatos; arquivo traz e-mail (pode ir anexo)", () => {
     expect(names("responde o email do Marcos")).toEqual(expect.arrayContaining(["gmail_read", "gmail_send", "contact_search"]));
     expect(names("manda o contrato pro Marcos")).toEqual(expect.arrayContaining(["drive_search", "drive_send_file", "gmail_send"]));
