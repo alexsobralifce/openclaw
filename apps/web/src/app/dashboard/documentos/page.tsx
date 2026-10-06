@@ -70,6 +70,9 @@ export default function DocumentosPage() {
   const [newTag, setNewTag] = useState("");
   const [confirm, setConfirm] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
+  const [adding, setAdding] = useState(false);
+  const [catName, setCatName] = useState("");
+  const [catDel, setCatDel] = useState<string | null>(null); // categoria esperando a confirmação de apagar
 
   const load = useCallback(async () => {
     try {
@@ -109,6 +112,36 @@ export default function DocumentosPage() {
     try {
       await api.documents.update(d.id, { topic: name });
       await load(); // a lista e a contagem das categorias mudaram
+    } catch (e: any) {
+      setError(e.message);
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  async function addCategory() {
+    const name = catName.trim();
+    if (name.length < 2) return;
+    setBusy("cat");
+    try {
+      await api.documents.createCategory(name);
+      setCatName("");
+      setAdding(false);
+      await load();
+    } catch (e: any) {
+      setError(e.message);
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  async function removeCategory(name: string) {
+    setBusy("cat");
+    try {
+      await api.documents.removeCategory(name);
+      setCatDel(null);
+      if (category === name) setCategory("");
+      await load(); // os documentos dela foram para Sem categoria
     } catch (e: any) {
       setError(e.message);
     } finally {
@@ -169,17 +202,38 @@ export default function DocumentosPage() {
       <div className="md:grid md:grid-cols-[13rem_minmax(0,1fr)] md:gap-5 space-y-4 md:space-y-0">
       <nav aria-label="Categorias" className="flex md:flex-col gap-1.5 md:gap-0.5 overflow-x-auto md:overflow-visible pb-1 md:pb-0 md:self-start md:sticky md:top-0">
         <h2 className="hidden md:block text-[11px] uppercase tracking-wider text-gray-500 font-semibold px-2 pb-1.5">Categorias</h2>
-        {[{ name: "", count: data?.total ?? 0 }, ...(data?.categories ?? [])].map((c) => (
-          <button
-            key={c.name || "todos"}
-            onClick={() => setCategory(c.name)}
-            aria-pressed={category === c.name}
-            className={`flex items-center gap-2 whitespace-nowrap text-left text-sm rounded-full md:rounded-lg border md:border-transparent px-3 py-1.5 md:px-2 md:py-1.5 ${category === c.name ? "bg-gray-900 border-violet-500 md:border-transparent md:shadow-[inset_3px_0_0_rgb(139_92_246)] text-gray-100 font-medium" : "border-gray-800 text-gray-300 hover:bg-gray-800"}`}
-          >
-            <span className="truncate max-w-[10rem] md:max-w-none">{c.name || "Todos"}</span>
-            <span className="md:ml-auto text-xs text-gray-500 tabular-nums">{c.count}</span>
-          </button>
-        ))}
+        {[{ name: "", count: data?.total ?? 0 }, ...(data?.categories ?? [])].map((c) =>
+          catDel === c.name && c.name ? (
+            <div key={c.name} role="alertdialog" aria-label={`Apagar a categoria ${c.name}?`} className="flex items-center gap-2 whitespace-nowrap rounded-lg border border-red-500/40 bg-red-500/10 px-2 py-1.5 text-xs text-red-200">
+              <span>{c.count ? `${c.count} doc. vão para Sem categoria. ` : ""}Apagar “{c.name}”?</span>
+              <button onClick={() => void removeCategory(c.name)} disabled={busy === "cat"} className="font-semibold underline disabled:opacity-50">Apagar</button>
+              <button onClick={() => setCatDel(null)} className="text-gray-300 underline">Cancelar</button>
+            </div>
+          ) : (
+            <div key={c.name || "todos"} className="group flex items-center gap-1">
+              <button
+                onClick={() => setCategory(c.name)}
+                aria-pressed={category === c.name}
+                className={`flex-1 min-w-0 flex items-center gap-2 whitespace-nowrap text-left text-sm rounded-full md:rounded-lg border md:border-transparent px-3 py-1.5 md:px-2 md:py-1.5 ${category === c.name ? "bg-gray-900 border-violet-500 md:border-transparent md:shadow-[inset_3px_0_0_rgb(139_92_246)] text-gray-100 font-medium" : "border-gray-800 text-gray-300 hover:bg-gray-800"}`}
+              >
+                <span className="truncate max-w-[10rem] md:max-w-none">{c.name || "Todos"}</span>
+                <span className="md:ml-auto text-xs text-gray-500 tabular-nums">{c.count}</span>
+              </button>
+              {c.name && c.name !== "Sem categoria" && (
+                <button onClick={() => setCatDel(c.name)} aria-label={`Apagar a categoria ${c.name}`} title="Apagar categoria" className="shrink-0 w-7 h-7 rounded-md text-gray-500 hover:text-red-300 hover:bg-gray-800 md:opacity-0 md:group-hover:opacity-100 focus:opacity-100">×</button>
+              )}
+            </div>
+          ),
+        )}
+        {adding ? (
+          <form onSubmit={(e) => { e.preventDefault(); void addCategory(); }} className="flex items-center gap-1.5 whitespace-nowrap">
+            <input autoFocus value={catName} maxLength={40} onChange={(e) => setCatName(e.target.value)} onKeyDown={(e) => e.key === "Escape" && setAdding(false)} placeholder="Nome da categoria" aria-label="Nome da nova categoria" autoComplete="off" className="w-36 md:w-full bg-gray-950 border border-gray-800 rounded-lg px-2.5 py-1.5 text-sm text-gray-200 focus:outline-none focus:border-violet-500" />
+            <button type="submit" disabled={busy === "cat" || catName.trim().length < 2} className={`${btn} bg-violet-500 text-white disabled:opacity-50`}>Criar</button>
+            <button type="button" onClick={() => { setAdding(false); setCatName(""); }} className={`${btn} bg-gray-800 text-gray-300`}>Cancelar</button>
+          </form>
+        ) : (
+          <button onClick={() => setAdding(true)} className="whitespace-nowrap text-left text-sm rounded-full md:rounded-lg border border-dashed border-gray-700 md:border-transparent px-3 py-1.5 md:px-2 text-violet-300 hover:bg-gray-800">+ Nova categoria</button>
+        )}
       </nav>
       <div className="min-w-0 space-y-5">
       <input

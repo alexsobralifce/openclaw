@@ -135,6 +135,9 @@ export const api = {
     },
     update: (id: string, patch: { tags?: string[]; title?: string; topic?: string }) => request<DocumentView>(`/documents/${encodeURIComponent(id)}`, { method: "PATCH", body: JSON.stringify(patch) }),
     remove: (id: string) => request<{ ok: boolean }>(`/documents/${encodeURIComponent(id)}`, { method: "DELETE" }),
+    createCategory: (name: string) => request<{ name: string; categories: { name: string; count: number }[] }>("/documents/categories", { method: "POST", body: JSON.stringify({ name }) }),
+    /** Apaga a categoria; os documentos dela vão para "Sem categoria". */
+    removeCategory: (name: string) => request<{ moved: number; categories: { name: string; count: number }[] }>(`/documents/categories?name=${encodeURIComponent(name)}`, { method: "DELETE" }),
     /** Baixa na hora, do Drive do usuário. Arquivo grande demais: o erro traz o link do Drive em `link`. */
     download: async (id: string): Promise<Blob> => {
       const res = await fetch(`${API}/api/v1/documents/${encodeURIComponent(id)}/download`, { headers: { Authorization: `Bearer ${localStorage.getItem("oc_token") ?? ""}` } });

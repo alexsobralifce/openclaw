@@ -1,9 +1,16 @@
-import { BadRequestException, Body, Controller, Delete, Get, NotFoundException, Param, Patch, Query, Request, Res } from "@nestjs/common";
+import { BadRequestException, Body, Controller, Delete, Get, NotFoundException, Param, Patch, Post, Query, Request, Res } from "@nestjs/common";
 import { ArrayMaxSize, IsArray, IsOptional, IsString, MaxLength } from "class-validator";
 import { Access } from "../auth/access";
 import { GoogleService } from "../integrations/google/google.service";
-import { cleanTag, docsInCategory, MAX_TAGS, searchDocs, topCategories, topTags } from "./assistant/documents";
+import { StateService } from "../state/state.service";
+import { allCategories, createCategory, deleteCategory } from "./assistant/document-categories";
+import { cleanTag, docsInCategory, MAX_TAGS, NO_CATEGORY, searchDocs, topTags } from "./assistant/documents";
 import { deleteDocument, getDocument, listDocuments, updateDocument } from "./assistant/documents-store";
+
+class CategoryDto {
+  @IsString() @MaxLength(40)
+  name!: string;
+}
 
 class UpdateDocumentDto {
   @IsOptional() @IsArray() @ArrayMaxSize(MAX_TAGS) @IsString({ each: true }) @MaxLength(40, { each: true })
@@ -35,7 +42,7 @@ const view = (d: any) => ({
 @Access("drive")
 @Controller("documents")
 export class DocumentsController {
-  constructor(private google: GoogleService) {}
+  constructor(private google: GoogleService, private state: StateService) {}
 
   private ws = (req: any): string => req.user.workspaces[0]?.workspaceId;
 
@@ -50,7 +57,31 @@ export class DocumentsController {
       const inCat = new Set(docsInCategory(docs, category.slice(0, 60)).map((d) => d.id));
       docs = docs.filter((d) => inCat.has(d.id));
     }
-    return { documents: docs.map(view), tags: topTags(all, 50), categories: topCategories(all), total: all.length };
+    return { documents: docs.map(view), tags: topTags(all, 50), categories: await allCategories(this.state, this.ws(req), all), total: all.length };
+  }
+
+  /** Cria uma categoria (pode ficar vazia). Devolve a lista de categorias atualizada. */
+  @Post("categories")
+  async createCat(@Request() req: any, @Body() body: CategoryDto) {
+    const ws = this.ws(req);
+    const r = await createCategory(this.state, ws, body.name);
+    if (!r.ok) {
+      const msg = { short: "Dê um nome com pelo menos 2 letras.", fixed: `"${NO_CATEGORY}" já existe: é onde ficam os documentos de categorias apagadas.`, exists: `A categoria "${r.name ?? body.name}" já existe.`, limit: "Limite de categorias criadas atingido. Apague alguma antes." }[r.reason];
+      throw new BadRequestException(msg);
+    }
+    return { name: r.name, categories: await allCategories(this.state, ws) };
+  }
+
+  /** Apaga a categoria; os documentos dela vão para "Sem categoria" (nenhum documento é apagado). */
+  @Delete("categories")
+  async removeCat(@Request() req: any, @Query("name") name?: string) {
+    const ws = this.ws(req);
+    const r = await deleteCategory(this.state, ws, String(name ?? "").slice(0, 60));
+    if (!r.ok) {
+      if (r.reason === "fixed") throw new BadRequestException(`"${NO_CATEGORY}" não pode ser apagada.`);
+      throw new NotFoundException("Categoria não encontrada.");
+    }
+    return { moved: r.moved, categories: await allCategories(this.state, ws) };
   }
 
   @Patch(":id")

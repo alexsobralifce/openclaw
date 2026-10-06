@@ -25,7 +25,8 @@ import { label as trackLabel, SpotifyAssistant } from "../spotify/spotify-assist
 import { SpotifyCmd, spotifyCommand } from "../spotify/spotify-commands";
 // import normal (não `import type`): o Nest precisa da classe em tempo de execução para injetar
 import { SpotifyService } from "../spotify/spotify.service";
-import { applyTagEdit, categoriesStateKey, categoryKey, categoryQuery, cleanCategory, MAX_CUSTOM_CATEGORIES, mergeCategories, NO_CATEGORY, parseCategoryCreate, parseCategoryDelete, docFileName, docQuery, docsInCategory, looksLikeCategoriesList, matchCategory, parseCategoryEdit, topCategories, isFileOriginNote, looksLikeDocsHome, looksLikeReclassify, looksLikeTagsList, RECLASSIFY_BATCH, RECLASSIFY_MAX_READS, parseDocPlan, parseTagEdit, searchDocs, searchTerms, tagsLine, topTags } from "./documents";
+import { applyTagEdit, categoryKey, categoryQuery, cleanCategory, MAX_CUSTOM_CATEGORIES, NO_CATEGORY, parseCategoryCreate, parseCategoryDelete, docFileName, docQuery, docsInCategory, looksLikeCategoriesList, matchCategory, parseCategoryEdit, topCategories, isFileOriginNote, looksLikeDocsHome, looksLikeReclassify, looksLikeTagsList, RECLASSIFY_BATCH, RECLASSIFY_MAX_READS, parseDocPlan, parseTagEdit, searchDocs, searchTerms, tagsLine, topTags } from "./documents";
+import { allCategories, createCategory, deleteCategory } from "./document-categories";
 import { catalogedDriveIds, createDocument, deleteDocument, getDocument, listDocuments, setDocumentsTopic, setDocumentTags, updateDocument } from "./documents-store";
 import { pdfPageCount } from "./media-limits";
 import { chatCompletion } from "./openai-chat";
@@ -1757,14 +1758,9 @@ export class MenuService {
     return cat ? this.categoryDocsView(ws, cat) : null;
   }
 
-  /** Categorias criadas à mão (podem estar vazias); as dos documentos vêm das próprias fichas. */
-  private async customCategories(ws: string): Promise<string[]> {
-    return (await this.state.get<{ names: string[] }>(categoriesStateKey(ws)))?.names ?? [];
-  }
-
   /** Todas as categorias com a contagem: as dos documentos mais as criadas à mão. */
-  private async allCategories(ws: string, docs?: any[]) {
-    return mergeCategories(topCategories(docs ?? (await listDocuments(ws))), await this.customCategories(ws));
+  private allCategories(ws: string, docs?: any[]) {
+    return allCategories(this.state, ws, docs);
   }
 
   /** "criar categoria Saúde" e "apagar categoria Saúde"; null quando o texto não é nenhum dos dois. */
@@ -1791,15 +1787,12 @@ export class MenuService {
   }
 
   private async categoryCreate(ws: string, raw: string): Promise<string> {
-    const name = cleanCategory(raw);
-    if (name.length < 2) return "🤔 Diga um nome com pelo menos 2 letras.";
-    if (categoryKey(name) === categoryKey(NO_CATEGORY)) return this.categoriesView(ws, `ℹ️ *${NO_CATEGORY}* já existe: é onde ficam os documentos de categorias apagadas.`);
-    const exists = (await this.allCategories(ws)).find((c) => categoryKey(c.name) === categoryKey(name));
-    if (exists) return this.categoriesView(ws, `ℹ️ A categoria *${short(exists.name, 30)}* já existe.`);
-    const custom = await this.customCategories(ws);
-    if (custom.length >= MAX_CUSTOM_CATEGORIES) return this.categoriesView(ws, `⚠️ Você já tem ${MAX_CUSTOM_CATEGORIES} categorias criadas. Apague alguma antes de criar outra.`);
-    await this.state.set(categoriesStateKey(ws), { names: [...custom, name] });
-    return this.categoriesView(ws, `✅ *Categoria criada:* ${short(name, 30)}`);
+    const r = await createCategory(this.state, ws, raw);
+    if (r.ok) return this.categoriesView(ws, `✅ *Categoria criada:* ${short(r.name, 30)}`);
+    if (r.reason === "short") return "🤔 Diga um nome com pelo menos 2 letras.";
+    if (r.reason === "fixed") return this.categoriesView(ws, `ℹ️ *${NO_CATEGORY}* já existe: é onde ficam os documentos de categorias apagadas.`);
+    if (r.reason === "exists") return this.categoriesView(ws, `ℹ️ A categoria *${short(r.name ?? raw, 30)}* já existe.`);
+    return this.categoriesView(ws, `⚠️ Você já tem ${MAX_CUSTOM_CATEGORIES} categorias criadas. Apague alguma antes de criar outra.`);
   }
 
   private async categoryDeletePick(ws: string): Promise<string> {
@@ -1825,10 +1818,9 @@ export class MenuService {
   }
 
   private async categoryDelete(ws: string, name: string): Promise<string> {
-    const k = categoryKey(name);
-    await this.state.set(categoriesStateKey(ws), { names: (await this.customCategories(ws)).filter((c) => categoryKey(c) !== k) });
-    const moved = await setDocumentsTopic(ws, docsInCategory(await listDocuments(ws), name).map((d) => d.id), NO_CATEGORY);
-    return this.categoriesView(ws, `✅ *Categoria apagada:* ${short(name, 30)}${moved ? `\n📄 ${moved} ${moved === 1 ? "documento foi" : "documentos foram"} para *${NO_CATEGORY}*.` : ""}`);
+    const r = await deleteCategory(this.state, ws, name);
+    if (!r.ok) return this.categoriesView(ws, `🤔 Não achei a categoria *${short(name, 30)}*.`);
+    return this.categoriesView(ws, `✅ *Categoria apagada:* ${short(name, 30)}${r.moved ? `\n📄 ${r.moved} ${r.moved === 1 ? "documento foi" : "documentos foram"} para *${NO_CATEGORY}*.` : ""}`);
   }
 
   /** Depois de guardar um PDF: pergunta a categoria (a sugerida pela IA vem primeiro) e deixa criar uma nova. */

@@ -7,7 +7,7 @@ vi.mock("@openclaw/database", () => ({
       findFirst: async ({ where }: any) => rows.find((r) => Object.entries(where).every(([k, v]) => r[k] === v)) ?? null,
       findMany: async ({ where }: any) => rows.filter((r) => r.workspaceId === where.workspaceId).sort((a, b) => b.createdAt - a.createdAt),
       updateMany: async ({ where, data }: any) => {
-        const hit = rows.filter((r) => r.id === where.id && r.workspaceId === where.workspaceId);
+        const hit = rows.filter((r) => (where.id?.in ? where.id.in.includes(r.id) : r.id === where.id) && r.workspaceId === where.workspaceId);
         hit.forEach((r) => Object.assign(r, data));
         return { count: hit.length };
       },
@@ -37,10 +37,13 @@ const res = () => {
   r.json = (b: any) => ((r.body = b), r);
   return r;
 };
-const ctrl = (google: any = {}) => new DocumentsController(google);
+const kv = new Map<string, any>();
+const state: any = { get: async (k: string) => kv.get(k) ?? null, set: async (k: string, v: any) => void kv.set(k, v) };
+const ctrl = (google: any = {}) => new DocumentsController(google, state);
 
 beforeEach(() => {
   rows.length = 0;
+  kv.clear();
   n = 0;
 });
 
@@ -160,5 +163,36 @@ describe("biblioteca: categorias", () => {
   it("não mostra categorias de outro workspace", async () => {
     seed({ topic: "Alheia", workspaceId: "w2" });
     expect((await ctrl().list(req())).categories).toEqual([]);
+  });
+});
+
+describe("biblioteca: categorias (criar e apagar)", () => {
+  it("cria uma categoria vazia, que aparece na lista com contagem 0, e recusa repetida ou curta", async () => {
+    seed({ topic: "Saúde" });
+    const c = ctrl();
+    const r = await c.createCat(req(), { name: "faculdade" });
+    expect(r.name).toBe("Faculdade");
+    expect((await c.list(req())).categories).toEqual([{ name: "Saúde", count: 1 }, { name: "Faculdade", count: 0 }]);
+    await expect(c.createCat(req(), { name: "FACULDADE" })).rejects.toThrow(/já existe/);
+    await expect(c.createCat(req(), { name: "a" })).rejects.toThrow(/2 letras/);
+  });
+
+  it("apagar move os documentos para Sem categoria e não apaga nenhum", async () => {
+    seed({ topic: "Saúde" });
+    const c = ctrl();
+    const r = await c.removeCat(req(), "saude");
+    expect(r.moved).toBe(1);
+    expect(rows).toHaveLength(1);
+    expect(rows[0].topic).toBe("Sem categoria");
+    expect(r.categories).toEqual([{ name: "Sem categoria", count: 1 }]);
+  });
+
+  it("apaga categoria vazia, recusa Sem categoria e a que não existe, e isola por workspace", async () => {
+    const c = ctrl();
+    await c.createCat(req(), { name: "Viagens" });
+    expect((await c.list(req("w2"))).categories).toEqual([]);
+    expect((await c.removeCat(req(), "Viagens")).categories).toEqual([]);
+    await expect(c.removeCat(req(), "Sem categoria")).rejects.toThrow(/não pode ser apagada/);
+    await expect(c.removeCat(req(), "Nada")).rejects.toThrow(/não encontrada/);
   });
 });
