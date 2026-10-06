@@ -23,3 +23,12 @@ export function fileSizeLabel(bytes?: number): string {
 
 /** A mensagem é só o "📎 nome" automático: o cartão já mostra o nome, então o texto não se repete. */
 export const isAutoFileNote = (text: string, name?: string) => !!name && text.trim() === `📎 ${name}`;
+
+/** Conteúdo do arquivo em base64 (sem o prefixo "data:"), para enviar à API. */
+export const fileToBase64 = (blob: Blob) =>
+  new Promise<string>((resolve, reject) => {
+    const r = new FileReader();
+    r.onload = () => resolve(String(r.result).split(",")[1] ?? "");
+    r.onerror = () => reject(new Error("Não consegui ler o arquivo."));
+    r.readAsDataURL(blob);
+  });

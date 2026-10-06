@@ -1,11 +1,12 @@
 "use client";
 
-import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { api, type DocumentView } from "@/lib/api";
-import { fileSizeLabel } from "@/lib/chat-file";
+import { fileSizeLabel, fileToBase64 } from "@/lib/chat-file";
 
 const btn = "px-3 py-1.5 rounded-lg text-xs font-medium transition-colors";
+const MAX_FILE = 15 * 1024 * 1024;
+const NEW_CAT = "__nova__";
 const chip = "inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs";
 
 type Cat = { name: string; count: number };
@@ -73,6 +74,11 @@ export default function DocumentosPage() {
   const [adding, setAdding] = useState(false);
   const [catName, setCatName] = useState("");
   const [catDel, setCatDel] = useState<string | null>(null); // categoria esperando a confirmação de apagar
+  const [saving, setSaving] = useState(false); // painel "Guardar novo arquivo" aberto
+  const [file, setFile] = useState<File | null>(null);
+  const [saveCat, setSaveCat] = useState("");
+  const [saveNew, setSaveNew] = useState("");
+  const [uploading, setUploading] = useState(false);
 
   const load = useCallback(async () => {
     try {
@@ -149,6 +155,27 @@ export default function DocumentosPage() {
     }
   }
 
+  async function upload() {
+    const name = saveCat === NEW_CAT ? saveNew.trim() : saveCat;
+    if (!file || name.length < 2) return;
+    if (file.type !== "application/pdf") return setError("Envie um arquivo PDF.");
+    if (file.size > MAX_FILE) return setError("Arquivo grande demais (limite de 15 MB).");
+    setUploading(true);
+    setError("");
+    try {
+      await api.documents.upload({ base64: await fileToBase64(file), mime: file.type, category: name });
+      setFile(null);
+      setSaveNew("");
+      setSaving(false);
+      setQ(""); setTag(""); setCategory(name); // mostra onde o arquivo foi parar
+      await load();
+    } catch (e: any) {
+      setError(e.message);
+    } finally {
+      setUploading(false);
+    }
+  }
+
   async function addTag(d: DocumentView) {
     const t = newTag.trim();
     if (!t) return;
@@ -191,13 +218,37 @@ export default function DocumentosPage() {
 
   return (
     <div className="p-4 md:p-6 max-w-4xl space-y-5 h-full overflow-y-auto">
-      <div>
-        <h1 className="text-xl font-semibold text-gray-200">Documentos</h1>
-        <p className="text-sm text-gray-500 mt-1">
-          Seus PDFs guardados no Drive, com título, categoria, tags e resumo. Para guardar um novo, mande o PDF no{" "}
-          <Link href="/dashboard/chat" className="text-violet-400 underline">chat do Assistente</Link> ou pelo WhatsApp.
-        </p>
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div className="min-w-0">
+          <h1 className="text-xl font-semibold text-gray-200">Documentos</h1>
+          <p className="text-sm text-gray-500 mt-1">Seus PDFs guardados no Drive, por categoria, com título, tags e resumo.</p>
+        </div>
+        <button onClick={() => { setSaving((v) => !v); setSaveCat(category || data?.categories.find((c) => c.name !== "Sem categoria")?.name || NEW_CAT); }} aria-expanded={saving} className={`${btn} bg-violet-500 text-white hover:bg-violet-400 px-4 py-2 text-sm`}>📤 Guardar novo arquivo</button>
       </div>
+
+      {saving && (
+        <form onSubmit={(e) => { e.preventDefault(); void upload(); }} className="bg-gray-900 border border-gray-800 rounded-xl p-4 space-y-3" aria-label="Guardar novo arquivo">
+          <label className="block text-xs text-gray-400 space-y-1">
+            <span>1. Escolha o PDF</span>
+            <input type="file" accept="application/pdf" onChange={(e) => setFile(e.target.files?.[0] ?? null)} className="block w-full text-sm text-gray-300 file:mr-3 file:rounded-lg file:border-0 file:bg-gray-800 file:px-3 file:py-1.5 file:text-xs file:text-gray-200" />
+          </label>
+          <label className="block text-xs text-gray-400 space-y-1">
+            <span>2. Em qual categoria guardar?</span>
+            <select value={saveCat} onChange={(e) => setSaveCat(e.target.value)} className="block w-full bg-gray-950 border border-gray-800 rounded-lg px-2.5 py-2 text-sm text-gray-200 focus:outline-none focus:border-violet-500">
+              {(data?.categories ?? []).map((c) => <option key={c.name} value={c.name}>{c.name} ({c.count})</option>)}
+              <option value={NEW_CAT}>➕ Nova categoria…</option>
+            </select>
+          </label>
+          {saveCat === NEW_CAT && (
+            <input value={saveNew} maxLength={40} onChange={(e) => setSaveNew(e.target.value)} placeholder="Nome da nova categoria" aria-label="Nome da nova categoria" autoComplete="off" className="w-full bg-gray-950 border border-gray-800 rounded-lg px-2.5 py-2 text-sm text-gray-200 focus:outline-none focus:border-violet-500" />
+          )}
+          <div className="flex items-center gap-2">
+            <button type="submit" disabled={uploading || !file || (saveCat === NEW_CAT ? saveNew.trim().length < 2 : !saveCat)} className={`${btn} bg-violet-500 text-white disabled:opacity-50`}>{uploading ? "Lendo e guardando…" : "Guardar"}</button>
+            <button type="button" onClick={() => setSaving(false)} disabled={uploading} className={`${btn} bg-gray-800 text-gray-300`}>Cancelar</button>
+            {uploading && <span className="text-xs text-gray-500" role="status">A IA está lendo o PDF; leva alguns segundos.</span>}
+          </div>
+        </form>
+      )}
 
       <div className="md:grid md:grid-cols-[13rem_minmax(0,1fr)] md:gap-5 space-y-4 md:space-y-0">
       <nav aria-label="Categorias" className="flex md:flex-col gap-1.5 md:gap-0.5 overflow-x-auto md:overflow-visible pb-1 md:pb-0 md:self-start md:sticky md:top-0">

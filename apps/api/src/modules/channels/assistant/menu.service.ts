@@ -2019,16 +2019,23 @@ export class MenuService {
     return `✅ *Documento apagado:* ${short(d.title, 50)}\n\n${await this.docsEntry(ws)}`;
   }
 
+  /** PDF no WhatsApp ou no chat do app: guarda, cataloga e pergunta a categoria (a sugerida pela IA vem primeiro). */
+  async documentIngest(ws: string, src: { text?: string; media: { mime: string; base64: string }[] }, origin = "whatsapp"): Promise<string> {
+    const r = await this.ingestPdf(ws, src, origin);
+    return r.ok ? this.categoryPickView(ws, r.row, "✅ *Documento guardado no Drive e catalogado*") : r.message;
+  }
+
   /**
    * Catalogar um PDF: a IA lê e sugere título, assunto, tags e resumo; o arquivo vai para Assist.IA/Documentos e a ficha para o catálogo.
    * O conteúdo do PDF é só dado (a IA não obedece ordens que estejam nele).
    */
-  async documentIngest(ws: string, src: { text?: string; media: { mime: string; base64: string }[] }, origin = "whatsapp"): Promise<string> {
-    if (!this.gemini?.enabled()) return "🔌 Para ler PDFs preciso do Gemini configurado no servidor (GEMINI_API_KEY).";
+  async ingestPdf(ws: string, src: { text?: string; media: { mime: string; base64: string }[] }, origin = "whatsapp", category?: string): Promise<{ ok: true; row: any } | { ok: false; message: string }> {
+    const fail = (message: string) => ({ ok: false as const, message });
+    if (!this.gemini?.enabled()) return fail("🔌 Para ler PDFs preciso do Gemini configurado no servidor (GEMINI_API_KEY).");
     const target = storageAccount(await this.google.listAccounts(ws));
-    if (!target) return this.noGoogle();
+    if (!target) return fail(await this.noGoogle());
     const file = src.media[0];
-    if (!file) return "🤔 Não recebi o arquivo. Mande o PDF de novo.";
+    if (!file) return fail("🤔 Não recebi o arquivo. Mande o PDF de novo.");
     const existing = await listDocuments(ws);
     const topics = [...new Set(existing.map((d) => d.topic))].slice(0, 20);
     const tags = topTags(existing, 30).map((t) => t.tag);
@@ -2044,18 +2051,23 @@ export class MenuService {
       raw = await this.gemini.extract(system, { text: src.text ? `Legenda do dono (pode indicar assunto ou tags): ${src.text}` : undefined, media: [file] });
     } catch (e: any) {
       this.logger.warn(`Leitura do documento falhou: ${e.message}`);
-      return "😕 Não consegui ler o PDF agora. Tente de novo em instantes.";
+      return fail("😕 Não consegui ler o PDF agora. Tente de novo em instantes.");
     }
     const plan = parseDocPlan(raw);
-    if (!plan.doc) return `🤔 Não consegui catalogar o PDF: ${short(plan.error ?? "sem texto aproveitável", 160)}.`;
+    if (!plan.doc) return fail(`🤔 Não consegui catalogar o PDF: ${short(plan.error ?? "sem texto aproveitável", 160)}.`);
+    // Categoria já escolhida (painel): vale a dela, com a grafia de uma que já exista ("saude" → "Saúde")
+    if (category) {
+      const known = (await this.allCategories(ws, existing)).find((c) => categoryKey(c.name) === categoryKey(category));
+      plan.doc.topic = known?.name || cleanCategory(category) || plan.doc.topic;
+    }
     const bytes = Buffer.from(file.base64, "base64");
     try {
       const stored = await this.google.documentStore(ws, bytes, docFileName(dayStamp(new Date(), TZ), plan.doc.title), file.mime || "application/pdf", target);
       const row = await createDocument({ ...plan.doc, workspaceId: ws, driveFileId: stored.id, account: target, mime: file.mime || "application/pdf", sizeBytes: bytes.length, pages: pdfPageCount(bytes) || null, origin });
-      return this.categoryPickView(ws, row, "✅ *Documento guardado no Drive e catalogado*");
+      return { ok: true, row };
     } catch (e: any) {
       this.logger.warn(`Guardar documento falhou: ${e.message}`);
-      return `😕 Li o PDF, mas não consegui guardar no Drive: ${short(e.message, 200)}`;
+      return fail(`😕 Li o PDF, mas não consegui guardar no Drive: ${short(e.message, 200)}`);
     }
   }
 

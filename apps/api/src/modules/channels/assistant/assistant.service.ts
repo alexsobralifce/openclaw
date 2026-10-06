@@ -640,6 +640,18 @@ export class AssistantService {
     return this.handleMedia(c, instanceName, () => this.evolution.getMediaBase64(instanceName, key), media);
   }
 
+  /** Guardar um PDF enviado pelo painel, já com a categoria escolhida: mesmas regras de tamanho, páginas e cota do chat. */
+  async storeDocumentFromPanel(c: Commander, file: { base64: string; mime: string }, category?: string): Promise<{ ok: true; row: any } | { ok: false; message: string }> {
+    trackUser({ userId: c.userId, workspaceId: c.workspaceId, exempt: c.role === "ROOT" || c.role === "ADMIN", limitUsd: planOf(c.plan)?.aiUsd, instance: APP_INSTANCE });
+    if (file.base64.length * 0.75 > MAX_MEDIA_BYTES) return { ok: false, message: "Arquivo grande demais (limite de 15 MB)." };
+    const plan = planOf(c.plan);
+    const pages = pdfPageCount(Buffer.from(file.base64, "base64"));
+    if (pages > maxPdfPages(plan)) return { ok: false, message: `Esse PDF tem cerca de ${pages} páginas, mais que o limite de ${maxPdfPages(plan)}${plan ? ` do plano ${plan.name}` : ""}. Envie só as páginas que interessam.` };
+    const r = await this.menu.ingestPdf(c.workspaceId, { media: [file] }, "painel", category);
+    if (!r.ok && quotaHit()) return { ok: false, message: QUOTA_NOTICE };
+    return r.ok ? r : { ok: false, message: r.message.replace(/[*_]/g, "") };
+  }
+
   /** O mesmo tratamento de imagem/PDF para qualquer canal: `fetchMedia` traz o arquivo (da Evolution, do app ou do Telegram). */
   async handleMedia(c: Commander, instanceName: string, fetchMedia: () => Promise<{ base64: string; mimetype?: string }>, media: { mime: string; caption: string }) {
     const workspaceId = c.workspaceId;

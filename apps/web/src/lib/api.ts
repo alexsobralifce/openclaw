@@ -135,6 +135,8 @@ export const api = {
     },
     update: (id: string, patch: { tags?: string[]; title?: string; topic?: string }) => request<DocumentView>(`/documents/${encodeURIComponent(id)}`, { method: "PATCH", body: JSON.stringify(patch) }),
     remove: (id: string) => request<{ ok: boolean }>(`/documents/${encodeURIComponent(id)}`, { method: "DELETE" }),
+    /** Guarda um PDF novo no Drive e no catálogo, já na categoria escolhida (nova ou existente). */
+    upload: (body: { base64: string; mime: string; category: string }) => request<DocumentView>("/documents", { method: "POST", body: JSON.stringify(body) }),
     createCategory: (name: string) => request<{ name: string; categories: { name: string; count: number }[] }>("/documents/categories", { method: "POST", body: JSON.stringify({ name }) }),
     /** Apaga a categoria; os documentos dela vão para "Sem categoria". */
     removeCategory: (name: string) => request<{ moved: number; categories: { name: string; count: number }[] }>(`/documents/categories?name=${encodeURIComponent(name)}`, { method: "DELETE" }),

@@ -1,11 +1,24 @@
-import { BadRequestException, Body, Controller, Delete, Get, NotFoundException, Param, Patch, Post, Query, Request, Res } from "@nestjs/common";
+import { BadRequestException, Body, Controller, Delete, ForbiddenException, Get, NotFoundException, Param, Patch, Post, Query, Request, Res } from "@nestjs/common";
 import { ArrayMaxSize, IsArray, IsOptional, IsString, MaxLength } from "class-validator";
 import { Access } from "../auth/access";
+import { AssistantService, MAX_MEDIA_BYTES } from "./assistant/assistant.service";
+import { commanderForUser } from "./assistant/commander";
 import { GoogleService } from "../integrations/google/google.service";
 import { StateService } from "../state/state.service";
 import { allCategories, createCategory, deleteCategory } from "./assistant/document-categories";
 import { cleanTag, docsInCategory, MAX_TAGS, NO_CATEGORY, searchDocs, topTags } from "./assistant/documents";
 import { deleteDocument, getDocument, listDocuments, updateDocument } from "./assistant/documents-store";
+
+class UploadDocumentDto {
+  @IsString()
+  base64!: string;
+
+  @IsString() @MaxLength(100)
+  mime!: string;
+
+  @IsOptional() @IsString() @MaxLength(40)
+  category?: string;
+}
 
 class CategoryDto {
   @IsString() @MaxLength(40)
@@ -42,7 +55,7 @@ const view = (d: any) => ({
 @Access("drive")
 @Controller("documents")
 export class DocumentsController {
-  constructor(private google: GoogleService, private state: StateService) {}
+  constructor(private google: GoogleService, private state: StateService, private assistant: AssistantService) {}
 
   private ws = (req: any): string => req.user.workspaces[0]?.workspaceId;
 
@@ -58,6 +71,19 @@ export class DocumentsController {
       docs = docs.filter((d) => inCat.has(d.id));
     }
     return { documents: docs.map(view), tags: topTags(all, 50), categories: await allCategories(this.state, this.ws(req), all), total: all.length };
+  }
+
+  /** Guarda um PDF novo no Drive e no catálogo. Com `category`, vale a escolhida (nova ou existente); sem ela, a IA sugere. */
+  @Post()
+  async upload(@Request() req: any, @Body() body: UploadDocumentDto) {
+    const c = await commanderForUser(req.user.id);
+    if (!c) throw new ForbiddenException("Conta sem acesso ao assistente.");
+    if (!/^application\/pdf$/i.test(body.mime)) throw new BadRequestException("Envie um arquivo PDF.");
+    if (!body.base64.length) throw new BadRequestException("Arquivo vazio.");
+    if (body.base64.length * 0.75 > MAX_MEDIA_BYTES) throw new BadRequestException("Arquivo grande demais (limite de 15 MB).");
+    const r = await this.assistant.storeDocumentFromPanel(c, { base64: body.base64, mime: "application/pdf" }, body.category);
+    if (!r.ok) throw new BadRequestException(r.message.slice(0, 300));
+    return view(r.row);
   }
 
   /** Cria uma categoria (pode ficar vazia). Devolve a lista de categorias atualizada. */

@@ -513,3 +513,28 @@ describe("categorias: escolher ao guardar, criar, listar e apagar", () => {
     expect(await say("apagar categoria sem categoria")).toContain("não pode ser apagada");
   });
 });
+
+describe("guardar pelo painel, com a categoria escolhida", () => {
+  it("usa a categoria escolhida (com a grafia de uma existente) e não deixa pergunta pendente", async () => {
+    seed({ topic: "Saúde" });
+    const { menu, pdf, screen } = build();
+    const r = await menu.ingestPdf("w1", { media: [pdf] }, "painel", "saude");
+    expect(r.ok).toBe(true);
+    expect(rows.find((x) => x.driveFileId === "drivefile01")).toMatchObject({ topic: "Saúde", origin: "painel" });
+    expect(screen()).toBeUndefined();
+  });
+
+  it("categoria nova vira a do documento", async () => {
+    const { menu, pdf } = build();
+    const r = await menu.ingestPdf("w1", { media: [pdf] }, "painel", "viagens de trabalho");
+    expect(r.ok).toBe(true);
+    expect(rows[0].topic).toBe("Viagens de trabalho");
+  });
+
+  it("falha devolve a mensagem sem criar ficha", async () => {
+    const { menu, pdf } = build({ gemini: false });
+    const r = await menu.ingestPdf("w1", { media: [pdf] }, "painel", "Saúde");
+    expect(r).toMatchObject({ ok: false });
+    expect(rows).toHaveLength(0);
+  });
+});
