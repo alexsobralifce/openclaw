@@ -52,7 +52,7 @@ export const nav: { href: string; label: string; icon: React.ReactNode; service?
   {
     href: "/dashboard/notes",
     label: "Notas",
-    service: "drive",
+    service: "assistant",
     icon: (
       <svg width="20" height="20" fill="none" viewBox="0 0 24 24">
         <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>

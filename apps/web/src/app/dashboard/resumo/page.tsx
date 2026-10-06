@@ -81,7 +81,7 @@ export default function ResumoPage() {
   const ready = !!me;
 
   const docs = useCard(ready && has("drive"), () => api.documents.list());
-  const notes = useCard(ready && has("drive"), () => api.assistant.notes());
+  const notes = useCard(ready && has("assistant"), () => api.notes.list());
   const contacts = useCard(ready && has("contacts"), () => api.contacts.list());
   const inbox = useCard(ready && has("inbox"), () => api.inbox.list());
   const vault = useCard(ready && has("vault"), async () => {
@@ -135,12 +135,16 @@ export default function ResumoPage() {
           {notes && (
             <Card title="Notas" href="/dashboard/notes" state={notes}>
               {notes.status === "ok" && (() => {
-                const total = notes.data.topics.reduce((n, t) => n + t.notes.length, 0);
-                const rows = notes.data.topics.map((t) => ({ name: t.name, count: t.notes.length })).sort((a, b) => b.count - a.count).slice(0, 5);
+                const list = notes.data.notes;
+                const next = list.filter((n) => n.remindAt && !n.remindedAt).sort((x, y) => String(x.remindAt).localeCompare(String(y.remindAt)));
                 return (
                   <>
-                    <Big value={total} label={`${total === 1 ? "nota" : "notas"} em ${notes.data.topics.length} ${notes.data.topics.length === 1 ? "assunto" : "assuntos"}`} />
-                    <Bars rows={rows} />
+                    <Big value={list.length} label={list.length === 1 ? "nota" : "notas"} />
+                    <p className="text-xs text-gray-400 mt-2">
+                      {next.length
+                        ? `⏰ ${next.length} ${next.length === 1 ? "lembrete" : "lembretes"}; o próximo é “${next[0].title}”, ${new Date(next[0].remindAt!).toLocaleString("pt-BR", { weekday: "short", day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" })}`
+                        : "Nenhum lembrete marcado."}
+                    </p>
                   </>
                 );
               })()}

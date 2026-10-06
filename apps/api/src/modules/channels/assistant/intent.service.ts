@@ -32,7 +32,6 @@ const PICK_RULES = "Considere erro de digitação, falta de acento, palavras a m
 const PERSON: PickKind = { id: "pessoa", noun: "a pessoa pedida", question: "Qual destes contatos é a pessoa que o dono da secretária procura?" };
 const FILE: PickKind = { id: "arquivo", noun: "o arquivo pedido", question: "Qual destes arquivos do Google Drive (música, documento, planilha, foto...) é o que o dono pediu pelo nome ou descrição?" };
 const TRACK: PickKind = { id: "musica", noun: "a música ou o artista pedido", question: "Qual destes resultados do Spotify é a música (ou o artista) que o dono pediu para tocar?" };
-const TOPIC: PickKind = { id: "assunto", noun: "o assunto pedido", question: "Qual destes assuntos de nota é o que o dono quer abrir?" };
 
 /** Só aceita a resposta do Jev quando ele está seguro; "other" nunca desvia o fluxo. */
 export function acceptIntent(r: IntentResult | null, wanted: Exclude<Intent, "other">, min = MIN_CONFIDENCE): boolean {
@@ -126,11 +125,6 @@ export class IntentService {
   /** Resultado do Spotify (só "nome — artistas" vai ao Jev). */
   pickTrack(query: string, tracks: { name: string; artists: string }[]) {
     return this.pickOne(TRACK, query, tracks.map((t) => `${t.name} — ${t.artists}`));
-  }
-
-  /** Assunto de nota entre os existentes. */
-  pickNoteTopic(query: string, topics: { name: string }[]) {
-    return this.pickOne(TOPIC, query, topics.map((t) => t.name));
   }
 
   /** Conta a chamada ao Jev no consumo do usuário (o SDK devolve o uso em tokens). Sem preço configurado, os tokens contam pelo maior preço da tabela. */

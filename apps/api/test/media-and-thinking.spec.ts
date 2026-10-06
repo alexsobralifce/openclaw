@@ -46,12 +46,12 @@ describe("limites de PDF e áudio", () => {
     const svc = Object.create(AssistantService.prototype) as any;
     const sent: string[] = [];
     svc.logger = { log: vi.fn(), warn: vi.fn(), error: vi.fn() };
-    svc.menu = { agendaMediaIntent: vi.fn(async () => "note"), noteIngest: vi.fn(async () => "NÃO DEVIA"), agendaIngest: vi.fn() };
+    svc.menu = { agendaMediaIntent: vi.fn(async () => "doc"), documentIngest: vi.fn(async () => "NÃO DEVIA"), agendaIngest: vi.fn() };
     svc.evolution = { getMediaBase64: vi.fn(async () => ({ base64: fakePdf(200).toString("base64"), mimetype: "application/pdf" })) };
     svc.sendToUser = vi.fn(async (_c: any, _i: string, t: string) => void sent.push(t));
     svc.scheduleIdle = vi.fn(async () => {});
     await svc.handleAgendaMedia({ userId: "u", name: "Ana", phone: "1", workspaceId: "w", services: [] }, "i", {}, { mime: "application/pdf", caption: "" });
-    expect(svc.menu.noteIngest).not.toHaveBeenCalled();
+    expect(svc.menu.documentIngest).not.toHaveBeenCalled();
     expect(sent.some((t) => t.includes("200 páginas") && t.includes("limite de 80"))).toBe(true);
   });
 });

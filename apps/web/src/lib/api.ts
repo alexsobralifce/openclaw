@@ -53,10 +53,20 @@ export interface PlanInfo {
   summary: string;
 }
 
-export interface NoteTopic {
+export interface NoteItem {
+  text: string;
+  done: boolean;
+}
+
+/** Nota em lista, com lembrete opcional (data e hora em que o assistente a manda). */
+export interface ListNote {
   id: string;
-  name: string;
-  notes: { id: string; name: string; modified?: string }[];
+  title: string;
+  items: NoteItem[];
+  remindAt: string | null;
+  remindedAt: string | null;
+  createdAt: string;
+  updatedAt: string;
 }
 
 export interface UsageReport {
@@ -204,11 +214,13 @@ export const api = {
   assistant: {
     menu: () => request<{ items: MenuItem[] }>("/assistant/menu"),
     overview: () => request<{ routine: { total: number; today: { topic: string; when: string }[] }; memories: number }>("/assistant/overview"),
-    notes: () => request<{ account: string; topics: NoteTopic[] }>("/assistant/notes"),
-    note: (id: string) => request<{ name: string; topic: string; content: string; link?: string }>(`/assistant/notes/${encodeURIComponent(id)}`),
-    createNote: (data: { topic: string; title?: string; content: string }) =>
-      request<{ assunto: string; nome: string }>("/assistant/notes", { method: "POST", body: JSON.stringify(data) }),
     setMenu: (hidden: string[]) => request<{ items: MenuItem[] }>("/assistant/menu", { method: "PUT", body: JSON.stringify({ hidden }) }),
+  },
+  notes: {
+    list: () => request<{ notes: ListNote[] }>("/notes"),
+    create: (data: { title: string; items?: NoteItem[]; remindAt?: string | null }) => request<ListNote>("/notes", { method: "POST", body: JSON.stringify(data) }),
+    update: (id: string, patch: { title?: string; items?: NoteItem[]; remindAt?: string | null }) => request<ListNote>(`/notes/${encodeURIComponent(id)}`, { method: "PATCH", body: JSON.stringify(patch) }),
+    remove: (id: string) => request<{ ok: boolean }>(`/notes/${encodeURIComponent(id)}`, { method: "DELETE" }),
   },
   users: {
     catalog: () => request<{ services: Record<string, string>; defaults: Record<string, string[]> }>("/users/services"),

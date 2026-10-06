@@ -3,15 +3,19 @@ import { prisma } from "@openclaw/database";
 import { StateService } from "../../state/state.service";
 import { AssistantService } from "./assistant.service";
 import { MenuService } from "./menu.service";
-import { Commander } from "./commander";
+import { assistantInstance, Commander, workspaceCommander } from "./commander";
+import { claimReminder, dueReminders, updateNote } from "./list-notes-store";
 import { AssistantConfig, CLEAN_MIN_AGE_MS, configKey, idleKey } from "./chat-clean";
 
 const TICK_MS = 20_000;
+/** Lembrete que falhou no envio (WhatsApp fora do ar, por exemplo) é tentado de novo até esta idade; depois disso desiste. */
+const REMINDER_RETRY_MS = 6 * 3_600_000;
 
 /**
  * Tarefas de fundo do assistente, lidas do banco (sobrevivem a reinícios e a mais de uma instância):
  * - volta ao menu principal quando o dono não responde a tempo;
- * - limpa as mensagens do chat no intervalo que ele escolheu em Configurações.
+ * - limpa as mensagens do chat no intervalo que ele escolheu em Configurações;
+ * - manda os lembretes das notas na data e hora marcadas.
  */
 @Injectable()
 export class AssistantSchedulerService implements OnModuleInit, OnModuleDestroy {
@@ -40,6 +44,7 @@ export class AssistantSchedulerService implements OnModuleInit, OnModuleDestroy 
       await this.wipeDue(now);
       await this.returnIdle(now);
       await this.cleanDue(now);
+      await this.remindersDue(now);
     } catch (e: any) {
       this.logger.error(`Tarefas do assistente falharam: ${e.message}`);
     } finally {
@@ -78,6 +83,28 @@ export class AssistantSchedulerService implements OnModuleInit, OnModuleDestroy 
       } catch (e: any) {
         this.logger.warn(`Retorno ao menu falhou (${r.key}): ${e.message}`);
       }
+    }
+  }
+
+  /** Manda a nota como lembrete. Reserva o envio antes (nunca repete); se o envio falha, devolve a vez por algumas horas. */
+  private async remindersDue(now: number) {
+    for (const n of await dueReminders(new Date(now))) {
+      if (!n.remindAt || !(await claimReminder(n.id, n.remindAt, new Date(now)))) continue;
+      let sent = false;
+      try {
+        const owner = await workspaceCommander(n.workspaceId);
+        const instance = owner ? await assistantInstance(n.workspaceId, owner) : null;
+        if (owner && instance) {
+          await this.assistant.sendToUser(owner, instance, this.menu.reminderText(n));
+          sent = true;
+        } else {
+          this.logger.warn(`Lembrete da nota ${n.id}: sem canal para avisar o workspace ${n.workspaceId}.`);
+        }
+      } catch (e: any) {
+        this.logger.warn(`Lembrete da nota ${n.id} falhou: ${e.message}`);
+      }
+      // Não enviou e ainda está na janela: solta a reserva para tentar na próxima volta
+      if (!sent && now - n.remindAt.getTime() < REMINDER_RETRY_MS) await updateNote(n.workspaceId, n.id, { remindAt: n.remindAt });
     }
   }
 

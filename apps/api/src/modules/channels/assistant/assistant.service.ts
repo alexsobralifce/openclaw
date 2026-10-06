@@ -660,12 +660,9 @@ export class AssistantService {
     if (mode === "no") return;
     let answer: string;
     if (mode === "hint") {
-      answer = "📷 Recebi o arquivo. O que faço com ele?\n📝 *Criar nota:* abra *Notas* e envie de novo (ou escreva _nota_ na legenda).\n🗓️ *Ler compromissos:* abra a *agenda* → *Criar eventos* e envie de novo (ou escreva _adicionar na agenda_ na legenda).";
+      answer = "📷 Recebi o arquivo. O que faço com ele?\n📚 *Guardar um PDF:* abra *Documentos* → *Guardar novo arquivo* e envie de novo.\n🗓️ *Ler compromissos:* abra a *agenda* → *Criar eventos* e envie de novo (ou escreva _adicionar na agenda_ na legenda).";
     } else {
-      // Ler o arquivo leva alguns segundos: avisa já que o cadastro da nota está em andamento (se o aviso falhar, segue mesmo assim)
-      if (mode === "note") {
-        await this.sendToUser(c, instanceName, "📝 Recebi o arquivo! Já estou lendo e criando a nota. Em breve confirmo o cadastro por aqui.").catch((e) => this.logger.warn(`Aviso de recebimento falhou: ${e.message}`));
-      }
+      // Ler o arquivo leva alguns segundos: avisa já que o cadastro está em andamento (se o aviso falhar, segue mesmo assim)
       if (mode === "doc") {
         await this.sendToUser(c, instanceName, "📚 Recebi o PDF! Já estou lendo, guardando no Drive e catalogando com tags. Em breve confirmo por aqui.").catch((e) => this.logger.warn(`Aviso de recebimento falhou: ${e.message}`));
       }
@@ -678,21 +675,14 @@ export class AssistantService {
           answer = `📄 Esse PDF tem cerca de ${pages} páginas, mais que o limite de ${maxPdfPages(plan)}${plan ? ` do plano ${plan.name}` : ""}. Mande só as páginas que interessam, ou divida o arquivo em partes.`;
         } else {
           const src = { text: media.caption || undefined, media: [{ mime: m.mimetype || media.mime, base64: m.base64 }] };
-          answer =
-            mode === "note"
-              ? await this.menu.noteIngest(workspaceId, src)
-              : mode === "doc"
-                ? await this.menu.documentIngest(workspaceId, src, channelOfInstance(instanceName))
-                : await this.menu.agendaIngest(workspaceId, src);
+          answer = mode === "doc" ? await this.menu.documentIngest(workspaceId, src, channelOfInstance(instanceName)) : await this.menu.agendaIngest(workspaceId, src);
         }
       } catch (err: any) {
         this.logger.error(`Leitura de arquivo para a agenda falhou: ${err.message}`);
         answer =
-          mode === "note"
-            ? "😕 Não consegui baixar ou ler o arquivo, então a nota *não* foi criada. Tente enviar de novo."
-            : mode === "doc"
-              ? "😕 Não consegui baixar ou ler o PDF, então ele *não* foi catalogado. Tente enviar de novo."
-              : "😕 Não consegui baixar ou ler o arquivo. Tente de novo, ou cole o texto dos compromissos.";
+          mode === "doc"
+            ? "😕 Não consegui baixar ou ler o PDF, então ele *não* foi catalogado. Tente enviar de novo."
+            : "😕 Não consegui baixar ou ler o arquivo. Tente de novo, ou cole o texto dos compromissos.";
       }
     }
     if (quotaHit()) answer = `${answer}\n\n${QUOTA_NOTICE}`;

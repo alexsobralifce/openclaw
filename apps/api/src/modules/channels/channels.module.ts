@@ -25,6 +25,7 @@ import { TelegramController } from "./telegram/telegram.controller";
 import { SpotifyController } from "./spotify/spotify.controller";
 import { SpotifyService } from "./spotify/spotify.service";
 import { DocumentsController } from "./documents.controller";
+import { NotesController } from "./notes.controller";
 import { AppChatController } from "./app-chat/app-chat.controller";
 import { AppChatService } from "./app-chat/app-chat.service";
 import { AppChatGateway } from "./app-chat/app-chat.gateway";
@@ -40,7 +41,7 @@ import { InstagramWorker } from "./workers/instagram.worker";
       inject: [ConfigService],
     }),
   ],
-  controllers: [ChannelsController, AssistantSettingsController, TelegramController, AppChatController, DocumentsController, SpotifyController],
+  controllers: [ChannelsController, AssistantSettingsController, TelegramController, AppChatController, DocumentsController, NotesController, SpotifyController],
   providers: [SpotifyService, TelegramService, AppChatService, AppChatGateway, PushService, ChannelsService, WhatsappWorker, InstagramWorker, InstagramService, InboundService, AssistantService, MenuService, MemoryService, GeminiService, IntentService, EmailWatcherService, WeatherService, AssistantSchedulerService],
   exports: [ChannelsService, EvolutionModule, AssistantService],
 })

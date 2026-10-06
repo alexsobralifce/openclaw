@@ -27,6 +27,7 @@ model Workspace {
   webhooks      WebhookEndpoint[]
   memories      Memory[]
   documents     Document[]
+  listNotes     ListNote[]
 }
 
 enum Plan {
@@ -496,4 +497,25 @@ model Document {
 
   @@index([workspaceId, createdAt])
   @@index([workspaceId, driveFileId])
+}
+
+// ─── NOTAS EM LISTA (com lembrete) ───────────────────────────────
+// Título + itens editáveis; opcionalmente uma data e hora para o assistente mandar a nota como lembrete.
+// (Não confundir com as anotações em Markdown no Drive: estas ficam no Postgres.)
+model ListNote {
+  id         String    @id @default(cuid())
+  title      String
+  // [{ "text": string, "done": boolean }]
+  items      Json      @default("[]")
+  remindAt   DateTime?
+  // preenchido quando o lembrete é enviado (nulo = ainda pendente); mudar o horário zera de novo
+  remindedAt DateTime?
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  workspaceId String
+
+  @@index([workspaceId, updatedAt])
+  @@index([remindAt])
 }

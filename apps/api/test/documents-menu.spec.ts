@@ -111,14 +111,14 @@ describe("guardar um PDF no catálogo", () => {
     expect(rows).toHaveLength(0);
   });
 
-  it("PDF sem outro pedido vai para o catálogo; nota, agenda e foto seguem como antes", async () => {
+  it("PDF vai para o catálogo (mesmo com nota na legenda); agenda e foto seguem como antes", async () => {
     const { menu } = build();
     expect(await menu.agendaMediaIntent("w1", "", "application/pdf")).toBe("doc");
     expect(await menu.agendaMediaIntent("w1", "contrato aluguel", "application/pdf")).toBe("doc");
-    expect(await menu.agendaMediaIntent("w1", "nota sobre contrato", "application/pdf")).toBe("note");
+    expect(await menu.agendaMediaIntent("w1", "nota sobre contrato", "application/pdf")).toBe("doc");
     expect(await menu.agendaMediaIntent("w1", "adicionar na agenda", "application/pdf")).toBe("yes");
     expect(await menu.agendaMediaIntent("w1", "", "image/jpeg")).toBe("hint");
-    expect(await menu.agendaMediaIntent("w1", "nota", "image/jpeg")).toBe("note");
+    expect(await menu.agendaMediaIntent("w1", "nota", "image/jpeg")).toBe("hint");
   });
 });
 

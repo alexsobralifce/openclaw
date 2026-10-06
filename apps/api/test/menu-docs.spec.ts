@@ -36,21 +36,22 @@ describe("documentação do menu do assistente", () => {
 
   it("diz com todas as letras o que o assistente apaga e o que NÃO apaga", async () => {
     const byId = Object.fromEntries(MENU_DOCS.map((n) => [n.id, n]));
-    // apaga evento e conclui nota (lixeira do Drive), mas não edita evento
+    // apaga evento e nota (com confirmação), mas não edita evento
     expect(byId.agenda.remove).toMatch(/apagar evento/);
     expect(byId.agenda.limits).toMatch(/não edita/);
-    expect(byId.notes.remove).toMatch(/lixeira do Drive/);
-    expect(byId.notes.limits).toMatch(/que ele mesmo criou/);
+    expect(byId.notes.remove).toMatch(/3 Apagar/);
+    expect(byId.notes.limits).toMatch(/continuam no seu Google Drive/);
     // não apaga arquivo do Drive nem contato, e o cofre é só pelo painel
     expect(byId.drive.remove).toMatch(/não apaga/);
     expect(byId.contacts.remove).toMatch(/só lê/);
     expect(byId.vault.remove).toMatch(/painel web/);
   });
 
-  it("os passos de apagar evento e concluir nota existem como itens da árvore", () => {
+  it("os passos de apagar evento e apagar nota existem como itens da árvore", () => {
     const ids = all(MENU_DOCS).map((n) => n.id);
     expect(ids).toContain("agenda-apagar");
-    expect(ids).toContain("notes-concluir");
+    expect(ids).toContain("notes-apagar");
+    expect(ids).toContain("notes-lembrete");
   });
 
 });

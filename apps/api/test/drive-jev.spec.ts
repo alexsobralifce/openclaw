@@ -77,29 +77,6 @@ describe("música e arquivo: o Jev escolhe entre os achados", () => {
   });
 });
 
-describe("assunto de nota: o Jev escolhe quando o nome não bate", () => {
-  const topics = [{ id: "t1", name: "Moradia" }, { id: "t2", name: "Reuniões" }];
-
-  it("'notas de aluguel' abre 'Moradia' quando o Jev tem certeza", async () => {
-    const { menu, intents, notesIn } = build({ topics, pickTopic: 0 });
-    await menu.respond("w1", "notas de aluguel");
-    expect(intents.pickNoteTopic).toHaveBeenCalledTimes(1);
-    expect(notesIn).toHaveBeenCalled();
-  });
-
-  it("nome que casa por texto não gasta o Jev; na dúvida mostra a lista de assuntos", async () => {
-    const a = build({ topics });
-    await a.menu.respond("w1", "notas de reunioes");
-    expect(a.intents.pickNoteTopic).not.toHaveBeenCalled();
-    expect(a.notesIn).toHaveBeenCalled();
-
-    const b = build({ topics, pickTopic: null });
-    const out = (await b.menu.respond("w1", "notas de aluguel")) as string;
-    expect(out).toContain("Não achei o assunto");
-    expect(b.notesIn).not.toHaveBeenCalled();
-  });
-});
-
 describe("o que vai ao Jev", () => {
   beforeEach(() => {
     systemOne.mockReset();
@@ -127,12 +104,5 @@ describe("o que vai ao Jev", () => {
     const sent = JSON.stringify(systemOne.mock.calls[0][0]);
     expect(sent).toContain("Evidências — Legião Urbana");
     expect(sent).not.toMatch(/spotify:track|Álbum/);
-  });
-
-  it("assunto de nota: devolve o índice ou null", async () => {
-    systemOne.mockResolvedValue({ answers: { escolha: { choice: "c0", confidence: 0.95 } } });
-    expect(await new IntentService().pickNoteTopic("aluguel", [{ name: "Moradia" }])).toBe(0);
-    systemOne.mockResolvedValue({ answers: { escolha: { choice: "nenhum", confidence: 0.99 } } });
-    expect(await new IntentService().pickNoteTopic("aluguel", [{ name: "Moradia" }])).toBeNull();
   });
 });
