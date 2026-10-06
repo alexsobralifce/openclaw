@@ -69,6 +69,17 @@ const DRIVE_EXPORTS: Record<string, { mime: string; ext: string }> = {
 const SIGNAL_HEADERS = new Set(["list-unsubscribe", "precedence", "auto-submitted", "x-spam-flag", "x-spam-status", "authentication-results"]);
 const GMAIL_HEADERS = ["From", "Subject", "Date", "List-Unsubscribe", "Precedence", "Auto-Submitted", "X-Spam-Flag", "X-Spam-Status", "Authentication-Results"];
 
+/** O Google recusou por cota por minuto (Gmail "Total Query Cost", 429...). Passa em um minuto. */
+export class GoogleQuotaError extends Error {
+  constructor() {
+    super("O Google limitou as consultas por alguns instantes (cota por minuto). Aguarde cerca de 1 minuto e tente de novo.");
+    this.name = "GoogleQuotaError";
+  }
+}
+const QUOTA_ERROR = /Quota exceeded|rateLimitExceeded|userRateLimitExceeded|RESOURCE_EXHAUSTED/i;
+/** Mensagens lidas ao mesmo tempo ao montar o catálogo de e-mails. */
+const HEADERS_PARALLEL = 4;
+
 @Injectable()
 export class GoogleService implements OnModuleInit {
   private readonly logger = new Logger(GoogleService.name);
@@ -238,7 +249,12 @@ export class GoogleService implements OnModuleInit {
       ...init,
       headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json", ...(init?.headers ?? {}) },
     });
-    if (!res.ok) throw new Error(`Google API ${res.status}: ${(await res.text()).slice(0, 300)}`);
+    if (!res.ok) {
+      const body = await res.text();
+      // Cota por minuto estourada: mensagem clara em vez do JSON do Google (e a importação em segundo plano sabe esperar)
+      if (res.status === 429 || QUOTA_ERROR.test(body)) throw new GoogleQuotaError();
+      throw new Error(`Google API ${res.status}: ${body.slice(0, 300)}`);
+    }
     // DELETE do Calendar responde 204, sem corpo
     if (res.status === 204) return undefined as T;
     return (await res.json()) as T;
@@ -801,15 +817,31 @@ export class GoogleService implements OnModuleInit {
     return contacts;
   }
 
+  /** Pausa entre tentativas (os testes trocam por uma pausa nula). */
+  protected sleepMs = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
+
+  /** Trabalho em segundo plano: se o Google limitar a cota por minuto, espera e tenta de novo (até 3 vezes, 20 s, 40 s). */
+  private async withQuotaRetry<T>(fn: () => Promise<T>, tries = 3): Promise<T> {
+    for (let i = 1; ; i++) {
+      try {
+        return await fn();
+      } catch (e) {
+        if (!(e instanceof GoogleQuotaError) || i >= tries) throw e;
+        await this.sleepMs(20_000 * i);
+      }
+    }
+  }
+
   /** Cabeçalhos From/To/Cc dos e-mails mais recentes que casam com a consulta (poucas requisições por vez). */
   private async gmailHeaders(workspaceId: string, account: string, query: string, max: number): Promise<{ from?: string; to?: string; cc?: string }[]> {
-    const list = await this.g<any>(workspaceId, account, `https://gmail.googleapis.com/gmail/v1/users/me/messages?maxResults=${Math.min(max, 500)}&q=${encodeURIComponent(query)}`);
+    const list = await this.withQuotaRetry(() => this.g<any>(workspaceId, account, `https://gmail.googleapis.com/gmail/v1/users/me/messages?maxResults=${Math.min(max, 500)}&q=${encodeURIComponent(query)}`));
     const ids: string[] = (list.messages ?? []).map((m: any) => m.id);
     const out: { from?: string; to?: string; cc?: string }[] = [];
-    for (let i = 0; i < ids.length; i += 8) {
+    // Poucas por vez: cada mensagem custa 5 unidades da cota por minuto do Gmail, e este trabalho roda junto com a vigia e os comandos do dono
+    for (let i = 0; i < ids.length; i += HEADERS_PARALLEL) {
       const batch = await Promise.all(
-        ids.slice(i, i + 8).map(async (id) => {
-          const m = await this.g<any>(workspaceId, account, `https://gmail.googleapis.com/gmail/v1/users/me/messages/${id}?format=metadata&metadataHeaders=From&metadataHeaders=To&metadataHeaders=Cc`).catch(() => null);
+        ids.slice(i, i + HEADERS_PARALLEL).map(async (id) => {
+          const m = await this.withQuotaRetry(() => this.g<any>(workspaceId, account, `https://gmail.googleapis.com/gmail/v1/users/me/messages/${id}?format=metadata&metadataHeaders=From&metadataHeaders=To&metadataHeaders=Cc`)).catch(() => null);
           const h = (n: string) => m?.payload?.headers?.find((x: any) => x.name === n)?.value as string | undefined;
           return m ? { from: h("From"), to: h("To"), cc: h("Cc") } : null;
         }),
@@ -831,7 +863,9 @@ export class GoogleService implements OnModuleInit {
         if (!target) throw new Error("Google não conectado");
         const seen: SeenAddress[] = [];
         for (const a of accounts) {
-          const [inbox, sent] = await Promise.all([this.gmailHeaders(workspaceId, a, "in:inbox", perBox), this.gmailHeaders(workspaceId, a, "in:sent", perBox)]);
+          // Uma caixa de cada vez (juntas dobrariam o pico de consultas por minuto)
+          const inbox = await this.gmailHeaders(workspaceId, a, "in:inbox", perBox);
+          const sent = await this.gmailHeaders(workspaceId, a, "in:sent", perBox);
           for (const m of inbox) for (const x of parseAddresses(m.from)) seen.push({ ...x, sent: false });
           for (const m of sent) for (const x of [...parseAddresses(m.to), ...parseAddresses(m.cc)]) seen.push({ ...x, sent: true });
         }
