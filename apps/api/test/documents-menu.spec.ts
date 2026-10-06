@@ -170,15 +170,31 @@ describe("buscar no catálogo", () => {
     const home = await say("documentos");
     expect(home).toContain("*2* documentos");
     expect(home).not.toContain("#contrato");
-    expect(home).toContain("Mudar a categoria de um documento");
+    expect(home).toMatch(/1️⃣ 📤 Guardar novo arquivo\n2️⃣ 📂 Abrir categorias\n3️⃣ 🔎 Buscar por nome ou tag/);
     expect(await say("tags")).toContain("#contrato · 2");
     // a tela de documentos segue aberta: "todos" lista tudo
     expect(await say("todos")).toContain("2 documentos");
   });
 
+  it("o menu de Documentos: 1 guardar, 2 categorias, 3 buscar", async () => {
+    const { say, screen } = build();
+    seed({ title: "Regulamento do curso", topic: "Educação", tags: ["regulamento"] });
+    await say("documentos");
+    expect(await say("1")).toContain("Mande o *PDF*");
+    expect(screen()).toBe("docs_save_input");
+    expect(await say("oi")).toContain("Mande o PDF como anexo");
+    expect(await say("0")).toContain("Guardar novo arquivo");
+    expect(await say("2")).toContain("Educação · 1");
+    expect(screen()).toBe("docs_cats");
+    await say("0");
+    expect(await say("3")).toContain("Buscar documento");
+    expect(screen()).toBe("docs_find_input");
+    expect(await say("regulamento")).toContain("Regulamento do curso");
+  });
+
   it("catálogo vazio orienta a mandar um PDF; o menu principal oferece Documentos", async () => {
     const { say } = build();
-    expect(await say("documentos com a tag contrato")).toContain("mande um PDF");
+    expect(await say("documentos com a tag contrato")).toContain("Guardar novo arquivo");
     expect(await say("menu")).toContain("Documentos");
   });
 

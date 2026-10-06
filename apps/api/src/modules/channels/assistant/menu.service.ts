@@ -440,17 +440,15 @@ export class MenuService {
       }
       case "docs_input": {
         if (n === 0) return this.mainMenu(ws, false);
-        const f = normalize(text);
-        if (looksLikeTagsList(f)) return this.tagsView(ws);
-        if (looksLikeCategoriesList(f)) return this.categoriesView(ws);
-        const catCmd = this.categoryCommand(ws, text);
-        if (catCmd) return catCmd;
-        if (looksLikeReclassify(f)) return this.docsReclassify(ws);
-        if (parseTagEdit(text) || parseCategoryEdit(text)) return "🤔 Abra primeiro o documento (busque e escolha o número) e então diga as tags ou a categoria.";
-        const cat = categoryQuery(f);
-        if (cat) return this.categoryDocsView(ws, cat);
-        return this.docsSearchView(ws, docQuery(f) ?? text);
+        if (n === 1) return this.docsSaveAsk(ws);
+        if (n === 2) return this.categoriesView(ws);
+        if (n === 3) return this.docsFindAsk(ws);
+        return this.docsText(ws, text);
       }
+      case "docs_save_input":
+        return n === 0 ? this.docsEntry(ws) : "📎 Mande o PDF como anexo aqui, ou 0 para voltar.";
+      case "docs_find_input":
+        return n === 0 ? this.docsEntry(ws) : this.docsText(ws, text);
       case "docs_cats": {
         if (n === 0) return this.docsEntry(ws);
         const k: number = d.cats?.length ?? 0;
@@ -1693,15 +1691,22 @@ export class MenuService {
     await this.set(ws, "docs_input");
     const cats = topCategories(docs).slice(0, 6).map((c) => `${c.name} (${c.count})`).join(" · ");
     return [
-      head("📚", "Documentos", "PDFs guardados, com categorias e tags"),
+      head("📚", "Documentos", "PDFs guardados, por categoria"),
       docs.length ? `Você tem *${docs.length}* ${docs.length === 1 ? "documento" : "documentos"}.${cats ? `\n📂 ${cats}` : ""}` : "Ainda não há documentos guardados.",
-      "📄 *Guardar:* mande um PDF aqui. Depois eu pergunto em qual categoria guardar (ou você cria uma).",
-      "🔎 *Buscar:* diga o assunto ou a tag, ex.: _contrato_ ou _documentos com a tag aluguel_. Para ver todos, diga _todos_.",
-      "📂 *Categorias:* diga _categorias_ para listar, criar ou apagar; _categoria saúde_ abre uma.",
-      "🔄 *Mudar a categoria de um documento:* busque o documento, abra e escolha *Mudar categoria*.",
       DIV,
-      opts(BACK),
+      opts([1, "📤", "Guardar novo arquivo"], [2, "📂", "Abrir categorias"], [3, "🔎", "Buscar por nome ou tag"], BACK),
+      foot("Responda com o número. Para ver todos, diga todos"),
     ].join("\n");
+  }
+
+  private async docsSaveAsk(ws: string): Promise<string> {
+    await this.set(ws, "docs_save_input");
+    return [head("📤", "Guardar novo arquivo"), "Mande o *PDF* por aqui (📎).", "Depois eu pergunto em qual categoria guardar; se não existir a que você quer, é só criar.", DIV, opts(BACK)].join("\n");
+  }
+
+  private async docsFindAsk(ws: string): Promise<string> {
+    await this.set(ws, "docs_find_input");
+    return [head("🔎", "Buscar documento", "por nome, assunto ou tag"), "Diga o que procura.", '_Ex.: "contrato", "regulamento" ou "documentos com a tag aluguel"_', "_Para ver todos, diga *todos*._", DIV, opts(BACK)].join("\n");
   }
 
   private async tagsView(ws: string): Promise<string> {
@@ -1745,6 +1750,20 @@ export class MenuService {
     const rows = items.map((d, i) => `${key(i + 1)} ${d.kind === "pdf" ? "📄" : "📝"} *${short(d.title, 40)}*\n     _${tagsLine(d.tags.slice(0, 4)) || d.topic} · ${this.docDate(d)}_`);
     const more = found.length > items.length ? `\n➕ _Mais ${found.length - items.length}: afine a busca com outra palavra ou tag._` : "";
     return [head("📚", `${found.length} documentos`, sub), rows.join("\n") + more, foot("Responda com o número para receber. Para mudar tags: *tags do documento 2: contrato*; categoria: *categoria do documento 2: Saúde*"), opts(BACK)].join("\n");
+  }
+
+  /** Texto solto nas telas de documentos: tags, categorias, criar/apagar categoria ou busca por nome, assunto e tag. */
+  private async docsText(ws: string, text: string): Promise<string> {
+    const f = normalize(text);
+    if (looksLikeTagsList(f)) return this.tagsView(ws);
+    if (looksLikeCategoriesList(f)) return this.categoriesView(ws);
+    const catCmd = this.categoryCommand(ws, text);
+    if (catCmd) return catCmd;
+    if (looksLikeReclassify(f)) return this.docsReclassify(ws);
+    if (parseTagEdit(text) || parseCategoryEdit(text)) return "🤔 Abra primeiro o documento (busque e escolha o número) e então diga as tags ou a categoria.";
+    const cat = categoryQuery(f);
+    if (cat) return this.categoryDocsView(ws, cat);
+    return this.docsSearchView(ws, docQuery(f) ?? text);
   }
 
   /** "categorias" e "categoria saúde" valem em qualquer tela do catálogo (a lista ou o documento aberto). */
