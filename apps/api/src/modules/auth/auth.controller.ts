@@ -1,10 +1,12 @@
-import { Body, Controller, Get, Patch, Post, Request, UseGuards } from "@nestjs/common";
+import { Body, Controller, Get, HttpCode, Patch, Post, Request, Res, UseGuards } from "@nestjs/common";
+import type { Response } from "express";
 import { Transform } from "class-transformer";
 import { IsEmail, IsOptional, IsString, Matches, MaxLength, MinLength } from "class-validator";
 import { AuthService } from "./auth.service";
 import { Access } from "./access";
 import { RateLimit, RateLimitGuard } from "./rate-limit";
 import { SERVICES } from "./permissions";
+import { clearSessionCookie, setSessionCookie } from "./session-cookie";
 
 const normalizeEmail = ({ value }: { value: unknown }) => (typeof value === "string" ? value.trim().toLowerCase() : value);
 
@@ -47,6 +49,13 @@ class ProfileDto {
   phone?: string;
 }
 
+/** Grava o cookie da sessão quando a resposta traz um token (cadastro pendente de aprovação não traz). */
+function startSession<T extends object>(res: Response, result: T): T {
+  const token = (result as { accessToken?: string }).accessToken;
+  if (token) setSessionCookie(res, token);
+  return result;
+}
+
 @Controller("auth")
 export class AuthController {
   constructor(private auth: AuthService) {}
@@ -54,22 +63,29 @@ export class AuthController {
   @UseGuards(RateLimitGuard)
   @RateLimit("register", 5, 3600)
   @Post("register")
-  register(@Body() dto: RegisterDto) {
-    return this.auth.register(dto.email, dto.name, dto.password, dto.workspaceName);
+  async register(@Body() dto: RegisterDto, @Res({ passthrough: true }) res: Response) {
+    return startSession(res, await this.auth.register(dto.email, dto.name, dto.password, dto.workspaceName));
   }
 
   @UseGuards(RateLimitGuard)
   @RateLimit("login", 20, 900)
   @Post("login")
-  login(@Body() dto: LoginDto) {
-    return this.auth.login(dto.email, dto.password);
+  async login(@Body() dto: LoginDto, @Res({ passthrough: true }) res: Response) {
+    return startSession(res, await this.auth.login(dto.email, dto.password));
   }
 
   @UseGuards(RateLimitGuard)
   @RateLimit("google-exchange", 30, 900)
   @Post("google/exchange")
-  googleExchange(@Body() dto: GoogleTicketDto) {
-    return this.auth.loginWithGoogleTicket(dto.ticket);
+  async googleExchange(@Body() dto: GoogleTicketDto, @Res({ passthrough: true }) res: Response) {
+    return startSession(res, await this.auth.loginWithGoogleTicket(dto.ticket));
+  }
+
+  /** Encerra a sessão do painel: o cookie é HttpOnly, só o servidor consegue apagá-lo. */
+  @Post("logout")
+  @HttpCode(204)
+  logout(@Res({ passthrough: true }) res: Response) {
+    clearSessionCookie(res);
   }
 
   @Access()

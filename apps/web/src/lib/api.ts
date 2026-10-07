@@ -1,3 +1,5 @@
+import { endSession } from "./auth";
+
 const API = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001";
 
 /** Item do menu principal do WhatsApp; `hidden` = fora da lista, `locked` = sempre visível. */
@@ -10,18 +12,16 @@ export interface MenuItem {
 }
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
-  const token = typeof window !== "undefined" ? localStorage.getItem("oc_token") : null;
   const res = await fetch(`${API}/api/v1${path}`, {
     ...init,
+    credentials: "include",
     headers: {
       "Content-Type": "application/json",
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
       ...(init?.headers ?? {}),
     },
   });
   if (res.status === 401 && typeof window !== "undefined") {
-    localStorage.removeItem("oc_token");
-    document.cookie = "oc_token=; path=/; max-age=0";
+    await endSession();
     window.location.href = "/auth/login";
     throw new Error("Sessão expirada. Faça login novamente.");
   }
@@ -29,9 +29,7 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
     const err = await res.json().catch(() => ({}));
     // Conta desativada ou pendente: encerra a sessão e mostra o motivo no login
     if (res.status === 403 && err.code === "ACCOUNT_INACTIVE" && typeof window !== "undefined") {
-      localStorage.removeItem("oc_token");
-      localStorage.removeItem("oc_user");
-      document.cookie = "oc_token=; path=/; max-age=0";
+      await endSession();
       window.location.href = `/auth/login?motivo=${encodeURIComponent(err.message)}`;
     }
     const msg = Array.isArray(err.message) ? err.message.join("; ") : err.message;
@@ -152,7 +150,7 @@ export const api = {
     removeCategory: (name: string) => request<{ moved: number; categories: { name: string; count: number }[] }>(`/documents/categories?name=${encodeURIComponent(name)}`, { method: "DELETE" }),
     /** Baixa na hora, do Drive do usuário. Arquivo grande demais: o erro traz o link do Drive em `link`. */
     download: async (id: string): Promise<Blob> => {
-      const res = await fetch(`${API}/api/v1/documents/${encodeURIComponent(id)}/download`, { headers: { Authorization: `Bearer ${localStorage.getItem("oc_token") ?? ""}` } });
+      const res = await fetch(`${API}/api/v1/documents/${encodeURIComponent(id)}/download`, { credentials: "include" });
       if (!res.ok) {
         const err: any = await res.json().catch(() => ({}));
         throw Object.assign(new Error(err.message || "Não consegui baixar o documento."), { link: typeof err.link === "string" ? err.link : null });
@@ -171,16 +169,16 @@ export const api = {
     pushUnsubscribe: (endpoint: string) => request<any>("/app-chat/push", { method: "DELETE", body: JSON.stringify({ endpoint }) }),
     /** Baixa um arquivo da lista do Drive, direto da conta do usuário. Se for grande demais, o erro traz o link do Drive em `link`. */
     driveFile: async (id: string, account: string): Promise<Blob> => {
-      const res = await fetch(`${API}/api/v1/app-chat/drive/${encodeURIComponent(id)}?account=${encodeURIComponent(account)}`, { headers: { Authorization: `Bearer ${localStorage.getItem("oc_token") ?? ""}` } });
+      const res = await fetch(`${API}/api/v1/app-chat/drive/${encodeURIComponent(id)}?account=${encodeURIComponent(account)}`, { credentials: "include" });
       if (!res.ok) {
         const err: any = await res.json().catch(() => ({}));
         throw Object.assign(new Error(err.message || "Não consegui baixar o arquivo."), { link: typeof err.link === "string" ? err.link : null });
       }
       return res.blob();
     },
-    /** Baixa um arquivo enviado pelo assistente (precisa do token, então não dá para usar um link direto). */
+    /** Baixa um arquivo enviado pelo assistente (precisa da sessão, então não dá para usar um link direto). */
     file: async (id: string): Promise<Blob> => {
-      const res = await fetch(`${API}/api/v1/app-chat/files/${id}`, { headers: { Authorization: `Bearer ${localStorage.getItem("oc_token") ?? ""}` } });
+      const res = await fetch(`${API}/api/v1/app-chat/files/${id}`, { credentials: "include" });
       if (!res.ok) throw new Error("Arquivo não encontrado ou expirado.");
       return res.blob();
     },

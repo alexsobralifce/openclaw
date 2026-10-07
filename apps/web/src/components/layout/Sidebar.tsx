@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { clearToken } from "@/lib/auth";
+import { endSession } from "@/lib/auth";
 import { hasService, isAdmin, useMe } from "@/hooks/useMe";
 import { Logo } from "@/components/brand/Logo";
 
@@ -170,7 +170,7 @@ export function Sidebar() {
   const visible = visibleNav(me);
 
   function logout() {
-    clearToken();
+    endSession();
     router.push("/auth/login");
   }
 

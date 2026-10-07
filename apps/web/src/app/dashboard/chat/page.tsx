@@ -75,9 +75,7 @@ export default function ChatPage() {
   }, []);
 
   useEffect(() => {
-    const token = localStorage.getItem("oc_token");
-    if (!token) return;
-    const socket = io(`${API}/chat`, { auth: { token }, transports: ["websocket"] });
+    const socket = io(`${API}/chat`, { withCredentials: true, transports: ["websocket"] });
     socket.on("chat:message", add);
     socket.on("chat:typing", (p: { on: boolean }) => setTyping(p.on));
     socket.on("chat:redacted", ({ id }: { id: string }) => setMessages((prev) => prev.map((m) => (m.id === id ? { ...m, text: "••••" } : m))));

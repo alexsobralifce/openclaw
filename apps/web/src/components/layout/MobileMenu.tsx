@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
-import { clearToken } from "@/lib/auth";
+import { endSession } from "@/lib/auth";
 import { useMe } from "@/hooks/useMe";
 import { visibleNav } from "./Sidebar";
 
@@ -28,7 +28,7 @@ export function MobileMenu() {
   }, [open]);
 
   function logout() {
-    clearToken();
+    endSession();
     router.push("/auth/login");
   }
 

@@ -5,6 +5,7 @@ import { RequestMethod, ValidationPipe } from "@nestjs/common";
 import { AppModule } from "./app.module";
 import { configureBodyParsers } from "./body-parsers";
 import { webOrigins } from "./web-origins";
+import { csrfOriginCheck } from "./modules/auth/session-cookie";
 
 function assertProductionConfig() {
   if (process.env.NODE_ENV !== "production") return;
@@ -28,6 +29,8 @@ async function bootstrap() {
   // A API pública tem versionamento e prefixo próprios (/api/public/v1)
   app.setGlobalPrefix("api/v1", { exclude: [{ path: "api/public/v1/(.*)", method: RequestMethod.ALL }] });
   app.useGlobalPipes(new ValidationPipe({ whitelist: true, transform: true }));
+  // Sessão por cookie: pedidos que alteram dados só valem vindos de um site do painel
+  app.use(csrfOriginCheck());
   app.enableCors({
     origin: webOrigins(),
     credentials: true,

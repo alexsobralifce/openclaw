@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { api } from "@/lib/api";
-import { setToken, setUser } from "@/lib/auth";
+import { setUser, startSession } from "@/lib/auth";
 
 /** Destino da volta do "Entrar com Google": troca o ticket da URL pela sessão. */
 export default function GoogleLoginPage() {
@@ -21,7 +21,7 @@ export default function GoogleLoginPage() {
     api.auth
       .googleExchange(ticket)
       .then(({ accessToken, user }) => {
-        setToken(accessToken);
+        startSession();
         setUser(user);
         router.replace("/dashboard");
       })

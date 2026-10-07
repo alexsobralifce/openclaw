@@ -4,7 +4,7 @@ import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { api } from "@/lib/api";
-import { setToken, setUser } from "@/lib/auth";
+import { setUser, startSession } from "@/lib/auth";
 import { Logo } from "@/components/brand/Logo";
 
 export default function RegisterPage() {
@@ -28,7 +28,7 @@ export default function RegisterPage() {
         setPending(res.message || "Cadastro recebido. Aguarde a aprovação do administrador.");
         return;
       }
-      setToken(res.accessToken);
+      startSession();
       setUser(res.user);
       router.push("/dashboard/inbox");
     } catch (err: any) {

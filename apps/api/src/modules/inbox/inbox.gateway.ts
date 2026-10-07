@@ -13,6 +13,7 @@ import { Server, Socket } from "socket.io";
 import { prisma } from "@openclaw/database";
 import type { WsNewMessage, WsConversationUpdated, WsConversationDeleted } from "@openclaw/types";
 import { webOrigins } from "../../web-origins";
+import { socketToken } from "../auth/session-cookie";
 
 @WebSocketGateway({
   cors: { origin: webOrigins(), credentials: true },
@@ -28,7 +29,7 @@ export class InboxGateway implements OnGatewayConnection, OnGatewayDisconnect {
 
   async handleConnection(client: Socket) {
     try {
-      const token = client.handshake.auth?.token as string | undefined;
+      const token = socketToken(client.handshake);
       if (!token) throw new Error("sem token");
       const payload: any = this.jwt.verify(token);
       const user = await prisma.user.findUnique({ where: { id: payload.sub }, select: { status: true } });

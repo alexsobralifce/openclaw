@@ -16,27 +16,40 @@ export interface UserInfo {
   assistantChannel?: string;
 }
 
-export function getToken(): string | null {
-  try { return localStorage.getItem("oc_token"); } catch { return null; }
-}
-
 /** Marca de "Agora não" do aviso de instalação; cada login a apaga para o aviso voltar. */
 export const PWA_DISMISS_KEY = "oc_pwa_dismissed";
 
-export function setToken(token: string) {
+// O token da sessão vive só num cookie HttpOnly gravado pela API: o JavaScript do painel não o enxerga.
+// Aqui fica apenas um sinal "tem sessão" (sem segredo), que o middleware usa para decidir entre painel e login;
+// quem de fato valida a sessão é a API.
+const FLAG = "oc_auth";
+
+/** Restos do esquema antigo, em que o token ficava no localStorage e num cookie legível. */
+function dropLegacyToken() {
+  try {
+    localStorage.removeItem("oc_token");
+    document.cookie = "oc_token=; path=/; max-age=0";
+  } catch {}
+}
+if (typeof window !== "undefined") dropLegacyToken();
+
+/** Chamar depois de um login bem-sucedido (a API já gravou o cookie da sessão). */
+export function startSession() {
   try {
     localStorage.removeItem(PWA_DISMISS_KEY);
-    localStorage.setItem("oc_token", token);
-    document.cookie = `oc_token=${token}; path=/; max-age=${60 * 60 * 24 * 7}; SameSite=Lax`;
+    document.cookie = `${FLAG}=1; path=/; max-age=${60 * 60 * 24 * 7}; SameSite=Lax`;
   } catch {}
 }
 
-export function clearToken() {
+/** Limpa o estado local e manda a API apagar o cookie HttpOnly (só o servidor consegue). */
+export function endSession() {
   try {
-    localStorage.removeItem("oc_token");
     localStorage.removeItem("oc_user");
-    document.cookie = "oc_token=; path=/; max-age=0";
+    document.cookie = `${FLAG}=; path=/; max-age=0`;
   } catch {}
+  dropLegacyToken();
+  const api = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001";
+  return fetch(`${api}/api/v1/auth/logout`, { method: "POST", credentials: "include", keepalive: true }).catch(() => undefined);
 }
 
 export function setUser(user: UserInfo) {
@@ -51,5 +64,5 @@ export function getUser(): UserInfo | null {
 }
 
 export function isAuthenticated(): boolean {
-  return !!getToken();
+  try { return document.cookie.split("; ").some((c) => c === `${FLAG}=1`); } catch { return false; }
 }

@@ -2,6 +2,7 @@ import { jwtSecret } from "../../config/jwt-secret";
 import { ForbiddenException, Injectable, UnauthorizedException } from "@nestjs/common";
 import { PassportStrategy } from "@nestjs/passport";
 import { ExtractJwt, Strategy } from "passport-jwt";
+import { tokenFromCookie } from "./session-cookie";
 import { prisma } from "@openclaw/database";
 
 interface JwtPayload {
@@ -13,7 +14,7 @@ interface JwtPayload {
 export class JwtStrategy extends PassportStrategy(Strategy) {
   constructor() {
     super({
-      jwtFromRequest: ExtractJwt.fromAuthHeaderAsBearerToken(),
+      jwtFromRequest: ExtractJwt.fromExtractors([ExtractJwt.fromAuthHeaderAsBearerToken(), tokenFromCookie]),
       secretOrKey: jwtSecret(),
     });
   }

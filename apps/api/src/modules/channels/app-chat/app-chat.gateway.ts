@@ -1,4 +1,5 @@
 import { OnGatewayConnection, WebSocketGateway, WebSocketServer } from "@nestjs/websockets";
+import { socketToken } from "../../auth/session-cookie";
 import { Logger } from "@nestjs/common";
 import { JwtService } from "@nestjs/jwt";
 import { Server, Socket } from "socket.io";
@@ -20,7 +21,7 @@ export class AppChatGateway implements OnGatewayConnection {
 
   async handleConnection(client: Socket) {
     try {
-      const token = client.handshake.auth?.token as string | undefined;
+      const token = socketToken(client.handshake);
       if (!token) throw new Error("sem token");
       const payload: any = this.jwt.verify(token);
       const user = await prisma.user.findUnique({ where: { id: payload.sub }, select: { status: true } });

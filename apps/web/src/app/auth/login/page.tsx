@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { api } from "@/lib/api";
-import { setToken, setUser } from "@/lib/auth";
+import { setUser, startSession } from "@/lib/auth";
 import { Logo } from "@/components/brand/Logo";
 
 export default function LoginPage() {
@@ -25,7 +25,7 @@ export default function LoginPage() {
     setLoading(true);
     try {
       const { accessToken, user } = await api.auth.login(form.email, form.password);
-      setToken(accessToken);
+      startSession();
       setUser(user);
       router.push("/dashboard");
     } catch (err: any) {

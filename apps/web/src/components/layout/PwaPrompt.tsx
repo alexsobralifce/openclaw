@@ -25,7 +25,7 @@ const detectPlatform = (): Platform => {
 /**
  * A cada login, se o app ainda não está instalado: no Android pede para instalar o app e no iPhone para criar o atalho; também oferece ligar as notificações.
  * O navegador só concede instalação e notificação depois de um toque do usuário, então o aviso traz os botões.
- * "Agora não" vale só até o próximo login (o login apaga a marca, ver `setToken`).
+ * "Agora não" vale só até o próximo login (o login apaga a marca, ver `startSession`).
  */
 export function PwaPrompt() {
   const [installEvt, setInstallEvt] = useState<InstallEvent | null>(null);

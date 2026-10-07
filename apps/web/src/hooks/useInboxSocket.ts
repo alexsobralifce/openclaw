@@ -22,11 +22,8 @@ export function useInboxSocket({ onNewMessage, onConversationUpdated, onConversa
     const user = getUser();
     if (!user?.workspaceId) return;
 
-    const token = localStorage.getItem("oc_token");
-    if (!token) return;
-
     const socket = io(`${API}/inbox`, {
-      auth: { token },
+      withCredentials: true,
       transports: ["websocket"],
     });
     socketRef.current = socket;

@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
-import { clearToken, getUser, UserInfo } from "@/lib/auth";
+import { endSession, getUser, UserInfo } from "@/lib/auth";
 import { LogoMark } from "@/components/brand/Logo";
 import { MobileMenu } from "@/components/layout/MobileMenu";
 
@@ -35,7 +35,7 @@ export function TopBar() {
   }, []);
 
   function logout() {
-    clearToken();
+    endSession();
     router.push("/auth/login");
   }
 
