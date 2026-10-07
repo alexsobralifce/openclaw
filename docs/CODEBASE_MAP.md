@@ -112,7 +112,7 @@ openclaw/
 
 ### auth, users, workspace
 
-- `auth`: registro/login/perfil, JWT de 7 dias (`{sub, email}`), `@Access(service?)`, `@AdminOnly()`, `RateLimitGuard` por IP (contador no Postgres). O primeiro usuário vira ROOT/ACTIVE; os demais entram PENDING até aprovação.
+- `auth`: registro/login/perfil, JWT de 7 dias (`{sub, email}`) entregue em cookie `oc_session` HttpOnly (`session-cookie.ts`; Bearer continua valendo para clientes de API; `POST /auth/logout` apaga; `csrfOriginCheck` exige Origin do painel em escrita com cookie), `@Access(service?)`, `@AdminOnly()`, `RateLimitGuard` por IP (contador no Postgres). O primeiro usuário vira ROOT/ACTIVE; os demais entram PENDING até aprovação.
 - **Login com Google:** `GET /integrations/google/login` (público) → Google (`openid email profile`, mesmo redirect do OAuth das contas, distinguido pelo `state`: `purpose: "google-login"`) → `callback` confere o `id_token` (aud/iss/email_verificado), acha ou cria a conta (`AuthService.registerFromGoogle`: PENDING, sem senha, mesmas regras do cadastro) e entrega um **ticket de uso único de 60 s** (`KvEntry glogin:<ticket>`) em `/auth/google?ticket=` → `POST /auth/google/exchange` devolve a sessão. O token nunca vai na URL.
 - `permissions.ts`: papéis ROOT/ADMIN/USER e serviços `inbox, contacts, channels, assistant, email, calendar, drive, vault, automations, api`. USER padrão: inbox, contacts, channels.
 - `users`: administração (ROOT/ADMIN), aprovação, remoção com limpeza de instâncias Evolution.
@@ -122,7 +122,7 @@ openclaw/
 
 - `inbox.service.ts`: `processIncoming` idempotente por `externalId`+canal, find-or-create de contato e conversa OPEN, emite webhook e evento WS. `inbox.gateway.ts`: namespace `/inbox` (`message:new`, `conversation:updated`, `conversation:deleted`, `join:conversation`).
 - `automations/rules.ts` (puro) valida e avalia regras; `automation-runner.service.ts` executa (nunca lança; cooldown em `state`).
-- `webhooks`: fila `WebhookDelivery` (tick 5 s, backoff 1min/5min/30min/2h/12h), assinatura `X-OpenClaw-Signature: t=..,v1=..`, `url-guard.ts` contra SSRF, `crypto.ts` (AES-256-GCM).
+- `webhooks`: fila `WebhookDelivery` (tick 5 s, backoff 1min/5min/30min/2h/12h), assinatura `X-OpenClaw-Signature: t=..,v1=..`, `url-guard.ts` contra SSRF, `crypto.ts` (AES-256-GCM, chaves por HKDF a partir de `ENCRYPTION_KEY` → `WEBHOOK_SECRET` → `JWT_SECRET`; prefixos `enc2:` tokens, `chat2:` textos por workspace, `sec2:` segredos de webhook; os formatos antigos `enc1:`/`chat1:` e o sem prefixo continuam abrindo; `sealField`/`openField` para colunas do banco).
 
 ### public-api (`/api/public/v1`, fora do prefixo global)
 
@@ -136,7 +136,7 @@ openclaw/
 
 ### integrations/google e state
 
-- `google.service.ts`: contas Google são `Channel` de `type: EMAIL` com refresh token cifrado (`enc1:`); múltiplas contas por workspace; Gmail, Calendar, Drive.
+- `google.service.ts`: contas Google são `Channel` de `type: EMAIL` com refresh token cifrado (`enc2:`); múltiplas contas por workspace; Gmail, Calendar, Drive.
 - **Conta de armazenamento** (`storageAccount` em `notes.ts`): notas e contatos são gravados sempre no Drive da conta `@gmail.com` (a pessoal); sem ela, a primeira conectada. Não há escolha de conta por frase.
 - Contatos: `contactsImport` lê a People API (`contacts.readonly`) de **todas** as contas, junta (sem duplicar) e grava `Assist.IA/Contatos/<letra>.md` só no Drive de armazenamento (um arquivo por letra, reescrito por inteiro; `Outros.md` para iniciais não-letra). Se uma conta falhar na leitura, nada é gravado. Roda sozinho na **primeira** conexão de uma conta (`connect()` → `importContactsOnce`, marcador `contactsSyncedAt` em `Channel.config`) e sob demanda com "atualizar contatos". `contactsLookup` baixa os arquivos do Drive de armazenamento (cache de 5 min) e procura pelo nome.
 - Catálogo de endereços: `emailBookImport` varre até 300 e-mails da caixa de entrada e 300 dos enviados por conta (só cabeçalhos From/To/Cc), `buildBook` guarda quem você escreveu ou quem escreveu 2+ vezes (sem automáticos, sem endereços seus, sem quem já está nos contatos) e grava `Assist.IA/Emails/<letra>.md` no Drive de armazenamento. Roda na primeira conexão (depois dos contatos, independente) e com "atualizar banco de e-mails". `contactsLookup` consulta contatos do Google e catálogo (Google primeiro). Usa o escopo `gmail.modify` que já existia: não pede reconexão.
@@ -246,12 +246,14 @@ Webhook → `InboundEvent` → worker → `InboxService.processIncoming` → `We
 13. Sessão do cofre e contador `waFails` só em memória: reiniciar ou escalar para várias instâncias bloqueia o cofre.
 14. `Vault`/`VaultBlock` não têm FK; excluir usuário deixa dados órfãos (cifrados).
 
-**Riscos de segurança a revisar**
-15. `WorkspaceService.getWorkspace` inclui `User` completo (com `passwordHash`) e `updateWorkspace` repassa `body: any` ao Prisma.
-16. `InboxGateway` não confere `user.status` (usuário desativado conecta até o JWT expirar).
-17. Cookie `oc_token` sem HttpOnly/Secure; JWT em `localStorage`. Middleware não valida o token.
+**Segurança (revisão de 06/10/2026)**
+15. Resolvido: `getWorkspace` não devolve mais `passwordHash` e `updateWorkspace` só aceita o nome.
+16. Resolvido: os dois gateways (`/inbox`, `/chat`) conferem `user.status` ao conectar e aceitam o cookie só vindo de origem do painel (`socketToken`).
+17. Resolvido: a sessão é o cookie HttpOnly `oc_session`; o painel guarda só o sinal `oc_auth=1` (sem segredo, usado pelo middleware) e o `oc_user` no localStorage. Opcionais: `COOKIE_DOMAIN`, `SESSION_SAMESITE=none` (painel e API em sites diferentes). Usuários logados antes da mudança caem no login uma vez.
 18. `assertPublicUrl` tem janela de DNS rebinding (TOCTOU).
-19. Fallback `"change-me-in-production"` para segredos fora de produção.
+19. Resolvido: sem `JWT_SECRET`/segredo de cifra, fora de produção usa-se um segredo aleatório do processo (sessões e dados cifrados não sobrevivem ao reinício em dev); em produção o boot recusa.
+20. Cifrados em repouso (chave do workspace): `AppMessage`, memória de conversa, `Message.body`, `Memory.content`, `ListNote` (título e itens). Em texto puro, de propósito ou por ora: nomes e telefones de `Contact`, `Document` (título, resumo, tags), horário de lembrete, metadados. `EncryptionBackfillService` cifra os registros antigos 60 s depois do boot. Não dá mais para buscar no SQL por esses campos.
+21. Girar a chave: definir `ENCRYPTION_KEY` (novas gravações usam ela; `WEBHOOK_SECRET` segue abrindo o antigo). Não remover o segredo antigo enquanto houver dado cifrado com ele.
 
 **Web**
 20. Duas conexões Socket.IO na tela de conversa; `unread` só em memória; mensagem otimista pode duplicar; `contacts.list` sem `encodeURIComponent`.
