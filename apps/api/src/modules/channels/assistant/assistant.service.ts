@@ -305,9 +305,9 @@ export const TOOLS = [
 // Ações que mudam o mundo exterior: exigem confirmação explícita do dono.
 const SENSITIVE = new Set(["gmail_send", "calendar_create_event", "reply_to_conversation"]);
 // Ferramentas que trazem texto de terceiros (potencial prompt injection).
-const EXTERNAL = new Set(["gmail_search", "gmail_read", "list_conversations", "drive_search", "note_search", "note_list", "contact_search"]);
-// Mudam preferências do dono: não valem depois de ler texto de terceiros no mesmo comando
-const PREFERENCE_TOOLS = new Set(["remember", "email_no_interest", "routine_set", "routine_remove", "set_location", "note_add", "note_create", "note_update"]);
+const EXTERNAL = new Set(["gmail_search", "gmail_read", "list_conversations", "drive_search", "note_search", "note_list", "contact_search", "calendar_list_events"]);
+// Mudam ou apagam dados do dono (preferências, memória, notas, status de conversa): não valem depois de ler texto de terceiros no mesmo comando
+const PREFERENCE_TOOLS = new Set(["remember", "forget", "email_no_interest", "routine_set", "routine_remove", "set_location", "note_add", "note_create", "note_update", "set_conversation_status"]);
 const MAX_PENDING = 3;
 export const MAX_MEDIA_BYTES = 15 * 1024 * 1024;
 const MAX_ROUNDS = 6;
