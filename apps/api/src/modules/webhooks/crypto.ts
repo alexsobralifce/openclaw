@@ -1,62 +1,112 @@
-import { createCipheriv, createDecipheriv, createHash, randomBytes } from "crypto";
+import { createCipheriv, createDecipheriv, createHash, hkdfSync, randomBytes } from "crypto";
 
-const key = () => createHash("sha256").update(process.env.WEBHOOK_SECRET || process.env.JWT_SECRET || "change-me-in-production").digest();
+// ─── Chaves ───────────────────────────────────────────────────────────────────
+// Todas as chaves de cifra saem de um segredo-mestre via HKDF-SHA256, uma por finalidade (e por escopo, no chat).
+// Segredo-mestre: ENCRYPTION_KEY (preferido) → WEBHOOK_SECRET → JWT_SECRET. Para girar a chave, defina ENCRYPTION_KEY:
+// o que foi cifrado com o segredo anterior continua abrindo (a leitura tenta todos os candidatos) e novas gravações usam a nova.
+// Fora de produção, sem nenhum segredo, usa-se um segredo aleatório só deste processo (nunca um valor fixo conhecido).
 
-/** Cifra um segredo para guardar no banco (AES-256-GCM). */
-export function encryptSecret(plain: string): string {
+let ephemeral: string | null = null;
+
+/** Segredos candidatos, do mais novo para o mais antigo; o primeiro é o que cifra. */
+export function masterSecrets(): string[] {
+  const list = [process.env.ENCRYPTION_KEY, process.env.WEBHOOK_SECRET, process.env.JWT_SECRET].filter((s): s is string => !!s);
+  const unique = [...new Set(list)];
+  if (unique.length) return unique;
+  if (process.env.NODE_ENV === "production") throw new Error("Nenhum segredo de cifra configurado (ENCRYPTION_KEY ou WEBHOOK_SECRET)");
+  return [(ephemeral ??= randomBytes(32).toString("hex"))];
+}
+
+const SALT = Buffer.from("magobox-crypto-v2");
+
+function derive(master: string, info: string): Buffer {
+  return Buffer.from(hkdfSync("sha256", master, SALT, info, 32));
+}
+
+// Derivação antiga (sha256 direto do segredo), mantida só para ler o que foi gravado antes do HKDF.
+const legacySecret = () => process.env.WEBHOOK_SECRET || process.env.JWT_SECRET || "change-me-in-production";
+const legacyKey = (prefix: string) => createHash("sha256").update(`${prefix}${legacySecret()}`).digest();
+
+// ─── Núcleo AES-256-GCM ─────────────────────────────────────────────────────────
+
+function seal(plain: string, key: Buffer): string {
   const iv = randomBytes(12);
-  const c = createCipheriv("aes-256-gcm", key(), iv);
+  const c = createCipheriv("aes-256-gcm", key, iv);
   const ct = Buffer.concat([c.update(plain, "utf8"), c.final()]);
   return [iv, c.getAuthTag(), ct].map((b) => b.toString("base64")).join(".");
 }
 
-const TOKEN_PREFIX = "enc1:";
-const tokenKey = () => createHash("sha256").update(`token:${process.env.WEBHOOK_SECRET || process.env.JWT_SECRET || "change-me-in-production"}`).digest();
+function openWith(body: string, key: Buffer): string {
+  const [iv, tag, ct] = body.split(".").map((p) => Buffer.from(p, "base64"));
+  const d = createDecipheriv("aes-256-gcm", key, iv);
+  d.setAuthTag(tag);
+  return Buffer.concat([d.update(ct), d.final()]).toString("utf8");
+}
 
-export const isSealed = (stored: unknown): stored is string => typeof stored === "string" && stored.startsWith(TOKEN_PREFIX);
+/** Abre com cada chave candidata; erro só se nenhuma servir (cifra autenticada: texto adulterado também falha). */
+function openAny(body: string, keys: Buffer[]): string {
+  let last: unknown;
+  for (const k of keys) {
+    try {
+      return openWith(body, k);
+    } catch (e) {
+      last = e;
+    }
+  }
+  throw last ?? new Error("nenhuma chave serve");
+}
+
+const v2Keys = (info: string) => masterSecrets().map((m) => derive(m, info));
+
+// ─── Segredos de webhook ────────────────────────────────────────────────────────
+
+const SECRET_V2 = "sec2:";
+
+/** Cifra um segredo para guardar no banco (AES-256-GCM, chave HKDF própria). */
+export function encryptSecret(plain: string): string {
+  return SECRET_V2 + seal(plain, v2Keys("secret")[0]);
+}
+
+/** Lê um segredo; o formato antigo (sem prefixo) continua abrindo. */
+export function decryptSecret(stored: string): string {
+  if (stored.startsWith(SECRET_V2)) return openAny(stored.slice(SECRET_V2.length), v2Keys("secret"));
+  return openWith(stored, legacyKey(""));
+}
+
+// ─── Tokens de terceiros (Google, Instagram, Spotify) ─────────────────────────────
+
+const TOKEN_V1 = "enc1:";
+const TOKEN_V2 = "enc2:";
+
+export const isSealed = (stored: unknown): stored is string => typeof stored === "string" && (stored.startsWith(TOKEN_V1) || stored.startsWith(TOKEN_V2));
 
 /** Cifra um token de terceiros (ex.: refresh token do Google) para guardar no banco. */
 export function sealToken(plain: string): string {
-  const iv = randomBytes(12);
-  const c = createCipheriv("aes-256-gcm", tokenKey(), iv);
-  const ct = Buffer.concat([c.update(plain, "utf8"), c.final()]);
-  return TOKEN_PREFIX + [iv, c.getAuthTag(), ct].map((b) => b.toString("base64")).join(".");
+  return TOKEN_V2 + seal(plain, v2Keys("token")[0]);
 }
 
-/** Lê o token guardado; valores antigos, sem cifra, continuam funcionando até serem migrados. */
+/** Lê o token guardado; valores antigos (enc1: ou sem cifra) continuam funcionando até serem migrados. */
 export function openToken(stored: string): string {
-  if (!isSealed(stored)) return stored;
-  const [iv, tag, ct] = stored.slice(TOKEN_PREFIX.length).split(".").map((p) => Buffer.from(p, "base64"));
-  const d = createDecipheriv("aes-256-gcm", tokenKey(), iv);
-  d.setAuthTag(tag);
-  return Buffer.concat([d.update(ct), d.final()]).toString("utf8");
+  if (stored.startsWith(TOKEN_V2)) return openAny(stored.slice(TOKEN_V2.length), v2Keys("token"));
+  if (stored.startsWith(TOKEN_V1)) return openWith(stored.slice(TOKEN_V1.length), legacyKey("token:"));
+  return stored;
 }
 
-export function decryptSecret(stored: string): string {
-  const [iv, tag, ct] = stored.split(".").map((p) => Buffer.from(p, "base64"));
-  const d = createDecipheriv("aes-256-gcm", key(), iv);
-  d.setAuthTag(tag);
-  return Buffer.concat([d.update(ct), d.final()]).toString("utf8");
-}
+// ─── Textos guardados com chave própria de cada workspace (chat do app, memória da conversa) ───
 
-// ─── Mensagens do chat do app: cifra em repouso com chave própria de cada workspace ───
+const CHAT_V1 = "chat1:";
+const CHAT_V2 = "chat2:";
 
-const CHAT_PREFIX = "chat1:";
-const chatKey = (scope: string) => createHash("sha256").update(`chat:${scope}:${process.env.WEBHOOK_SECRET || process.env.JWT_SECRET || "change-me-in-production"}`).digest();
+const chatInfo = (scope: string) => `chat:${scope}`;
 
-/** Cifra um texto do chat (AES-256-GCM) com a chave do escopo, normalmente o id do workspace. */
+/** Cifra um texto (AES-256-GCM) com a chave do escopo, normalmente o id do workspace. */
 export function sealText(plain: string, scope: string): string {
-  const iv = randomBytes(12);
-  const c = createCipheriv("aes-256-gcm", chatKey(scope), iv);
-  const ct = Buffer.concat([c.update(plain, "utf8"), c.final()]);
-  return CHAT_PREFIX + [iv, c.getAuthTag(), ct].map((b) => b.toString("base64")).join(".");
+  return CHAT_V2 + seal(plain, v2Keys(chatInfo(scope))[0]);
 }
 
 /** Lê um texto cifrado por `sealText`. Com chave errada ou texto adulterado, lança erro (a cifra é autenticada). */
 export function openText(stored: string, scope: string): string {
-  if (!stored.startsWith(CHAT_PREFIX)) throw new Error("texto não cifrado por esta chave");
-  const [iv, tag, ct] = stored.slice(CHAT_PREFIX.length).split(".").map((p) => Buffer.from(p, "base64"));
-  const d = createDecipheriv("aes-256-gcm", chatKey(scope), iv);
-  d.setAuthTag(tag);
-  return Buffer.concat([d.update(ct), d.final()]).toString("utf8");
+  if (stored.startsWith(CHAT_V2)) return openAny(stored.slice(CHAT_V2.length), v2Keys(chatInfo(scope)));
+  if (stored.startsWith(CHAT_V1)) return openWith(stored.slice(CHAT_V1.length), legacyKey(`chat:${scope}:`));
+  throw new Error("texto não cifrado por esta chave");
 }

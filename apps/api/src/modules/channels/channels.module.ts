@@ -1,5 +1,6 @@
 import { Module } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
+import { jwtSecret } from "../../config/jwt-secret";
 import { JwtModule } from "@nestjs/jwt";
 import { ChannelsController } from "./channels.controller";
 import { ChannelsService } from "./channels.service";
@@ -37,7 +38,7 @@ import { InstagramWorker } from "./workers/instagram.worker";
     InboxModule, GoogleModule, VaultModule, EvolutionModule, AutomationsModule,
     // Assina o `state` do OAuth do Instagram (mesmo esquema do Google)
     JwtModule.registerAsync({
-      useFactory: (config: ConfigService) => ({ secret: config.get("JWT_SECRET") || "change-me-in-production" }),
+      useFactory: (config: ConfigService) => ({ secret: jwtSecret(config.get("JWT_SECRET")) }),
       inject: [ConfigService],
     }),
   ],

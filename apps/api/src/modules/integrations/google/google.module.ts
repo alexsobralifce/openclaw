@@ -1,5 +1,6 @@
 import { Module } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
+import { jwtSecret } from "../../../config/jwt-secret";
 import { JwtModule } from "@nestjs/jwt";
 import { PassportModule } from "@nestjs/passport";
 import { AuthModule } from "../../auth/auth.module";
@@ -11,7 +12,7 @@ import { GoogleService } from "./google.service";
     AuthModule,
     PassportModule,
     JwtModule.registerAsync({
-      useFactory: (config: ConfigService) => ({ secret: config.get("JWT_SECRET") || "change-me-in-production" }),
+      useFactory: (config: ConfigService) => ({ secret: jwtSecret(config.get("JWT_SECRET")) }),
       inject: [ConfigService],
     }),
   ],
