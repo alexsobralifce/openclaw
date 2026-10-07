@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { openNoteRow as plain } from "../src/modules/channels/assistant/list-notes-store";
 
 const rows: any[] = [];
 let seq = 0;
@@ -75,7 +76,8 @@ describe("notas em lista: criar e listar", () => {
     expect(out).toContain("☐ 3. ovos");
     expect(out).toContain("Sem lembrete");
     expect(screen()).toBe("notes_view");
-    expect(rows[0]).toMatchObject({ workspaceId: "w1", title: "Compras", items: [{ text: "leite", done: false }, { text: "pão", done: false }, { text: "ovos", done: false }] });
+    expect(rows[0].workspaceId).toBe("w1");
+    expect(plain(rows[0])).toMatchObject({ title: "Compras", items: [{ text: "leite", done: false }, { text: "pão", done: false }, { text: "ovos", done: false }] });
   });
 
   it("passo a passo: Nova nota pede o título, depois os itens", async () => {
@@ -140,9 +142,9 @@ describe("notas em lista: itens", () => {
     const done = await say("feito 2");
     expect(done).toContain("☑ 2. ~pão~");
     expect(done).toContain("1/3 feitos");
-    expect(rows[0].items[1].done).toBe(true);
+    expect(plain(rows[0]).items[1].done).toBe(true);
     expect(await say("marcar 2 e 3")).toContain("☑ 3. ~ovos~");
-    expect(rows[0].items.map((i: any) => i.done)).toEqual([false, false, true]);
+    expect(plain(rows[0]).items.map((i: any) => i.done)).toEqual([false, false, true]);
     expect(await say("feito 9")).toContain("Não achei esse item");
   });
 
@@ -153,28 +155,28 @@ describe("notas em lista: itens", () => {
     expect(screen()).toBe("notes_edit");
     await say("1");
     expect(await say("café, açúcar")).toContain("2 itens adicionados");
-    expect(rows[0].items.map((i: any) => i.text)).toEqual(["leite", "pão", "ovos", "café", "açúcar"]);
+    expect(plain(rows[0]).items.map((i: any) => i.text)).toEqual(["leite", "pão", "ovos", "café", "açúcar"]);
 
     await say("1");
     await say("2"); // mudar um item
     expect(await say("2")).toContain("Item 2");
     expect(await say("pão integral")).toContain("Item atualizado");
-    expect(rows[0].items[1].text).toBe("pão integral");
+    expect(plain(rows[0]).items[1].text).toBe("pão integral");
 
     await say("1");
     await say("3"); // tirar itens
     expect(await say("1, 5")).toContain("2 itens tirados");
-    expect(rows[0].items.map((i: any) => i.text)).toEqual(["pão integral", "ovos", "café"]);
+    expect(plain(rows[0]).items.map((i: any) => i.text)).toEqual(["pão integral", "ovos", "café"]);
 
     await say("1");
     await say("4"); // marcar
     await say("1");
-    expect(rows[0].items[0].done).toBe(true);
+    expect(plain(rows[0]).items[0].done).toBe(true);
 
     await say("1");
     await say("5"); // título
     expect(await say("Mercado")).toContain("Título mudado");
-    expect(rows[0].title).toBe("Mercado");
+    expect(plain(rows[0]).title).toBe("Mercado");
   });
 
   it("0 volta uma etapa sem mudar nada; número inválido pede de novo", async () => {
@@ -187,7 +189,7 @@ describe("notas em lista: itens", () => {
     expect(screen()).toBe("notes_edit");
     expect(await say("0")).toContain("Compras");
     expect(screen()).toBe("notes_view");
-    expect(rows[0].items).toHaveLength(3);
+    expect(plain(rows[0]).items).toHaveLength(3);
   });
 
   it("nota sem itens avisa em vez de abrir mudar, tirar ou marcar", async () => {
@@ -287,5 +289,23 @@ describe("agendador: manda o lembrete na hora marcada", () => {
     const { updateNote } = await import("../src/modules/channels/assistant/list-notes-store");
     await updateNote("w1", "y", { remindAt: new Date(Date.now() + 60_000) });
     expect(rows[0].remindedAt).toBeNull();
+  });
+});
+
+describe("notas em lista: cifra em repouso", () => {
+  it("título e itens não ficam em texto puro no banco, mas o horário do lembrete fica aberto", async () => {
+    const { createNote, getNote } = await import("../src/modules/channels/assistant/list-notes-store");
+    rows.length = 0;
+    const when = new Date(Date.now() + 3600_000);
+    const n = await createNote("w1", "Senha do cofre da vó", [{ text: "segredo-xyz", done: false }]);
+    expect(JSON.stringify(rows[0])).not.toMatch(/Senha do cofre|segredo-xyz/);
+    expect(typeof rows[0].items).toBe("string");
+    expect(n.title).toBe("Senha do cofre da vó");
+    expect((await getNote("w1", n.id))!.items).toEqual([{ text: "segredo-xyz", done: false }]);
+    expect(when.getTime()).toBeGreaterThan(Date.now());
+  });
+
+  it("nota antiga em texto puro (itens como lista) continua legível", () => {
+    expect(plain({ id: "x", workspaceId: "w1", title: "Antiga", items: [{ text: "a", done: true }], createdAt: new Date(), updatedAt: new Date() })).toMatchObject({ title: "Antiga", items: [{ text: "a", done: true }] });
   });
 });

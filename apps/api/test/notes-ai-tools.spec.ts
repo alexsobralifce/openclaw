@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { openNoteRow as plain } from "../src/modules/channels/assistant/list-notes-store";
 
 const rows: any[] = [];
 let seq = 0;
@@ -74,7 +75,8 @@ describe("IA livre: notas em lista e lembretes", () => {
     const r = result(sent, "note_create");
     expect(r).toMatchObject({ ok: true, titulo: "Compras", itens: 2 });
     expect(r.lembrete).toMatch(/às \d{2}:\d{2}/);
-    expect(rows[0]).toMatchObject({ workspaceId: "w1", title: "Compras", items: [{ text: "leite", done: false }, { text: "pão", done: false }] });
+    expect(rows[0].workspaceId).toBe("w1");
+    expect(plain(rows[0])).toMatchObject({ title: "Compras", items: [{ text: "leite", done: false }, { text: "pão", done: false }] });
     expect(rows[0].remindAt).toBeInstanceOf(Date);
     expect(rows[0].remindAt.getTime()).toBeGreaterThan(Date.now() + 100 * 60_000);
   });
@@ -114,8 +116,8 @@ describe("IA livre: notas em lista e lembretes", () => {
     const sent = await run([tool("note_update", { id: "a", toggle_items: [1], remove_items: [3], add_items: ["café"], title: "mercado", remind_at: "daqui a 1 hora" })]);
     const r = result(sent, "note_update");
     expect(r.ok).toBe(true);
-    expect(rows[0].title).toBe("Mercado");
-    expect(rows[0].items).toEqual([{ text: "leite", done: true }, { text: "pão", done: false }, { text: "café", done: false }]);
+    expect(plain(rows[0]).title).toBe("Mercado");
+    expect(plain(rows[0]).items).toEqual([{ text: "leite", done: true }, { text: "pão", done: false }, { text: "café", done: false }]);
     expect(rows[0].remindAt).toBeInstanceOf(Date);
     await run([tool("note_update", { id: "a", remind_at: "remover" })]);
     expect(rows[0].remindAt).toBeNull();
@@ -125,7 +127,7 @@ describe("IA livre: notas em lista e lembretes", () => {
     rows.push({ id: "z", workspaceId: "w2", title: "Alheia", items: [], remindAt: null, remindedAt: null });
     const sent = await run([tool("note_update", { id: "z", title: "Invadida" })]);
     expect(result(sent, "note_update").error).toMatch(/não encontrada/);
-    expect(rows[0].title).toBe("Alheia");
+    expect(plain(rows[0]).title).toBe("Alheia");
   });
 
   it("depois de ler notas no mesmo comando, a IA não cria nem muda nota (prompt injection)", async () => {

@@ -110,3 +110,26 @@ export function openText(stored: string, scope: string): string {
   if (stored.startsWith(CHAT_V1)) return openWith(stored.slice(CHAT_V1.length), legacyKey(`chat:${scope}:`));
   throw new Error("texto não cifrado por esta chave");
 }
+
+// ─── Campos do banco (mensagens, memórias, notas) ───────────────────────────────────
+
+const isSealedText = (s: string) => s.startsWith(CHAT_V1) || s.startsWith(CHAT_V2);
+
+/** Cifra um campo de texto do banco com a chave do workspace. */
+export const sealField = (plain: string, workspaceId: string) => sealText(plain, workspaceId);
+
+/**
+ * Lê um campo do banco. Valor gravado antes da cifra (texto puro) volta como está, e os registros antigos vão sendo cifrados
+ * pelo `EncryptionBackfillService`. Se a leitura falhar (chave trocada sem manter a antiga), devolve o texto guardado.
+ */
+export function openField(stored: string, workspaceId: string): string {
+  if (!isSealedText(stored)) return stored;
+  try {
+    return openText(stored, workspaceId);
+  } catch {
+    return stored;
+  }
+}
+
+/** Campo já está cifrado? (para o backfill não cifrar duas vezes) */
+export const isSealedField = isSealedText;

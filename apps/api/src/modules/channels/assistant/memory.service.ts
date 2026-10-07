@@ -1,5 +1,6 @@
 import { Injectable } from "@nestjs/common";
 import { prisma } from "@openclaw/database";
+import { openField, sealField } from "../../webhooks/crypto";
 import { encodeRoutine, MAX_ROUTINE, parseRoutine, RoutineItem, topicKey, when } from "./routine";
 
 const MAX_PER_WORKSPACE = 100;
@@ -7,14 +8,16 @@ const MAX_PER_WORKSPACE = 100;
 @Injectable()
 export class MemoryService {
   /** Memórias comuns (a rotina tem lista própria). */
-  list(workspaceId: string, take = 40) {
-    return prisma.memory.findMany({ where: { workspaceId, kind: { not: "routine" } }, orderBy: { createdAt: "desc" }, take });
+  async list(workspaceId: string, take = 40) {
+    const rows = await prisma.memory.findMany({ where: { workspaceId, kind: { not: "routine" } }, orderBy: { createdAt: "desc" }, take });
+    return rows.map((r) => ({ ...r, content: openField(r.content, workspaceId) }));
   }
 
   async add(workspaceId: string, content: string, kind = "fact") {
     const text = content.trim().slice(0, 300);
     if (!text) throw new Error("memória vazia");
-    const dup = await prisma.memory.findFirst({ where: { workspaceId, content: text } });
+    // O texto é cifrado com IV aleatório, então a duplicata se acha comparando o conteúdo já decifrado
+    const dup = (await this.list(workspaceId, MAX_PER_WORKSPACE)).find((m) => m.content === text);
     if (dup) return dup;
     // O teto vale só para memórias comuns: a rotina tem o próprio limite e nunca é descartada por aqui
     const common = { workspaceId, kind: { not: "routine" } };
@@ -23,7 +26,8 @@ export class MemoryService {
       const oldest = await prisma.memory.findFirst({ where: common, orderBy: { createdAt: "asc" } });
       if (oldest) await prisma.memory.delete({ where: { id: oldest.id } });
     }
-    return prisma.memory.create({ data: { workspaceId, content: text, kind } });
+    const created = await prisma.memory.create({ data: { workspaceId, content: sealField(text, workspaceId), kind } });
+    return { ...created, content: text };
   }
 
   async remove(workspaceId: string, id: string) {
@@ -35,7 +39,7 @@ export class MemoryService {
   async listRoutine(workspaceId: string): Promise<(RoutineItem & { id: string })[]> {
     const rows = await prisma.memory.findMany({ where: { workspaceId, kind: "routine" }, orderBy: { createdAt: "asc" }, take: MAX_ROUTINE });
     return rows.flatMap((r) => {
-      const item = parseRoutine(r.content);
+      const item = parseRoutine(openField(r.content, workspaceId));
       return item ? [{ ...item, id: r.id }] : [];
     });
   }
@@ -45,11 +49,11 @@ export class MemoryService {
     const current = await this.listRoutine(workspaceId);
     const same = current.find((r) => topicKey(r.topic) === topicKey(item.topic));
     if (same) {
-      await prisma.memory.updateMany({ where: { id: same.id, workspaceId }, data: { content: encodeRoutine(item) } });
+      await prisma.memory.updateMany({ where: { id: same.id, workspaceId }, data: { content: sealField(encodeRoutine(item), workspaceId) } });
       return { updated: true };
     }
     if (current.length >= MAX_ROUTINE) throw new Error(`a rotina já tem ${MAX_ROUTINE} itens; remova algum antes`);
-    await prisma.memory.create({ data: { workspaceId, kind: "routine", content: encodeRoutine(item) } });
+    await prisma.memory.create({ data: { workspaceId, kind: "routine", content: sealField(encodeRoutine(item), workspaceId) } });
     return { updated: false };
   }
 

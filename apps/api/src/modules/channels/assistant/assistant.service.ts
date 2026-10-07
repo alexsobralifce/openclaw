@@ -29,6 +29,7 @@ import { addSent, CLEAN_GIVE_UP_MS, IDLE_MENU_MS, idleKey, SENT_TTL_MS, sentKey,
 import { EvolutionError, EvolutionService } from "../evolution/evolution.service";
 import { loadLocation, validCoords } from "./location";
 import { sanitizeRoutine, when as routineWhen } from "./routine";
+import { openField, sealField } from "../../webhooks/crypto";
 import { addMute, loadMute, removeMute, saveMute, senderAddress } from "./email-mute";
 
 const TZ = process.env.ASSISTANT_TZ || "America/Fortaleza";
@@ -961,7 +962,7 @@ export class AssistantService {
         contato: c.contact.name,
         telefone: c.contact.phone,
         status: c.status,
-        ultimaMensagem: c.messages[0]?.body,
+        ultimaMensagem: c.messages[0] ? openField(c.messages[0].body, workspaceId) : undefined,
       }));
     }
 
@@ -983,7 +984,7 @@ export class AssistantService {
       await prisma.message.create({
         data: {
           conversationId: conv.id,
-          body: args.text,
+          body: sealField(String(args.text), workspaceId),
           direction: "OUTBOUND",
           type: "TEXT",
           externalId: res?.key?.id,

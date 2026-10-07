@@ -2,6 +2,7 @@ import { Injectable } from "@nestjs/common";
 import { prisma } from "@openclaw/database";
 import { InboxGateway } from "./inbox.gateway";
 import { WebhooksService } from "../webhooks/webhooks.service";
+import { openField, sealField } from "../webhooks/crypto";
 import type { IncomingMessage } from "@openclaw/types";
 
 @Injectable()
@@ -12,7 +13,7 @@ export class InboxService {
   ) {}
 
   async listConversations(workspaceId: string, status?: string) {
-    return prisma.conversation.findMany({
+    const rows = await prisma.conversation.findMany({
       where: {
         workspaceId,
         ...(status ? { status: status as any } : {}),
@@ -25,10 +26,11 @@ export class InboxService {
       },
       orderBy: { updatedAt: "desc" },
     });
+    return rows.map((c) => ({ ...c, messages: openBodies(c.messages, workspaceId) }));
   }
 
   async getConversation(workspaceId: string, id: string) {
-    return prisma.conversation.findFirstOrThrow({
+    const c = await prisma.conversation.findFirstOrThrow({
       where: { id, workspaceId },
       include: {
         contact: true,
@@ -37,6 +39,7 @@ export class InboxService {
         messages: { orderBy: { createdAt: "asc" } },
       },
     });
+    return { ...c, messages: openBodies(c.messages, workspaceId) };
   }
 
   async updateStatus(workspaceId: string, id: string, status: string) {
@@ -113,16 +116,17 @@ export class InboxService {
       this.webhooks.emit(msg.workspaceId, "conversation.created", { conversation });
     }
 
-    const message = await prisma.message.create({
+    const stored = await prisma.message.create({
       data: {
         conversationId: conversation.id,
-        body: msg.body,
+        body: sealField(msg.body, msg.workspaceId),
         type: msg.type,
         direction: "INBOUND",
         externalId: msg.externalId,
         ...(msg.metadata && Object.keys(msg.metadata).length ? { metadata: msg.metadata as any } : {}),
       },
     });
+    const message = { ...stored, body: msg.body };
     // Mantém a conversa no topo da lista
     await prisma.conversation.update({ where: { id: conversation.id }, data: { updatedAt: new Date() } });
 
@@ -149,9 +153,10 @@ export class InboxService {
 
   /** Registra uma mensagem enviada (por pessoa ou automação) e avisa painel e webhooks. */
   async recordOutbound(workspaceId: string, conversationId: string, body: string, externalId?: string, authorId?: string, metadata?: Record<string, unknown>) {
-    const message = await prisma.message.create({
-      data: { conversationId, body, direction: "OUTBOUND", type: "TEXT", externalId, authorId, ...(metadata ? { metadata: metadata as any } : {}) },
+    const stored = await prisma.message.create({
+      data: { conversationId, body: sealField(body, workspaceId), direction: "OUTBOUND", type: "TEXT", externalId, authorId, ...(metadata ? { metadata: metadata as any } : {}) },
     });
+    const message = { ...stored, body };
     await prisma.conversation.update({ where: { id: conversationId }, data: { updatedAt: new Date() } });
     const view = { id: message.id, body: message.body, type: message.type, direction: message.direction, createdAt: message.createdAt };
     this.webhooks.emit(workspaceId, "message.sent", { conversationId, message: view });
@@ -196,3 +201,6 @@ export class InboxService {
     return { contact, created: true };
   }
 }
+
+/** Mensagens guardadas cifradas com a chave do workspace; as antigas (texto puro) passam como estão. */
+export const openBodies = <T extends { body: string }>(rows: T[], workspaceId: string): T[] => rows.map((m) => ({ ...m, body: openField(m.body, workspaceId) }));

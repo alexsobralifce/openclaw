@@ -38,6 +38,7 @@ import { normalize, parseChoice, pickByLabel } from "./voice";
 import { fmtWhen, mergeQueue, QUEUE_TTL_MS, QueuedEmail, removeFromQueue } from "./email-queue";
 import { addMute, loadMute, MutePrefs, recordDismiss, removeMute, saveMute, senderAddress } from "./email-mute";
 import { AgendaEvent, EventsPlan, extractJson, extractUrls, looksLikeAgendaIntent, parseEventsPlan } from "./agenda-events";
+import { openField, sealField } from "../../webhooks/crypto";
 import { classifyEmail, groupOrder, isHidden, looksLikeBatchReply, looksLikeBulkDelete, looksLikeBulkRead, parseBulkSelection, parseBatchPlan, parseBulkDelete } from "./email-filter";
 
 const TZ = process.env.ASSISTANT_TZ || "America/Fortaleza";
@@ -2997,7 +2998,7 @@ _Ou 0 para voltar._`;
     });
     await this.set(ws, "clients", { items: convs.map((c) => ({ id: c.id, name: c.contact.name })) });
     if (!convs.length) return [head("🎉", "Tudo em dia!"), "Nenhuma conversa de cliente em aberto.", DIV, opts(BACK)].join("\n");
-    const cards = convs.map((c, i) => `${key(i + 1)} 👤 *${short(c.contact.name, 28)}* ${c.status === "PENDING" ? "🟡" : "🟢"}\n     💬 ${short(c.messages[0]?.body ?? "", 55)}`);
+    const cards = convs.map((c, i) => `${key(i + 1)} 👤 *${short(c.contact.name, 28)}* ${c.status === "PENDING" ? "🟡" : "🟢"}\n     💬 ${short(openField(c.messages[0]?.body ?? "", ws), 55)}`);
     return [head("💬", "Conversas em aberto", "🟢 aberta · 🟡 pendente"), cards.join("\n\n"), foot("Responda com o número para abrir"), opts(BACK)].join("\n");
   }
 
@@ -3007,9 +3008,10 @@ _Ou 0 para voltar._`;
       include: { contact: true, messages: { orderBy: { createdAt: "desc" }, take: 5 } },
     });
     const msgs = [...c.messages].reverse();
-    const lastInbound = [...c.messages].find((m) => m.direction === "INBOUND")?.body;
+    const lastInboundBody = [...c.messages].find((m) => m.direction === "INBOUND")?.body;
+    const lastInbound = lastInboundBody === undefined ? undefined : openField(lastInboundBody, ws);
     await this.set(ws, "client", { id, name: c.contact.name, lastInbound });
-    const lines = msgs.map((m) => `${m.direction === "INBOUND" ? "👤" : "🧑‍💼"} *${m.direction === "INBOUND" ? short(c.contact.name, 16) : "Você"}:* ${short(m.body, 120)}`);
+    const lines = msgs.map((m) => `${m.direction === "INBOUND" ? "👤" : "🧑‍💼"} *${m.direction === "INBOUND" ? short(c.contact.name, 16) : "Você"}:* ${short(openField(m.body, ws), 120)}`);
     return [
       head("💬", c.contact.name, c.contact.phone ?? undefined),
       lines.join("\n"),
@@ -3026,7 +3028,7 @@ _Ou 0 para voltar._`;
     const cfg = c.channel.config as any;
     const res = await this.evolution.sendText(cfg.instanceName, c.contact.phone!, text);
     await prisma.message.create({
-      data: { conversationId: c.id, body: text, direction: "OUTBOUND", type: "TEXT", externalId: res?.key?.id },
+      data: { conversationId: c.id, body: sealField(text, ws), direction: "OUTBOUND", type: "TEXT", externalId: res?.key?.id },
     });
   }
 

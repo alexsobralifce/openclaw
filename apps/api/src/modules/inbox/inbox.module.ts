@@ -5,6 +5,7 @@ import { JwtModule } from "@nestjs/jwt";
 import { InboxController } from "./inbox.controller";
 import { InboxService } from "./inbox.service";
 import { InboxGateway } from "./inbox.gateway";
+import { EncryptionBackfillService } from "./encryption-backfill.service";
 
 @Module({
   imports: [
@@ -14,7 +15,7 @@ import { InboxGateway } from "./inbox.gateway";
     }),
   ],
   controllers: [InboxController],
-  providers: [InboxService, InboxGateway],
+  providers: [InboxService, InboxGateway, EncryptionBackfillService],
   exports: [InboxService, InboxGateway],
 })
 export class InboxModule {}
