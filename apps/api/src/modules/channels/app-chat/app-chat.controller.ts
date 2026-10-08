@@ -9,8 +9,8 @@ import { AppChatService } from "./app-chat.service";
 import { PushService } from "./push.service";
 
 const MAX_TEXT = 4000;
-/** Ao abrir o app, o menu só é mostrado de novo se a conversa está parada há mais que isso (mesmo prazo da tela guardada do menu). */
-const OPEN_MENU_AFTER_MS = 30 * 60_000;
+/** Ao abrir o app, o menu só é mostrado de novo se a conversa está parada há mais que isso (boas-vindas e menu). */
+const OPEN_MENU_AFTER_MS = 10 * 60_000;
 const FILE_MIMES = /^(image\/(jpeg|png|webp|gif|heic|heif)|application\/pdf)$/;
 
 const bytesOf = (base64: unknown) => (typeof base64 === "string" ? Math.floor(base64.length * 0.75) : 0);

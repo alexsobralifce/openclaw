@@ -42,7 +42,7 @@ export class PushService {
   }
 
   /** Avisa todos os navegadores do usuário. Assinatura vencida (404/410) é apagada; qualquer outra falha só vira aviso no log. */
-  async notify(userId: string, payload: { title: string; body: string; url?: string }) {
+  async notify(userId: string, payload: { title: string; body: string; url?: string; tag?: string }) {
     if (!this.enabled()) return;
     this.init();
     const subs = await prisma.pushSubscription.findMany({ where: { userId } });

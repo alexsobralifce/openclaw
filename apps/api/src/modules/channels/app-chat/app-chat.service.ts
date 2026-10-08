@@ -50,6 +50,12 @@ export class AppChatService {
 
   constructor(private state: StateService, private gateway: AppChatGateway, private push: PushService) {}
 
+  /** Só a notificação (nada no histórico), e só com o app fechado. `tag` faz o aviso novo substituir o anterior. Quem não quer, desliga em Assistente → Notificações. */
+  async pushNotice(userId: string, body: string, tag: string) {
+    if (await this.gateway.online(userId)) return;
+    await this.push.notify(userId, { title: "MagoBox", body, url: "/dashboard/chat", tag }).catch((e) => this.logger.warn(`Push falhou: ${e.message}`));
+  }
+
   private view(m: any, workspaceId: string): ChatView {
     let text: string;
     try {

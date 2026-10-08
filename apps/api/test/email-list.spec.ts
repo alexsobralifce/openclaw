@@ -35,12 +35,12 @@ describe("lista de e-mails organizada", () => {
     expect(out).not.toContain("GANHOU");
     expect(out).toContain("2 ocultos");
 
-    // Pessoas primeiro; a numeração segue a ordem da tela (Maria=1, João=2, GitHub=3)
-    expect(out.indexOf("Maria")).toBeLessThan(out.indexOf("João"));
-    expect(out.indexOf("João")).toBeLessThan(out.indexOf("GitHub"));
+    // Pessoas primeiro, os mais recentes antes; a numeração segue a ordem da tela (João=1, Maria=2, GitHub=3)
+    expect(out.indexOf("João")).toBeLessThan(out.indexOf("Maria"));
+    expect(out.indexOf("Maria")).toBeLessThan(out.indexOf("GitHub"));
     const st = store.get("menu:w1");
-    expect(st.data.items.map((m: any) => m.id)).toEqual(["1", "5", "3"]);
-    expect(st.data.hidden.map((m: any) => m.id)).toEqual(["2", "4"]);
+    expect(st.data.items.map((m: any) => m.id)).toEqual(["5", "1", "3"]);
+    expect(st.data.hidden.map((m: any) => m.id)).toEqual(["4", "2"]);
     console.log("\n" + out);
   });
 

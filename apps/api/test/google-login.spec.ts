@@ -32,13 +32,13 @@ describe("ticket do login com Google", () => {
   it("troca o ticket pela sessão uma única vez", async () => {
     users.push({ id: "u1", status: "ACTIVE", email: "a@a.com", name: "A", role: "USER", services: [], workspaces: [] });
     store.set("glogin:abc", { userId: "u1" });
-    const auth = new AuthService(jwt as any, state as any);
+    const auth = new AuthService(jwt as any, state as any, { send: async () => true } as any);
     expect((await auth.loginWithGoogleTicket("abc")).accessToken).toBe("jwt-fake");
     await expect(auth.loginWithGoogleTicket("abc")).rejects.toThrow("expirado");
   });
 
   it("recusa ticket inexistente e conta que deixou de estar ativa", async () => {
-    const auth = new AuthService(jwt as any, state as any);
+    const auth = new AuthService(jwt as any, state as any, { send: async () => true } as any);
     await expect(auth.loginWithGoogleTicket("nada")).rejects.toThrow();
     users.push({ id: "u2", status: "DISABLED", workspaces: [] });
     store.set("glogin:x", { userId: "u2" });
@@ -51,18 +51,18 @@ describe("conta nova pelo Google", () => {
 
   it("fica pendente e sem senha quando já existe usuário", async () => {
     users.push({ id: "root", status: "ACTIVE", email: "root@a.com" });
-    const u = await new AuthService(jwt as any, state as any).registerFromGoogle("novo@gmail.com", "Maria Silva");
+    const u = await new AuthService(jwt as any, state as any, { send: async () => true } as any).registerFromGoogle("novo@gmail.com", "Maria Silva");
     expect(u).toMatchObject({ status: "PENDING", role: "USER", passwordHash: null, name: "Maria Silva" });
   });
 
   it("não duplica e-mail já cadastrado", async () => {
     users.push({ id: "u", status: "ACTIVE", email: "Maria@gmail.com" });
-    await expect(new AuthService(jwt as any, state as any).registerFromGoogle("maria@gmail.com", "Maria")).rejects.toThrow("já cadastrado");
+    await expect(new AuthService(jwt as any, state as any, { send: async () => true } as any).registerFromGoogle("maria@gmail.com", "Maria")).rejects.toThrow("já cadastrado");
   });
 
   it("usa a parte do e-mail quando o Google não manda o nome", async () => {
     users.push({ id: "root", status: "ACTIVE", email: "root@a.com" });
-    expect((await new AuthService(jwt as any, state as any).registerFromGoogle("joao@gmail.com", "")).name).toBe("joao");
+    expect((await new AuthService(jwt as any, state as any, { send: async () => true } as any).registerFromGoogle("joao@gmail.com", "")).name).toBe("joao");
   });
 });
 

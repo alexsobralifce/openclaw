@@ -57,6 +57,8 @@ model User {
   assistantChannel String?
   telegramChatId   String?
   approvedAt   DateTime?
+  // Quando confirmou o e-mail (Google já vem confirmado). Coluna nova: sem @unique.
+  emailVerifiedAt DateTime?
   createdAt    DateTime     @default(now())
   updatedAt    DateTime     @updatedAt
 

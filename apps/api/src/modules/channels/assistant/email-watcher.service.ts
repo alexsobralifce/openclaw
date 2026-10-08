@@ -7,6 +7,7 @@ import { MenuService } from "./menu.service";
 import { WebhooksService } from "../../webhooks/webhooks.service";
 import { assistantInstance, can, workspaceCommander } from "./commander";
 import { loadMute } from "./email-mute";
+import { channelOfInstance } from "./channel-route";
 import { StateService } from "../../state/state.service";
 
 const INTERVAL_MS = Number(process.env.EMAIL_POLL_SECONDS || 60) * 1000;
@@ -99,8 +100,8 @@ export class EmailWatcherService implements OnModuleInit, OnModuleDestroy {
       updates.push({ id: ch.id, config: { ...cfg, lastSeenMs: newest } });
     }
 
-    // Do mais antigo ao mais novo, entre todas as contas
-    fresh.sort((a, b) => a.at - b.at);
+    // Os mais recentes primeiro, entre todas as contas
+    fresh.sort((a, b) => b.at - a.at);
 
     // Metadados (sem o corpo) para clientes que assinam email.received
     for (const m of fresh) this.webhooks.emit(workspaceId, "email.received", { account: m.account, id: m.id, from: m.de, subject: m.assunto });
@@ -110,8 +111,9 @@ export class EmailWatcherService implements OnModuleInit, OnModuleDestroy {
       const owner = await workspaceCommander(workspaceId);
       const instance = await assistantInstance(workspaceId);
       if (owner && can(owner, "assistant") && can(owner, "email") && instance) {
-        const text = await this.menu.notifyNew(workspaceId, fresh);
-        await this.assistant.sendToUser(owner, instance, text);
+        // No app (web e celular) não há mensagem: o e-mail entra na fila e o menu mostra quantos não lidos há
+        if (channelOfInstance(instance) === "app") await this.assistant.notifyUnread(owner, await this.menu.enqueueNew(workspaceId, fresh));
+        else await this.assistant.sendToUser(owner, instance, await this.menu.notifyNew(workspaceId, fresh));
       } else if (!instance) {
         this.logger.warn(`Novo e-mail no workspace ${workspaceId}, mas não há WhatsApp para avisar.`);
       }

@@ -15,12 +15,13 @@ import { MenuService } from "../src/modules/channels/assistant/menu.service";
 const q = (id: string, at: number, account = "a@x.com") => ({ account, id, de: `Fulano ${id} <f${id}@x.com>`, assunto: `Assunto ${id}`, at });
 
 describe("fila de e-mails (lógica)", () => {
-  it("ordena por chegada, sem repetir, e respeita o teto", () => {
+  it("ordena do mais recente ao mais antigo, sem repetir, e respeita o teto", () => {
     const m = mergeQueue([q("3", 300), q("1", 100)], [q("2", 200), q("3", 300), q("1", 100, "outra@x.com")]);
-    expect(m.map((x) => `${x.account}:${x.id}`)).toEqual(["a@x.com:1", "outra@x.com:1", "a@x.com:2", "a@x.com:3"]);
+    expect(m.map((x) => `${x.account}:${x.id}`)).toEqual(["a@x.com:3", "a@x.com:2", "a@x.com:1", "outra@x.com:1"]);
     const big = mergeQueue([], Array.from({ length: QUEUE_MAX + 5 }, (_, i) => q(String(i), i)));
     expect(big).toHaveLength(QUEUE_MAX);
-    expect(big[0].id).toBe("5"); // os mais antigos saem primeiro
+    expect(big[0].id).toBe(String(QUEUE_MAX + 4)); // o mais recente vem primeiro
+    expect(big.at(-1)!.id).toBe("5"); // os mais antigos saem primeiro
   });
 
   it("remove por id e conta", () => {
@@ -68,34 +69,34 @@ function setup() {
 describe("fluxo: chegam 5 e-mails e o usuário trata um a um", () => {
   beforeEach(() => vi.stubEnv("OPENAI_API_KEY", ""));
 
-  it("lista em ordem de chegada, mesmo que tenham chegado embaralhados", async () => {
+  it("lista os mais recentes primeiro, mesmo que tenham chegado embaralhados", async () => {
     const { menu, say } = setup();
     await menu.notifyNew("ws", [q("3", 300), q("1", 100), q("5", 500), q("2", 200), q("4", 400)]);
     // o aviso é curto; a lista inteira só vem quando o dono pede
     const out = (await say("fila"))!;
     expect(out).toContain("5 e-mails na fila");
-    const pos = ["Assunto 1", "Assunto 2", "Assunto 3", "Assunto 4", "Assunto 5"].map((s) => out.indexOf(s));
+    const pos = ["Assunto 5", "Assunto 4", "Assunto 3", "Assunto 2", "Assunto 1"].map((s) => out.indexOf(s));
     expect([...pos].sort((a, b) => a - b)).toEqual(pos);
     expect(pos.every((p) => p > 0)).toBe(true);
   });
 
-  it("'próximo' abre o mais antigo e, ao apagar, já abre o seguinte", async () => {
+  it("'próximo' abre o mais recente e, ao apagar, já abre o seguinte", async () => {
     const { menu, say, log } = setup();
     await menu.notifyNew("ws", [q("2", 200), q("1", 100), q("3", 300)]);
     const first = (await say("próximo"))!;
-    expect(first).toContain("Assunto 1");
+    expect(first).toContain("Assunto 3");
     expect(first).toContain("2 restantes na fila");
     expect(first).toContain("Próximo");
     const after = (await say("2"))!; // apagar
-    expect(log).toEqual(["trash 1"]);
+    expect(log).toEqual(["trash 3"]);
     expect(after).toContain("Pronto");
     expect(after).toContain("Assunto 2"); // avançou sozinho
     expect(after).toContain("1 restante na fila");
     const last = (await say("apagar"))!;
-    expect(log).toEqual(["trash 1", "trash 2"]);
-    expect(last).toContain("Assunto 3");
+    expect(log).toEqual(["trash 3", "trash 2"]);
+    expect(last).toContain("Assunto 1");
     const done = (await say("spam"))!;
-    expect(log.at(-1)).toBe("spam 3");
+    expect(log.at(-1)).toBe("spam 1");
     expect(done).toContain("Fila vazia");
   });
 
@@ -107,9 +108,9 @@ describe("fluxo: chegam 5 e-mails e o usuário trata um a um", () => {
     const draft = (await say("confirmo presença"))!;
     expect(draft).toContain("Rascunho");
     const sent = (await say("1"))!; // enviar
-    expect(log[0]).toMatch(/^send f1@x.com Re: Assunto 1/);
+    expect(log[0]).toMatch(/^send f2@x.com Re: Assunto 2/);
     expect(sent).toContain("E-mail enviado");
-    expect(sent).toContain("Assunto 2");
+    expect(sent).toContain("Assunto 1");
   });
 
   it("e-mail que chega no meio NÃO troca a tela: os números continuam valendo", async () => {
@@ -145,9 +146,9 @@ describe("fluxo: chegam 5 e-mails e o usuário trata um a um", () => {
   it("pular ('próximo') mantém o e-mail não lido no Gmail, só sai da fila", async () => {
     const { menu, say, log } = setup();
     await menu.notifyNew("ws", [q("1", 100), q("2", 200)]);
-    await say("próximo"); // abre o 1
+    await say("próximo"); // abre o 2 (o mais recente)
     const second = (await say("5"))!; // pular para o próximo
-    expect(second).toContain("Assunto 2");
+    expect(second).toContain("Assunto 1");
     expect(log).toEqual([]); // nada foi apagado nem marcado
   });
 
@@ -171,8 +172,8 @@ describe("fluxo: chegam 5 e-mails e o usuário trata um a um", () => {
     const { say } = { say: (t: string) => menu.respond("ws", t) };
     await menu.notifyNew("ws", [q("2", 200), q("1", 100)]);
     const spoken = toSpeech((await say("fila"))!);
-    expect(spoken).toContain("um, Fulano 1");
-    expect(spoken).toContain("dois, Fulano 2");
+    expect(spoken).toContain("um, Fulano 2");
+    expect(spoken).toContain("dois, Fulano 1");
     expect(spoken).toMatch(/pr[óo]ximo/i);
     expect(spoken.length).toBeLessThanOrEqual(700);
     expect(spoken).not.toMatch(/[*_⏭️📩]/u);
@@ -216,14 +217,14 @@ describe("fluxo: chegam 5 e-mails e o usuário trata um a um", () => {
       store.set("mode:ws", "car"); // modo carro ligado, assistente parado
       const out = await menu.notifyNew("ws", [q("2", 200), q("1", 100)]);
       expect(out).toContain("2 e-mails na fila");
-      expect(out).toContain("Assunto 1");
+      expect(out).toContain("Assunto 2");
     });
 
-    it("a fila continua disponível: 'fila' mostra e 'próximo' abre o mais antigo", async () => {
+    it("a fila continua disponível: 'fila' mostra e 'próximo' abre o mais recente", async () => {
       const { menu, say } = setup();
       await menu.notifyNew("ws", [q("2", 200), q("1", 100)]);
       expect((await say("fila"))!).toContain("2 e-mails na fila");
-      expect((await say("próximo"))!).toContain("Assunto 1");
+      expect((await say("próximo"))!).toContain("Assunto 2");
     });
   });
 });

@@ -58,7 +58,9 @@ export function parseWaRich(text: string): WaSeg[] {
 // ─── Opções numeradas do menu ───────────────────────────────────────
 
 const KEYCAPS = ["0️⃣", "1️⃣", "2️⃣", "3️⃣", "4️⃣", "5️⃣", "6️⃣", "7️⃣", "8️⃣", "9️⃣", "🔟"];
-const OPTION_LINE = /^\s*(0️⃣|1️⃣|2️⃣|3️⃣|4️⃣|5️⃣|6️⃣|7️⃣|8️⃣|9️⃣|🔟)\s+(.+)$/;
+const OPTION_LINE = /^\s*((?:[0-9]\uFE0F\u20E3)+|🔟)\s+(.+)$/u;
+/** "1️⃣1️⃣" → 11 */
+const keycapNumber = (k: string) => (k === "🔟" ? 10 : Number([...k].filter((c) => /[0-9]/.test(c)).join("")));
 const SUB_LINE = /^\s{3,}_(.+)_\s*$/;
 
 export type ChatBlock = { kind: "text"; text: string } | { kind: "option"; n: number; label: string; sub?: string };
@@ -78,7 +80,7 @@ export function splitOptions(text: string): ChatBlock[] {
     const m = OPTION_LINE.exec(line);
     if (m) {
       flush();
-      blocks.push({ kind: "option", n: KEYCAPS.indexOf(m[1]), label: m[2].trim() });
+      blocks.push({ kind: "option", n: keycapNumber(m[1]), label: m[2].trim() });
       continue;
     }
     const sub = SUB_LINE.exec(line);

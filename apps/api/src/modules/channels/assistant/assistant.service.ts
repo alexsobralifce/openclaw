@@ -678,8 +678,14 @@ export class AssistantService {
     return { redact };
   }
 
+  /** E-mail novo no app: só uma notificação com o total de não lidos (sem mensagem no chat). */
+  async notifyUnread(c: Commander, total: number): Promise<void> {
+    await this.appChat?.pushNotice(c.userId, `📧 ${total} e-mail${total > 1 ? "s" : ""} não lido${total > 1 ? "s" : ""}`, "email");
+  }
+
   /** O usuário abriu o app: mostra o menu principal (com a dica de conectar canais, se faltar), sem mensagem dele no histórico. */
   async openMenu(c: Commander, instanceName: string): Promise<void> {
+    await this.sendToUser(c, instanceName, await this.menu.welcome(c.workspaceId));
     const answer = await this.menu.respond(c.workspaceId, "menu");
     if (answer) await this.sendToUser(c, instanceName, answer);
     await this.scheduleIdle(c, instanceName);

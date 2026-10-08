@@ -191,6 +191,9 @@ export const api = {
     unlink: () => request<{ linked: boolean }>("/channels/telegram/link", { method: "DELETE" }),
   },
   auth: {
+    forgot: (email: string) => request<{ ok: boolean }>("/auth/forgot", { method: "POST", body: JSON.stringify({ email }) }),
+    reset: (token: string, password: string) => request<{ ok: boolean }>("/auth/reset", { method: "POST", body: JSON.stringify({ token, password }) }),
+    verifyEmail: (token: string) => request<{ ok: boolean }>("/auth/verify-email", { method: "POST", body: JSON.stringify({ token }) }),
     login: (email: string, password: string) =>
       request<{ accessToken: string; user: any }>("/auth/login", {
         method: "POST",

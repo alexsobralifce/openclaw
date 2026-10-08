@@ -14,7 +14,7 @@ export interface QueuedEmail {
 export const QUEUE_MAX = 50;
 export const QUEUE_TTL_MS = 48 * 3600_000;
 
-/** Junta os novos e-mails à fila: sem repetir (conta + id), do mais antigo para o mais novo, com teto de tamanho. */
+/** Junta os novos e-mails à fila: sem repetir (conta + id), do mais recente para o mais antigo, com teto de tamanho. */
 export function mergeQueue(current: QueuedEmail[], incoming: QueuedEmail[]): QueuedEmail[] {
   const seen = new Set<string>();
   const out: QueuedEmail[] = [];
@@ -24,9 +24,9 @@ export function mergeQueue(current: QueuedEmail[], incoming: QueuedEmail[]): Que
     seen.add(k);
     out.push(m);
   }
-  out.sort((a, b) => a.at - b.at || a.id.localeCompare(b.id));
+  out.sort((a, b) => b.at - a.at || a.id.localeCompare(b.id));
   // Se estourar o teto, descarta os mais antigos (continuam não lidos no Gmail)
-  return out.length > QUEUE_MAX ? out.slice(out.length - QUEUE_MAX) : out;
+  return out.length > QUEUE_MAX ? out.slice(0, QUEUE_MAX) : out;
 }
 
 export function removeFromQueue(queue: QueuedEmail[], id: string, account?: string): QueuedEmail[] {

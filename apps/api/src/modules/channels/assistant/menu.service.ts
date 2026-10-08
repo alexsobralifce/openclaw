@@ -87,7 +87,8 @@ const ALIASES: Record<string, Record<string, number>> = {
 
 const DIV = "━━━━━━━━━━━━━━━━━━";
 const KEYS = ["0️⃣", "1️⃣", "2️⃣", "3️⃣", "4️⃣", "5️⃣", "6️⃣", "7️⃣", "8️⃣", "9️⃣", "🔟"];
-const key = (n: number) => KEYS[n] ?? `${n}.`;
+// 11 em diante vira dígitos em emoji ("1️⃣1️⃣"): assim o app e o WhatsApp também mostram a opção como cartão
+const key = (n: number) => KEYS[n] && n <= 10 ? KEYS[n] : [...String(n)].map((d) => KEYS[Number(d)]).join("");
 const head = (icon: string, title: string, sub?: string) => `${icon} *${title}*${sub ? `\n_${sub}_` : ""}\n${DIV}`;
 const opts = (...items: [number, string, string][]) => items.map(([n, icon, label]) => `${key(n)} ${icon} ${label}`).join("\n");
 const foot = (hint: string) => `${DIV}\n💡 _${hint}_`;
@@ -955,6 +956,21 @@ _Ou 0 para voltar._`;
     return `${head("🔌", "Google não conectado")}\nConecte em *Canais → Conectar Google* no painel.`;
   }
 
+  /** "3 não lidos" para o menu (só e-mails que a lista mostraria: sem spam, promoção nem "sem interesse"). Falhou? O menu sai sem o número. */
+  private async unreadCount(ws: string, accounts: string[]): Promise<string> {
+    try {
+      const mute = await loadMute(this.state, ws);
+      const lists = await Promise.all(accounts.map((a) => this.google.gmailSearch(ws, "is:unread in:inbox", a, 30)));
+      const total = lists.flat().filter((m: any) => classifyEmail(m, mute).kind !== "muted" && !isHidden(classifyEmail(m, mute).kind)).length;
+      const capped = lists.some((l: any[]) => l.length >= 30);
+      if (!total) return "nenhum não lido";
+      return `${total}${capped ? "+" : ""} não ${total === 1 && !capped ? "lido" : "lidos"}`;
+    } catch (e: any) {
+      this.logger.warn(`Contagem de não lidos indisponível: ${e.message}`);
+      return "";
+    }
+  }
+
   private async mainOptions(ws: string) {
     const services = await this.services(ws);
     const accounts = await this.google.listAccounts(ws);
@@ -962,7 +978,8 @@ _Ou 0 para voltar._`;
     const labels: { id: string; icon: string; label: string; sub?: string }[] = [];
     if (accounts.length && services.includes("email")) {
       options.push(accounts.length === 1 ? { type: "emails", account: accounts[0] } : { type: "emails_pick" });
-      labels.push({ id: "email", icon: "📧", label: "E-mails", sub: accounts.map(accountLabel).join(" · ") });
+      const unread = await this.unreadCount(ws, accounts);
+      labels.push({ id: "email", icon: "📧", label: "E-mails", sub: [unread, ...accounts.map(accountLabel)].filter(Boolean).join(" · ") });
     }
     if (accounts.length && services.includes("calendar")) {
       options.push({ type: "agenda" });
@@ -1106,7 +1123,7 @@ _Ou 0 para voltar._`;
     await this.set(ws, "emails", { account: undefined, items: shown, q: true });
     const extra = q.length > shown.length ? `\n➕ _${q.length - shown.length} mais na fila_` : "";
     return [
-      head("📩", `${q.length} e-mails na fila`, "do mais antigo ao mais novo"),
+      head("📩", `${q.length} e-mails na fila`, "mais recentes primeiro"),
       this.emailGroups(shown, multi) + extra,
       // linha comum (não 💡): no modo carro a leitura por voz descarta as dicas
       "⏭️ Diga *próximo* para ir um a um, ou o número.",
@@ -1190,6 +1207,22 @@ _Ou 0 para voltar._`;
     const items = labels.map((l, i) => `${key(i + 1)} ${l.icon} ${l.label}${l.sub ? `\n     _${l.sub}_` : ""}`);
     // Linha em branco entre os itens: no WhatsApp cada opção vira um "cartão", como no app (o app ignora as linhas vazias)
     return [head(greet ? icon : "🏠", title, "O que vamos ver agora?"), ...(await this.contextLines(ws, greet)), ...(greet ? await this.connectHint(ws) : []), items.join("\n\n"), foot("Responda com o número, escreva ou mande um áudio 🎙️")].join("\n");
+  }
+
+  /** Boas-vindas curtas que vêm antes do menu quando o usuário abre o app. */
+  async welcome(ws: string): Promise<string> {
+    const h = Number(new Date().toLocaleString("en-GB", { timeZone: TZ, hour: "2-digit", hour12: false }));
+    const [icon, saud] = h < 12 ? ["☀️", "Bom dia"] : h < 18 ? ["🌤️", "Boa tarde"] : ["🌙", "Boa noite"];
+    const first = (await this.ownerName(ws)).split(" ")[0];
+    return `${icon} *${saud}, ${first}!* Bem-vindo ao MagoBox. Seu assistente está pronto 🧙`;
+  }
+
+  /** App: o e-mail novo entra na fila sem mensagem; o menu mostra quantos não lidos há. */
+  async enqueueNew(ws: string, items: { account: string; id: string; de: string; assunto: string; at?: number; kind?: "person" | "auto" }[]): Promise<number> {
+    const now = Date.now();
+    const merged = mergeQueue(await this.queueGet(ws), items.map((m, i) => ({ ...m, at: m.at ?? now + i })));
+    await this.queueSave(ws, merged);
+    return merged.length;
   }
 
   /** Primeiros passos: sem conta Google conectada o menu não mostra e-mail, agenda nem Drive, então explica como conectar. */
@@ -1557,7 +1590,7 @@ _Ou 0 para voltar._`;
     }
     await this.set(ws, "emails", { account: accounts[0], items: found, hidden: [], search: spec });
     return [
-      head("🔎", "E-mails encontrados", `${spec.label} · do mais novo ao mais antigo`),
+      head("🔎", "E-mails encontrados", `${spec.label} · mais recentes primeiro`),
       this.emailGroups(found, accounts.length > 1),
       warnLine(failed),
       foot("Responda com o número para abrir"),
@@ -2462,8 +2495,8 @@ _Ou 0 para voltar._`;
     const size = await this.listSize(ws, 6);
     // Busca além do necessário: o que for spam/promoção some da lista e não pode deixar buracos
     const found = await this.google.gmailSearch(ws, "is:unread in:inbox", account, Math.min(30, size * 4));
-    // Mesma ordem da fila: do mais antigo ao mais novo
-    const sorted = [...found].sort((a: any, b: any) => (a.internalDate ?? 0) - (b.internalDate ?? 0));
+    // Mesma ordem da fila: os mais recentes primeiro
+    const sorted = [...found].sort((a: any, b: any) => (b.internalDate ?? 0) - (a.internalDate ?? 0));
     const visible: any[] = [];
     const hidden: any[] = [];
     const mute = await loadMute(this.state, ws);
@@ -2483,7 +2516,7 @@ _Ou 0 para voltar._`;
     const queued = (await this.queueGet(ws)).length;
     const hint = queued ? `\n⏳ _${queued} na fila de novos: diga *fila* ou *próximo*._` : "";
     return [
-      head("📧", "E-mails não lidos", `${accountLabel(account)} · do mais antigo ao mais novo`),
+      head("📧", "E-mails não lidos", `${accountLabel(account)} · mais recentes primeiro`),
       this.emailGroups(items) + (more > 0 ? `\n➕ _${more} mais_` : ""),
       hiddenLine,
       foot("Responda com o número para abrir") + hint,

@@ -26,6 +26,25 @@ class RegisterDto {
   workspaceName!: string;
 }
 
+class EmailDto {
+  @Transform(normalizeEmail)
+  @IsEmail()
+  email!: string;
+}
+
+class TokenDto {
+  @IsString()
+  @MaxLength(200)
+  token!: string;
+}
+
+class ResetDto extends TokenDto {
+  @IsString()
+  @MinLength(8)
+  @MaxLength(200)
+  password!: string;
+}
+
 class LoginDto {
   @Transform(normalizeEmail)
   @IsEmail()
@@ -65,6 +84,30 @@ export class AuthController {
   @Post("register")
   async register(@Body() dto: RegisterDto, @Res({ passthrough: true }) res: Response) {
     return startSession(res, await this.auth.register(dto.email, dto.name, dto.password, dto.workspaceName));
+  }
+
+  @UseGuards(RateLimitGuard)
+  @RateLimit("forgot", 5, 3600)
+  @HttpCode(200)
+  @Post("forgot")
+  forgot(@Body() dto: EmailDto) {
+    return this.auth.requestPasswordReset(dto.email);
+  }
+
+  @UseGuards(RateLimitGuard)
+  @RateLimit("reset", 10, 900)
+  @HttpCode(200)
+  @Post("reset")
+  reset(@Body() dto: ResetDto) {
+    return this.auth.resetPassword(dto.token, dto.password);
+  }
+
+  @UseGuards(RateLimitGuard)
+  @RateLimit("verify-email", 20, 900)
+  @HttpCode(200)
+  @Post("verify-email")
+  verifyEmail(@Body() dto: TokenDto) {
+    return this.auth.verifyEmail(dto.token);
   }
 
   @UseGuards(RateLimitGuard)

@@ -6,6 +6,7 @@ import { PassportModule } from "@nestjs/passport";
 import { AuthController } from "./auth.controller";
 import { AuthService } from "./auth.service";
 import { JwtStrategy } from "./jwt.strategy";
+import { MailService } from "./mail.service";
 import { APP_INTERCEPTOR } from "@nestjs/core";
 import { SESSION_DAYS } from "./session-cookie";
 import { SessionRenewInterceptor } from "./session-renew.interceptor";
@@ -22,7 +23,7 @@ import { SessionRenewInterceptor } from "./session-renew.interceptor";
     }),
   ],
   controllers: [AuthController],
-  providers: [AuthService, JwtStrategy, { provide: APP_INTERCEPTOR, useClass: SessionRenewInterceptor }],
+  providers: [AuthService, MailService, JwtStrategy, { provide: APP_INTERCEPTOR, useClass: SessionRenewInterceptor }],
   exports: [AuthService],
 })
 export class AuthModule {}
