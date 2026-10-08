@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { endSession } from "@/lib/auth";
 import { hasService, isAdmin, useMe } from "@/hooks/useMe";
+import { BugReportButton } from "@/components/layout/BugReportButton";
 import { Logo } from "@/components/brand/Logo";
 
 // service: serviço que precisa estar liberado para o item aparecer; admin: só ROOT/ADMIN; desktopOnly: não aparece no menu do celular
@@ -136,6 +137,17 @@ export const nav: { href: string; label: string; icon: React.ReactNode; service?
     ),
   },
   {
+    href: "/dashboard/relatos",
+    desktopOnly: true,
+    label: "Relatos",
+    admin: true,
+    icon: (
+      <svg width="20" height="20" fill="none" viewBox="0 0 24 24">
+        <path d="M8 2l1.5 2M16 2l-1.5 2M9 7h6a4 4 0 0 1 4 4v3a7 7 0 0 1-14 0v-3a4 4 0 0 1 4-4zM12 11v10" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
+      </svg>
+    ),
+  },
+  {
     href: "/dashboard/usage",
     desktopOnly: true,
     label: "Consumo",
@@ -228,6 +240,7 @@ export function Sidebar() {
           </svg>
           Documentação da API
         </a>
+        <BugReportButton className="w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm text-gray-500 hover:text-violet-400 hover:bg-gray-800 transition-colors" />
         <button
           onClick={logout}
           className="w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm text-gray-500 hover:text-red-400 hover:bg-red-500/10 transition-colors"

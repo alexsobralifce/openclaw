@@ -11,6 +11,16 @@ export interface MenuItem {
   locked: boolean;
 }
 
+export interface BugReport {
+  id: string;
+  userName: string;
+  userEmail: string;
+  message: string;
+  page: string | null;
+  status: "NOVO" | "EM_ANALISE" | "RESOLVIDO";
+  createdAt: string;
+}
+
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const res = await fetch(`${API}/api/v1${path}`, {
     ...init,
@@ -215,6 +225,11 @@ export const api = {
     services: () => request<Record<string, string>>("/auth/services"),
     updateMe: (data: { name?: string; phone?: string }) =>
       request<any>("/auth/me", { method: "PATCH", body: JSON.stringify(data) }),
+  },
+  bugReports: {
+    create: (message: string, page: string) => request<{ id: string }>("/bug-reports", { method: "POST", body: JSON.stringify({ message, page }) }),
+    list: (status?: string) => request<BugReport[]>(`/bug-reports${status ? `?status=${status}` : ""}`),
+    setStatus: (id: string, status: string) => request<BugReport>(`/bug-reports/${encodeURIComponent(id)}`, { method: "PATCH", body: JSON.stringify({ status }) }),
   },
   usage: {
     report: (days: number) => request<UsageReport>(`/usage?days=${days}`),

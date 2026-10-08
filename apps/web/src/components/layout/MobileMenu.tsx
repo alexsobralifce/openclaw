@@ -5,6 +5,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { endSession } from "@/lib/auth";
 import { useMe } from "@/hooks/useMe";
+import { BugReportButton } from "./BugReportButton";
 import { visibleNav } from "./Sidebar";
 
 const rowClass = "flex items-center gap-3 px-5 min-h-12 text-[15px] text-gray-300 active:bg-gray-800";
@@ -67,6 +68,7 @@ export function MobileMenu() {
                   </Link>
                 );
               })}
+              <BugReportButton className={`${rowClass} w-full text-gray-300`} />
               <button onClick={logout} className={`${rowClass} w-full text-red-400`}>
                 <svg width="20" height="20" fill="none" viewBox="0 0 24 24" aria-hidden><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" /></svg>
                 Sair

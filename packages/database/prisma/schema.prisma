@@ -521,3 +521,22 @@ model ListNote {
   @@index([workspaceId, updatedAt])
   @@index([remindAt])
 }
+
+// ─── RELATOS DE PROBLEMAS ────────────────────────────────────────
+
+// Bug informado por um usuário pelo botão "Relatar problema". Dado da plataforma (não de um workspace): só ROOT/ADMIN leem.
+model BugReport {
+  id        String   @id @default(cuid())
+  userId    String
+  userName  String
+  userEmail String
+  message   String
+  page      String? // tela em que o usuário estava
+  userAgent String?
+  // NOVO | EM_ANALISE | RESOLVIDO
+  status    String   @default("NOVO")
+  createdAt DateTime @default(now())
+
+  @@index([status, createdAt])
+  @@index([userId])
+}

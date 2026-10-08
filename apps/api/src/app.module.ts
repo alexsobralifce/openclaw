@@ -13,6 +13,7 @@ import { StateModule } from "./modules/state/state.module";
 import { UsersModule } from "./modules/users/users.module";
 import { UsageModule } from "./modules/usage/usage.module";
 import { VaultModule } from "./modules/vault/vault.module";
+import { ReportsModule } from "./modules/reports/reports.module";
 import { HealthModule } from "./modules/health/health.module";
 
 @Module({
@@ -32,6 +33,7 @@ import { HealthModule } from "./modules/health/health.module";
     WebhooksModule,
     PublicApiModule,
     VaultModule,
+    ReportsModule,
   ],
 })
 export class AppModule {}

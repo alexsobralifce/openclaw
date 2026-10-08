@@ -24,6 +24,6 @@ import { SessionRenewInterceptor } from "./session-renew.interceptor";
   ],
   controllers: [AuthController],
   providers: [AuthService, MailService, JwtStrategy, { provide: APP_INTERCEPTOR, useClass: SessionRenewInterceptor }],
-  exports: [AuthService],
+  exports: [AuthService, MailService],
 })
 export class AuthModule {}
