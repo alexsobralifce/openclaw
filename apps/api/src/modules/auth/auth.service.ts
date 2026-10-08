@@ -174,6 +174,12 @@ export class AuthService {
     return this.view(user);
   }
 
+  /** Marca o tour de boas-vindas como visto (concluído ou pulado). */
+  async finishOnboarding(userId: string) {
+    await prisma.user.update({ where: { id: userId }, data: { onboardedAt: new Date() } });
+    return { ok: true };
+  }
+
   /** O próprio usuário cadastra o WhatsApp de onde vai falar com o assistente. */
   async updateProfile(userId: string, data: { name?: string; phone?: string | null }) {
     const phone = data.phone === undefined ? undefined : (data.phone ?? "").replace(/\D/g, "") || null;
@@ -199,6 +205,8 @@ export class AuthService {
       services: effectiveServices(user.role, user.services),
       plan: user.plan ?? null,
       assistantChannel: user.assistantChannel ?? "whatsapp",
+      // Tour de boas-vindas: abre sozinho só para cadastro novo que ainda não o viu
+      onboarding: !!user.planRequired && !user.onboardedAt,
     };
   }
 

@@ -57,6 +57,8 @@ model User {
   planUntil        DateTime?
   // Cadastro público: entra sem aprovação, mas só usa depois de assinar ou de o admin dar um plano. Sem @unique.
   planRequired     Boolean   @default(false)
+  // Quando a pessoa terminou (ou pulou) o tour de boas-vindas. Sem @unique.
+  onboardedAt      DateTime?
   mpSubscriptionId String?
   billingStatus    String? // estado da assinatura no Mercado Pago: authorized | paused | cancelled | pending
   // Canal principal do assistente: whatsapp (padrão) | app | telegram. Sem @unique: a unicidade do Telegram é garantida no código.

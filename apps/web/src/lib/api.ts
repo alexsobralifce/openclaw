@@ -227,6 +227,7 @@ export const api = {
     googleExchange: (ticket: string) => request<{ accessToken: string; user: any }>("/auth/google/exchange", { method: "POST", body: JSON.stringify({ ticket }) }),
     me: () => request<any>("/auth/me"),
     services: () => request<Record<string, string>>("/auth/services"),
+    onboardingDone: () => request<{ ok: boolean }>("/auth/onboarding/done", { method: "POST" }),
     updateMe: (data: { name?: string; phone?: string }) =>
       request<any>("/auth/me", { method: "PATCH", body: JSON.stringify(data) }),
   },

@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { TOUR_EVENT } from "@/components/onboarding/WelcomeTour";
 import { countDocs, filterDocs, MENU_DOCS, type DocNode } from "@/lib/menu-docs";
 
 const chip = "inline-block rounded px-1.5 py-0.5 text-[11px] font-semibold uppercase tracking-wide";
@@ -82,6 +83,7 @@ export default function AjudaPage() {
           O que cada item do menu faz e como adicionar e apagar. Os mesmos comandos valem no WhatsApp, no app e no Telegram.
           Itens que a sua conta não tem liberados não aparecem no seu menu.
         </p>
+        <button type="button" onClick={() => window.dispatchEvent(new Event(TOUR_EVENT))} className="mt-3 px-3 py-2 rounded-lg text-xs font-medium bg-violet-600/20 text-violet-300 hover:bg-violet-600/30">Ver o tour de boas-vindas</button>
       </div>
 
       <div className="flex flex-wrap items-center gap-2">

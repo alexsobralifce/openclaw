@@ -49,6 +49,8 @@ const securityHeaders = [{ key: "Content-Security-Policy", value: contentSecurit
 const paymentHeaders = [{ key: "Content-Security-Policy", value: contentSecurityPolicy(API, process.env.NODE_ENV !== "production", true) }, ...otherHeaders];
 
 const nextConfig: NextConfig = {
+  // Pasta de build separada (usada pelo script de prints do tour, para não mexer no `next dev` em uso)
+  distDir: process.env.NEXT_DIST_DIR || ".next",
   transpilePackages: ["@openclaw/types"],
   poweredByHeader: false,
   async headers() {

@@ -138,6 +138,15 @@ export class AuthController {
     return this.auth.me(req.user.id);
   }
 
+  /** O tour de boas-vindas roda com a conta ainda sem plano, por isso a rota continua aberta nesse caso. */
+  @Access()
+  @AllowExpired()
+  @HttpCode(200)
+  @Post("onboarding/done")
+  onboardingDone(@Request() req: any) {
+    return this.auth.finishOnboarding(req.user.id);
+  }
+
   /** Nomes amigáveis dos serviços (para o painel mostrar o que está liberado). */
   @Access()
   @Get("services")

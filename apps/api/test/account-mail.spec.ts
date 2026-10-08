@@ -71,6 +71,18 @@ describe("cadastro por e-mail e senha", () => {
     expect(ana).toMatchObject({ status: "ACTIVE", planRequired: true });
   });
 
+  it("cadastro novo abre o tour de boas-vindas até ele ser concluído", async () => {
+    users.push({ id: "r", role: "ROOT", status: "ACTIVE", email: "root@x.com", name: "Root" });
+    const res: any = await make().register("leo@x.com", "Leo Dias", "senha-forte-1", "Espaço do Leo");
+    expect(res.user.onboarding).toBe(true);
+    const leo = users.find((u) => u.email === "leo@x.com");
+    await make().finishOnboarding(leo.id);
+    expect(leo.onboardedAt).toBeInstanceOf(Date);
+    expect((make() as any).view(leo).onboarding).toBe(false);
+    // conta antiga (sem planRequired) nunca abre o tour sozinha
+    expect((make() as any).view({ ...leo, planRequired: false, onboardedAt: null }).onboarding).toBe(false);
+  });
+
   it("cadastro pelo Google já vem com e-mail confirmado e também avisa o root", async () => {
     users.push({ id: "r", role: "ROOT", status: "ACTIVE", email: "root@x.com", name: "Root" });
     await make().registerFromGoogle("bia@gmail.com", "Bia Souza");
