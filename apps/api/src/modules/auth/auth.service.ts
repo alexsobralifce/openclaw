@@ -209,6 +209,8 @@ export class AuthService {
   }
 
   private buildResponse(user: any) {
+    // login novo: o app mostra as instruções e o menu na próxima abertura, mesmo que a conversa seja recente
+    void this.state.set(`login-intro:${user.id}`, 1, 24 * 3600_000).catch(() => undefined);
     return {
       accessToken: this.jwt.sign({ sub: user.id, email: user.email }),
       user: this.view(user),

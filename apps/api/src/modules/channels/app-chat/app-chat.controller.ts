@@ -7,10 +7,11 @@ import { commanderForUser } from "../assistant/commander";
 import { GoogleService } from "../../integrations/google/google.service";
 import { AppChatService } from "./app-chat.service";
 import { PushService } from "./push.service";
+import { StateService } from "../../state/state.service";
 
 const MAX_TEXT = 4000;
 /** Ao abrir o app, o menu só é mostrado de novo se a conversa está parada há mais que isso (boas-vindas e menu). */
-const OPEN_MENU_AFTER_MS = 10 * 60_000;
+const OPEN_MENU_AFTER_MS = 3 * 60_000;
 const FILE_MIMES = /^(image\/(jpeg|png|webp|gif|heic|heif)|application\/pdf)$/;
 
 const bytesOf = (base64: unknown) => (typeof base64 === "string" ? Math.floor(base64.length * 0.75) : 0);
@@ -19,7 +20,7 @@ const bytesOf = (base64: unknown) => (typeof base64 === "string" ? Math.floor(ba
 @Access("assistant")
 @Controller("app-chat")
 export class AppChatController {
-  constructor(private chat: AppChatService, private push: PushService, private assistant: AssistantService, private google: GoogleService) {}
+  constructor(private chat: AppChatService, private push: PushService, private assistant: AssistantService, private google: GoogleService, private state: StateService) {}
 
   private async commander(req: any) {
     const c = await commanderForUser(req.user.id);
@@ -38,7 +39,10 @@ export class AppChatController {
   async open(@Request() req: any) {
     const c = await this.commander(req);
     const last = (await this.chat.list(c.userId, c.workspaceId, { limit: 1 }))[0];
-    if (last && Date.now() - new Date(last.createdAt).getTime() < OPEN_MENU_AFTER_MS) return { opened: false };
+    const flag = `login-intro:${c.userId}`;
+    const justLoggedIn = !!(await this.state.get(flag));
+    if (justLoggedIn) await this.state.del(flag);
+    if (!justLoggedIn && last && Date.now() - new Date(last.createdAt).getTime() < OPEN_MENU_AFTER_MS) return { opened: false };
     this.chat.typing(c.userId, true);
     void this.assistant
       .openMenu(c, APP_INSTANCE)

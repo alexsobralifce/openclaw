@@ -686,7 +686,8 @@ export class AssistantService {
   /** O usuário abriu o app: mostra o menu principal (com a dica de conectar canais, se faltar), sem mensagem dele no histórico. */
   async openMenu(c: Commander, instanceName: string): Promise<void> {
     await this.sendToUser(c, instanceName, await this.menu.welcome(c.workspaceId));
-    const answer = await this.menu.respond(c.workspaceId, "menu");
+    // as instruções vêm primeiro (se o usuário não pediu para pulá-las); o menu abre logo depois da resposta
+    const answer = (await this.menu.intro(c.workspaceId)) ?? (await this.menu.respond(c.workspaceId, "menu"));
     if (answer) await this.sendToUser(c, instanceName, answer);
     await this.scheduleIdle(c, instanceName);
   }

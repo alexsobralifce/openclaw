@@ -284,6 +284,7 @@ export class MenuService {
       // Áudio transcrito vem numa linha só: fala longa pedindo agenda (sem convidados por e-mail) também é uma lista
       const spokenList = flat.split(" ").length >= 14 && !text.includes("@");
       if (!isInput && !pending && (quoted || lines >= 2 || spokenList || extractUrls(text).length) && (await this.services(workspaceId)).includes("calendar") && (looksLikeAgendaIntent(flat) || (await jevSays("agenda_add")))) return await this.agendaIngest(workspaceId, { text: ingestText });
+      if (!isInput && /^(instru[cç][oõ]es|como funciona)$/.test(flat)) return await this.intro(workspaceId, true);
       if (MENU_WORD.test(flat) || (!isInput && SALUTE.test(flat))) return await this.mainMenu(workspaceId, true);
       if (!st) return n !== null ? await this.mainMenu(workspaceId, false) : null;
       return await this.route(workspaceId, st, st.screen === "event_input" && quoted ? ingestText : text, n);
@@ -690,6 +691,13 @@ _Ou 0 para voltar._`;
       case "email_batch_input": {
         if (n === 0) return d.list.q ? this.queueShow(ws) : this.emailList(ws, d.list.account);
         return this.batchReply(ws, d.list, text);
+      }
+      case "intro": {
+        if (n !== 1 && n !== 2) return null;
+        if (n === 2) await this.state.set(`intro-off:${ws}`, 1);
+        else await this.state.del(`intro-off:${ws}`);
+        const menu = await this.mainMenu(ws, false);
+        return `${n === 2 ? "Combinado! Não mostro mais. Para rever, escreva *instruções*." : "Combinado, mostro de novo no próximo login."}\n\n${menu}`;
       }
       case "notif": {
         if (n === 0) return this.mainMenu(ws, false);
@@ -1215,6 +1223,23 @@ _Ou 0 para voltar._`;
     const [icon, saud] = h < 12 ? ["☀️", "Bom dia"] : h < 18 ? ["🌤️", "Boa tarde"] : ["🌙", "Boa noite"];
     const first = (await this.ownerName(ws)).split(" ")[0];
     return `${icon} *${saud}, ${first}!* Bem-vindo ao MagoBox. Seu assistente está pronto 🧙`;
+  }
+
+  /** Instruções de uso mostradas ao entrar, com a pergunta se devem aparecer de novo no próximo login. Nulo se o usuário pediu para pulá-las. */
+  async intro(ws: string, force = false): Promise<string | null> {
+    if (!force && await this.state.get(`intro-off:${ws}`)) return null;
+    await this.set(ws, "intro");
+    return [
+      head("📖", "Como o MagoBox funciona", "Um minuto para conhecer"),
+      "• Toque nos *cartões* do menu ou responda com o número.",
+      "• Você também pode *escrever* ou mandar um *áudio* 🎙️ pedindo o que precisa.",
+      "• Para voltar ao menu a qualquer hora, escreva *menu* ou toque no botão *Menu*.",
+      "• Em qualquer tela, *0* volta um passo.",
+      "• E-mails novos aparecem como contagem de não lidos no menu, sempre dos mais recentes aos mais antigos.",
+      DIV,
+      "Quer ver estas instruções de novo no próximo login?",
+      opts([1, "✅", "Sim, mostrar de novo"], [2, "⏭️", "Não, ir direto ao menu"]),
+    ].join("\n");
   }
 
   /** App: o e-mail novo entra na fila sem mensagem; o menu mostra quantos não lidos há. */

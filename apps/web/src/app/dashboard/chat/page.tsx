@@ -76,6 +76,10 @@ export default function ChatPage() {
     });
     api.telegram.status().then(setTg).catch(() => undefined);
     api.appChat.pushStatus().then(setPush).catch(() => undefined);
+    // voltar ao app depois de um tempo também recebe o menu (o servidor decide pelo tempo parado)
+    const onShow = () => { if (document.visibilityState === "visible") api.appChat.open().catch(() => undefined); };
+    document.addEventListener("visibilitychange", onShow);
+    return () => document.removeEventListener("visibilitychange", onShow);
   }, []);
 
   useEffect(() => {
@@ -122,6 +126,16 @@ export default function ChatPage() {
       add(await api.appChat.send(t));
     } catch (e: any) {
       setText(t);
+      setError(e.message);
+    }
+  }
+
+  /** Botão fixo "Menu": quem chega agora não precisa saber que é só digitar "menu". */
+  async function openMenu() {
+    setError("");
+    try {
+      add(await api.appChat.send("menu"));
+    } catch (e: any) {
       setError(e.message);
     }
   }
@@ -407,6 +421,7 @@ export default function ChatPage() {
         </div>
       ) : (
         <form onSubmit={(e) => { e.preventDefault(); void send(); }} className="flex items-end gap-1 px-2 py-2 border-t border-gray-800">
+          <button type="button" onClick={() => void openMenu()} className="shrink-0 mb-1 px-3 h-9 rounded-full bg-violet-500/15 text-violet-300 text-sm font-medium hover:bg-violet-500/25" aria-label="Abrir o menu">Menu</button>
           <button type="button" onClick={() => fileInput.current?.click()} disabled={busy} className={iconBtn} aria-label="Enviar foto ou PDF" title="Enviar foto ou PDF">
             <svg width="20" height="20" fill="none" viewBox="0 0 24 24" aria-hidden><path d="m21.4 11.1-9.2 9.2a6 6 0 0 1-8.5-8.5l9.2-9.2a4 4 0 0 1 5.7 5.7l-9.2 9.2a2 2 0 0 1-2.8-2.8l8.5-8.5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" /></svg>
           </button>
