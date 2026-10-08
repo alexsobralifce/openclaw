@@ -1,4 +1,4 @@
-import { BadRequestException, Injectable, Logger, ServiceUnavailableException } from "@nestjs/common";
+import { BadGatewayException, BadRequestException, HttpException, Injectable, Logger, ServiceUnavailableException } from "@nestjs/common";
 import { prisma } from "@openclaw/database";
 import { MercadoPagoConfig, Payment, PreApproval, Preference } from "mercadopago";
 import { isPlan, planExpired, PLANS } from "../auth/plans";
@@ -33,12 +33,24 @@ export class BillingService {
     return { plan: u?.plan ?? null, planUntil: u?.planUntil ?? null, billingStatus: u?.billingStatus ?? null, expired: !!u && planExpired(u), configured: !!process.env.MERCADOPAGO_ACCESS_TOKEN };
   }
 
-  /** Cria o checkout e devolve o endereço da página do Mercado Pago. */
+  /** Cria o checkout e devolve o endereço da página do Mercado Pago. Erro do Mercado Pago vira mensagem legível (e não "Internal server error"). */
   async checkout(userId: string, planId: string, method: PayMethod): Promise<{ url: string }> {
+    try {
+      return await this.createCheckout(userId, planId, method);
+    } catch (e: any) {
+      if (e instanceof HttpException) throw e;
+      this.logger.warn(`Mercado Pago recusou o checkout: ${e?.message ?? e}`);
+      throw new BadGatewayException(`O Mercado Pago recusou a cobrança: ${e?.message ?? "erro desconhecido"}`);
+    }
+  }
+
+  private async createCheckout(userId: string, planId: string, method: PayMethod): Promise<{ url: string }> {
     if (!isPlan(planId) || PLANS[planId].priceBrl <= 0) throw new BadRequestException("Plano inválido para assinatura.");
     const plan = PLANS[planId];
     const user = await prisma.user.findUnique({ where: { id: userId }, select: { email: true } });
     if (!user) throw new BadRequestException("Usuário não encontrado.");
+    // Só para teste: com credenciais de teste o Mercado Pago exige que o pagador seja um comprador de teste
+    const payerEmail = process.env.MERCADOPAGO_PAYER_EMAIL_OVERRIDE || user.email;
     const reference = makeReference(userId, planId);
     const back = `${this.webUrl()}/dashboard/settings`;
     const mp = this.client();
@@ -48,7 +60,7 @@ export class BillingService {
         body: {
           reason: `MagoBox · plano ${plan.name}`,
           external_reference: reference,
-          payer_email: user.email,
+          payer_email: payerEmail,
           back_url: back,
           status: "pending",
           auto_recurring: { frequency: 1, frequency_type: "months", transaction_amount: plan.priceBrl, currency_id: "BRL" },
@@ -61,7 +73,7 @@ export class BillingService {
     const pref = await new Preference(mp).create({
       body: {
         items: [{ id: planId, title: `MagoBox · plano ${plan.name} (1 mês)`, quantity: 1, unit_price: plan.priceBrl, currency_id: "BRL" }],
-        payer: { email: user.email },
+        payer: { email: payerEmail },
         external_reference: reference,
         notification_url: this.notificationUrl(),
         back_urls: { success: back, pending: back, failure: back },
