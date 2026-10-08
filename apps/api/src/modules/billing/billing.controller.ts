@@ -1,5 +1,5 @@
 import { Body, Controller, Get, Headers, HttpCode, Logger, Post, Query, Request, UseGuards } from "@nestjs/common";
-import { IsIn, IsString } from "class-validator";
+import { IsIn, IsString, MaxLength, MinLength } from "class-validator";
 import { Access, AllowExpired } from "../auth/access";
 import { PLAN_IDS, PLANS } from "../auth/plans";
 import { RateLimit, RateLimitGuard } from "../auth/rate-limit";
@@ -9,6 +9,11 @@ import { verifyMpSignature } from "./mp-utils";
 class CheckoutDto {
   @IsString() @IsIn(PLAN_IDS) plan!: string;
   @IsIn(["card", "pix"]) method!: "card" | "pix";
+}
+
+class CardDto {
+  @IsString() @IsIn(PLAN_IDS) plan!: string;
+  @IsString() @MinLength(10) @MaxLength(200) token!: string;
 }
 
 @Controller("billing")
@@ -34,6 +39,16 @@ export class BillingController {
   @HttpCode(200)
   sync(@Request() req: any) {
     return this.billing.sync(req.user.id);
+  }
+
+  /** Assinatura no cartão dentro do app (o formulário do Mercado Pago entrega só o token do cartão). */
+  @Access()
+  @AllowExpired()
+  @UseGuards(RateLimitGuard)
+  @RateLimit("subscribe-card", 10, 3600)
+  @Post("subscribe-card")
+  subscribeCard(@Request() req: any, @Body() dto: CardDto) {
+    return this.billing.subscribeWithCard(req.user.id, dto.plan, dto.token);
   }
 
   /** Começa a assinatura: devolve o endereço do checkout do Mercado Pago. Aberto também com a assinatura vencida (é como se renova). */

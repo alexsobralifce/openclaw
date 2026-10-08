@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { api, type PlanInfo } from "@/lib/api";
+import { CardBrick, cardPaymentConfigured } from "./CardBrick";
 
 type Info = { plans: PlanInfo[]; plan: string | null; planUntil: string | null; billingStatus: string | null; expired: boolean; configured: boolean };
 const brl = (v: number) => v.toLocaleString("pt-BR", { minimumFractionDigits: 2 });
@@ -12,6 +13,8 @@ export function SubscribeCard() {
   const [info, setInfo] = useState<Info | null>(null);
   const [busy, setBusy] = useState("");
   const [error, setError] = useState("");
+  const [card, setCard] = useState<PlanInfo | null>(null); // plano com o formulário de cartão aberto
+  const [done, setDone] = useState(false);
 
   useEffect(() => {
     // Se ainda não há plano pago ativo, confere no Mercado Pago (cobre o aviso que atrasou) antes de mostrar a situação
@@ -21,7 +24,23 @@ export function SubscribeCard() {
     }).catch(() => undefined);
   }, []);
 
+  /** Cartão pago aqui dentro: o primeiro débito pode levar um tempo, então confere de tempos em tempos. */
+  function afterCard() {
+    setCard(null);
+    setDone(true);
+    let tries = 0;
+    const t = setInterval(() => {
+      tries += 1;
+      api.billing.sync().then((s) => { setInfo((cur) => (cur ? { ...cur, ...s } : cur)); if (s.planUntil && !s.expired) { setDone(false); clearInterval(t); } }).catch(() => undefined);
+      if (tries >= 30) clearInterval(t);
+    }, 10_000);
+  }
+
   async function pay(plan: string, method: "card" | "pix") {
+    if (method === "card" && cardPaymentConfigured) {
+      setCard(info?.plans.find((p) => p.id === plan) ?? null);
+      return;
+    }
     setBusy(`${plan}:${method}`);
     setError("");
     try {
@@ -46,7 +65,8 @@ export function SubscribeCard() {
           <p className="text-xs text-gray-500 mt-1">Escolha um plano e pague pelo Mercado Pago. Cartão renova sozinho todo mês; no Pix você paga a cada mês.</p>
         )}
       </div>
-      {info.plans.map((p) => (
+      {done && <p role="status" className="text-sm text-violet-300">Cartão recebido! O Mercado Pago confirma o primeiro pagamento em instantes; esta tela atualiza sozinha.</p>}
+      {card ? <CardBrick plan={card} onDone={afterCard} onCancel={() => setCard(null)} /> : info.plans.map((p) => (
         <div key={p.id} className="border border-gray-800 rounded-lg p-3 space-y-2">
           <div className="flex items-baseline justify-between gap-3">
             <p className="text-sm font-medium text-gray-200">{p.name}{info.plan === p.id && !info.expired ? " · atual" : ""}</p>

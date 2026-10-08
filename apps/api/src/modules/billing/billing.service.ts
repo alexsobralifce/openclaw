@@ -44,6 +44,33 @@ export class BillingService {
     }
   }
 
+  /** Assinatura no cartão sem sair do app: o formulário do Mercado Pago no navegador gera o `token` do cartão (o número nunca passa por aqui). */
+  async subscribeWithCard(userId: string, planId: string, cardToken: string): Promise<{ status: string }> {
+    if (!isPlan(planId) || PLANS[planId].priceBrl <= 0) throw new BadRequestException("Plano inválido para assinatura.");
+    const plan = PLANS[planId];
+    const user = await prisma.user.findUnique({ where: { id: userId }, select: { email: true } });
+    if (!user) throw new BadRequestException("Usuário não encontrado.");
+    try {
+      const sub = await new PreApproval(this.client()).create({
+        body: {
+          reason: `MagoBox · plano ${plan.name}`,
+          external_reference: makeReference(userId, planId),
+          payer_email: process.env.MERCADOPAGO_PAYER_EMAIL_OVERRIDE || user.email,
+          card_token_id: cardToken,
+          back_url: `${this.webUrl()}/dashboard/settings`,
+          status: "authorized",
+          auto_recurring: { frequency: 1, frequency_type: "months", transaction_amount: plan.priceBrl, currency_id: "BRL" },
+        },
+      });
+      if (sub.id) await this.onSubscription({ id: sub.id, status: sub.status, external_reference: makeReference(userId, planId) });
+      return { status: sub.status ?? "unknown" };
+    } catch (e: any) {
+      if (e instanceof HttpException) throw e;
+      this.logger.warn(`Mercado Pago recusou a assinatura no cartão: ${e?.message ?? e}`);
+      throw new BadGatewayException(`O Mercado Pago recusou o cartão: ${e?.message ?? "erro desconhecido"}`);
+    }
+  }
+
   private async createCheckout(userId: string, planId: string, method: PayMethod): Promise<{ url: string }> {
     if (!isPlan(planId) || PLANS[planId].priceBrl <= 0) throw new BadRequestException("Plano inválido para assinatura.");
     const plan = PLANS[planId];
