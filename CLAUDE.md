@@ -21,3 +21,8 @@ Para arquitetura, fluxos, gotchas e guia de navegação, veja [docs/CODEBASE_MAP
 - Não trocar `WEBHOOK_SECRET` depois de definido (cifra segredos de webhook e tokens do Google).
 - Toda consulta filtra por `workspaceId`. Rota nova da API pública exige atualizar `openapi.ts` (escrito à mão).
 - `MenuService.respond`: a ordem das regras importa; telas `_input` só aceitam comandos globais como mensagem inteira.
+
+## Economia de contexto (além do `~/.claude/CLAUDE.md` global)
+
+- `menu.service.ts` (~3 mil linhas) e `assistant.service.ts` (~1 mil): nunca ler inteiros; `grep -n "nomeDoMétodo"` e ler o trecho com `offset`/`limit`.
+- Testes: `pnpm test:changed` enquanto edita; o `pnpm test` completo com `2>&1 | tail -30`.
