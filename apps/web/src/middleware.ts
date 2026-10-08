@@ -11,7 +11,10 @@ export function middleware(req: NextRequest) {
   if (!isPublic(pathname) && !token) {
     return NextResponse.redirect(new URL("/auth/login", req.url));
   }
-  return NextResponse.next();
+  const res = NextResponse.next();
+  // Sessão deslizante: cada visita ao painel renova o sinal (a API renova o cookie de verdade)
+  if (token) res.cookies.set("oc_auth", "1", { path: "/", maxAge: 180 * 24 * 3600, sameSite: "lax" });
+  return res;
 }
 
 // Só o painel passa por aqui; a landing, o login e os arquivos públicos ficam de fora.

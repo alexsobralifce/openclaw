@@ -3,7 +3,8 @@ import { webOrigins } from "../../web-origins";
 
 /** Cookie da sessão: HttpOnly, então nenhum script da página (nem um XSS) consegue ler o token. */
 export const SESSION_COOKIE = "oc_session";
-const SESSION_MS = 7 * 24 * 3600 * 1000; // igual à validade do JWT
+export const SESSION_DAYS = 180; // igual à validade do JWT; a sessão é renovada com o uso (ver SessionRenewInterceptor)
+const SESSION_MS = SESSION_DAYS * 24 * 3600 * 1000;
 
 const SAFE_METHODS = new Set(["GET", "HEAD", "OPTIONS"]);
 

@@ -25,7 +25,7 @@ const detectPlatform = (): Platform => {
 /**
  * A cada login, se o app ainda não está instalado: no Android pede para instalar o app e no iPhone para criar o atalho; também oferece ligar as notificações.
  * O navegador só concede instalação e notificação depois de um toque do usuário, então o aviso traz os botões.
- * "Agora não" vale só até o próximo login (o login apaga a marca, ver `startSession`).
+ * "Agora não" vale por 24 horas (e o login apaga a marca, ver `startSession`).
  */
 export function PwaPrompt() {
   const [installEvt, setInstallEvt] = useState<InstallEvent | null>(null);
@@ -44,7 +44,8 @@ export function PwaPrompt() {
     setStandalone(window.matchMedia("(display-mode: standalone)").matches || (navigator as any).standalone === true);
     setPlatform(detectPlatform());
     if ("Notification" in window) setPerm(Notification.permission);
-    setHidden(!!read(PWA_DISMISS_KEY));
+    // "Agora não" vale por 24 horas: o aviso volta até o app estar instalado e as notificações ligadas
+    setHidden(Date.now() - Number(read(PWA_DISMISS_KEY)) < 24 * 3600 * 1000);
     api.appChat.pushStatus().then(setPush).catch(() => undefined);
 
     const onPrompt = (e: Event) => { e.preventDefault(); setInstallEvt(e as InstallEvent); };
@@ -65,7 +66,7 @@ export function PwaPrompt() {
   if (hidden || (!canInstall && !iosInstall && !androidManual && !canPush)) return null;
 
   const later = () => {
-    try { localStorage.setItem(PWA_DISMISS_KEY, "1"); } catch {}
+    try { localStorage.setItem(PWA_DISMISS_KEY, String(Date.now())); } catch {}
     setHidden(true);
   };
 

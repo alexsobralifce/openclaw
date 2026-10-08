@@ -23,6 +23,8 @@ export const PWA_DISMISS_KEY = "oc_pwa_dismissed";
 // Aqui fica apenas um sinal "tem sessão" (sem segredo), que o middleware usa para decidir entre painel e login;
 // quem de fato valida a sessão é a API.
 const FLAG = "oc_auth";
+/** Mesma validade da sessão na API (ela é renovada com o uso). */
+export const SESSION_DAYS = 180;
 
 /** Restos do esquema antigo, em que o token ficava no localStorage e num cookie legível. */
 function dropLegacyToken() {
@@ -37,7 +39,7 @@ if (typeof window !== "undefined") dropLegacyToken();
 export function startSession() {
   try {
     localStorage.removeItem(PWA_DISMISS_KEY);
-    document.cookie = `${FLAG}=1; path=/; max-age=${60 * 60 * 24 * 7}; SameSite=Lax`;
+    document.cookie = `${FLAG}=1; path=/; max-age=${SESSION_DAYS * 24 * 3600}; SameSite=Lax`;
   } catch {}
 }
 

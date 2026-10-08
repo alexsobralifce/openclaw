@@ -15,7 +15,7 @@ self.addEventListener("push", (event) => {
   try {
     data = event.data ? event.data.json() : {};
   } catch {}
-  event.waitUntil(self.registration.showNotification(data.title || "MagoBox", { body: data.body || "", icon: "/icons/icon-192.png", badge: "/icons/icon-192.png", data: { url: data.url || "/dashboard/chat" } }));
+  event.waitUntil(self.registration.showNotification(data.title || "MagoBox", { body: data.body || "", icon: "/icons/icon-192.png", vibrate: [200, 100, 200], tag: data.tag || undefined, renotify: !!data.tag, badge: "/icons/icon-192.png", data: { url: data.url || "/dashboard/chat" } }));
 });
 
 self.addEventListener("notificationclick", (event) => {
