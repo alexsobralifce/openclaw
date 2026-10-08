@@ -37,6 +37,7 @@ export function WelcomeTour() {
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [i, setI] = useState(0);
+  const [zoom, setZoom] = useState(false);
   const [broken, setBroken] = useState<Record<string, boolean>>({});
   const nextRef = useRef<HTMLButtonElement>(null);
   const first = useRef(false); // abriu sozinho (1ª entrada): ao fechar, marca como visto no servidor
@@ -53,7 +54,7 @@ export function WelcomeTour() {
 
   // Reabrir pela Ajuda
   useEffect(() => {
-    const reopen = () => { setI(0); setOpen(true); };
+    const reopen = () => { setI(0); setZoom(false); setOpen(true); };
     window.addEventListener(TOUR_EVENT, reopen);
     return () => window.removeEventListener(TOUR_EVENT, reopen);
   }, []);
@@ -75,13 +76,13 @@ export function WelcomeTour() {
   useEffect(() => {
     if (!open) return;
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") close();
+      if (e.key === "Escape") { if (zoom) setZoom(false); else close(); }
       else if (e.key === "ArrowRight") go(1);
       else if (e.key === "ArrowLeft") go(-1);
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [open, close, go]);
+  }, [open, close, go, zoom]);
 
   useEffect(() => { if (open) nextRef.current?.focus(); }, [open, i]);
 
@@ -91,24 +92,25 @@ export function WelcomeTour() {
 
   return createPortal(
     <div className="fixed inset-0 z-[70] flex items-end sm:items-center justify-center bg-black/70 p-0 sm:p-4">
-      <div role="dialog" aria-modal="true" aria-labelledby="tour-titulo" className="w-full sm:max-w-2xl max-h-[96dvh] overflow-y-auto bg-gray-900 border border-gray-800 sm:rounded-2xl rounded-t-2xl p-4 sm:p-6 space-y-4">
+      <div role="dialog" aria-modal="true" aria-labelledby="tour-titulo" className="w-full sm:max-w-5xl max-h-[96dvh] overflow-y-auto bg-gray-900 border border-gray-800 sm:rounded-2xl rounded-t-2xl p-4 sm:p-6 space-y-4">
         <div className="flex items-center justify-between gap-3">
           <p className="text-xs text-gray-500">Passo {i + 1} de {STEPS.length}</p>
           <button type="button" onClick={() => close()} className="text-xs text-gray-400 hover:text-gray-200 underline underline-offset-2">Pular</button>
         </div>
 
         {!broken[step.id] && (
-          <picture>
+          <picture onClick={() => setZoom(true)} className="block cursor-zoom-in" title="Toque para ampliar">
             <source media="(max-width: 767px)" srcSet={src(step.id, "mobile")} />
             <img
               key={step.id}
               src={src(step.id, "desktop")}
               alt={step.alt}
               onError={() => setBroken((b) => ({ ...b, [step.id]: true }))}
-              className="w-full h-auto max-h-[46dvh] object-contain rounded-xl border border-gray-800 bg-gray-950"
+              className="w-full h-auto max-h-[62dvh] sm:max-h-[66dvh] object-contain rounded-xl border border-gray-800 bg-gray-950"
             />
           </picture>
         )}
+        {!broken[step.id] && <p className="-mt-2 text-center text-[11px] text-gray-500">Toque na imagem para ampliar</p>}
         {/* pré-carrega o print do próximo passo */}
         {next && <link rel="prefetch" as="image" href={src(next.id, "desktop")} />}
 
@@ -136,6 +138,15 @@ export function WelcomeTour() {
           </div>
         </div>
       </div>
+      {zoom && (
+        <div className="fixed inset-0 z-[80] overflow-auto bg-black/90 p-2 sm:p-6" onClick={() => setZoom(false)} role="presentation">
+          <button type="button" onClick={() => setZoom(false)} aria-label="Fechar imagem" className="fixed right-3 top-3 z-[81] rounded-full bg-gray-900/90 px-3 py-1.5 text-sm text-gray-200">Fechar ×</button>
+          <picture>
+            <source media="(max-width: 767px)" srcSet={src(step.id, "mobile")} />
+            <img src={src(step.id, "desktop")} alt={step.alt} className="mx-auto h-auto w-full max-w-[1280px] rounded-lg" />
+          </picture>
+        </div>
+      )}
     </div>,
     document.body,
   );
