@@ -30,7 +30,7 @@ export class BillingService {
 
   async status(userId: string) {
     const u = await prisma.user.findUnique({ where: { id: userId }, select: { role: true, plan: true, planUntil: true, billingStatus: true } });
-    return { plan: u?.plan ?? null, planUntil: u?.planUntil ?? null, billingStatus: u?.billingStatus ?? null, expired: !!u && planExpired(u), configured: !!process.env.MERCADOPAGO_ACCESS_TOKEN };
+    return { plan: u?.plan ?? null, planUntil: u?.planUntil ?? null, billingStatus: u?.billingStatus ?? null, expired: !!u && planExpired(u), configured: !!process.env.MERCADOPAGO_ACCESS_TOKEN, publicKey: process.env.MERCADOPAGO_PUBLIC_KEY || null };
   }
 
   /** Cria o checkout e devolve o endereço da página do Mercado Pago. Erro do Mercado Pago vira mensagem legível (e não "Internal server error"). */
