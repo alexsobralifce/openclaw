@@ -8,18 +8,20 @@ const site = process.env.NEXT_PUBLIC_SITE_URL;
 export const metadata: Metadata = {
   metadataBase: site ? new URL(site) : undefined,
   applicationName: "MagoBox",
-  title: { default: "MagoBox — sua secretária virtual no WhatsApp", template: "%s | MagoBox" },
-  description: "Sua secretária virtual: e-mail, agenda, Drive, senhas e clientes, no WhatsApp e no app. Por texto, áudio, foto ou link.",
+  title: { default: "MagoBox: secretária virtual para e-mail, agenda e senhas", template: "%s | MagoBox" },
+  description: "Secretária particular no app ou no WhatsApp: organiza documentos, notas, senhas e compromissos e responde e-mails e cria eventos por voz. 7 dias grátis.",
+  robots: { index: true, follow: true },
   appleWebApp: { capable: true, title: "MagoBox", statusBarStyle: "black-translucent" },
   openGraph: {
     type: "website",
     siteName: "MagoBox",
     locale: "pt_BR",
-    title: "MagoBox — sua secretária virtual no WhatsApp",
-    description: "E-mail, agenda, Drive e senhas. Por texto, áudio, foto ou link.",
+    url: "/",
+    title: "MagoBox: secretária virtual para e-mail, agenda e senhas",
+    description: "Documentos, notas, senhas e compromissos organizados. Responda e-mails e crie eventos por voz, no app ou no WhatsApp.",
     ...(site ? { images: [{ url: "/brand/magobox-og.png", width: 1200, height: 630, alt: "MagoBox" }] } : {}),
   },
-  twitter: { card: "summary_large_image" },
+  twitter: { card: "summary_large_image", title: "MagoBox: secretária virtual para e-mail, agenda e senhas", description: "Sua secretária particular no app ou no WhatsApp. 7 dias grátis." },
 };
 
 export const viewport: Viewport = {

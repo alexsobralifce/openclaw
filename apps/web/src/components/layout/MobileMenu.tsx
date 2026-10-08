@@ -30,7 +30,7 @@ export function MobileMenu() {
 
   function logout() {
     endSession();
-    router.push("/auth/login");
+    router.push("/");
   }
 
   return (

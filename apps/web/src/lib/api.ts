@@ -36,7 +36,7 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
     const err = await res.json().catch(() => ({}));
     if (err.message && err.message !== "Unauthorized") throw new Error(err.message);
     await endSession();
-    window.location.href = "/auth/login";
+    window.location.href = "/";
     throw new Error("Sessão expirada. Faça login novamente.");
   }
   if (!res.ok) {

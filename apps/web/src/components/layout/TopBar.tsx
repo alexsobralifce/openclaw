@@ -36,7 +36,7 @@ export function TopBar() {
 
   function logout() {
     endSession();
-    router.push("/auth/login");
+    router.push("/");
   }
 
   return (

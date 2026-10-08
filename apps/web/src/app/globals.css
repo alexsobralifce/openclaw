@@ -48,3 +48,18 @@ button, a, input, select, textarea, label {
     height: 20px;
   }
 }
+
+/* ── Landing: noite (padrão) e dia, trocados por horário (ver TemaPorHorario) ── */
+.landing {
+  color-scheme: dark;
+  --l-bg: #09070b; --l-bg-glass: rgb(9 7 11 / 0.85); --l-card: #0d0b10; --l-card-hl: #1a1233;
+  --l-text: #e6eeea; --l-strong: #ffffff; --l-muted: #a49eaf; --l-faint: #868090; --l-accent: #a78bfa; --l-hl: #e4dcfb;
+  --l-line: rgb(255 255 255 / 0.1); --l-line-soft: rgb(255 255 255 / 0.05); --l-hover: rgb(255 255 255 / 0.05);
+}
+.landing[data-tema="dia"] {
+  color-scheme: light;
+  --l-bg: #faf8ff; --l-bg-glass: rgb(250 248 255 / 0.88); --l-card: #ffffff; --l-card-hl: #f1ebff;
+  --l-text: #1e1633; --l-strong: #150f2b; --l-muted: #5b5472; --l-faint: #6b6482; --l-accent: #6d28d9; --l-hl: #3b1d82;
+  --l-line: rgb(46 16 101 / 0.16); --l-line-soft: rgb(46 16 101 / 0.09); --l-hover: rgb(46 16 101 / 0.06);
+}
+.landing { transition: background-color 0.4s, color 0.4s; }
