@@ -48,6 +48,9 @@ export default function ChatPage() {
   const [loaded, setLoaded] = useState(false);
   const [ready, setReady] = useState(false);
   const firstScroll = useRef(true);
+  // Conversa de sessões passadas fica guardada no servidor, mas a tela começa limpa: só entra o que chegar depois deste marco
+  const cutoff = useRef<string | undefined>(undefined);
+  const hiddenAt = useRef(0);
   const [text, setText] = useState("");
   const [typing, setTyping] = useState(false);
   const [unread, setUnread] = useState(0); // e-mails não lidos, atualizado ao vivo pelo servidor
@@ -82,14 +85,21 @@ export default function ChatPage() {
 
   useEffect(() => {
     // Carrega o histórico e, em seguida, pede o menu (o servidor só envia se a conversa está vazia ou parada)
-    api.appChat.messages().then(setMessages).catch((e) => setError(e.message)).finally(() => {
+    api.appChat.messages().then((h) => { cutoff.current = h[h.length - 1]?.createdAt; }).catch((e) => setError(e.message)).finally(() => {
       setLoaded(true);
       api.appChat.open().then((r) => { if (r.askLocation) askLocation(); }).catch(() => undefined);
     });
     api.telegram.status().then(setTg).catch(() => undefined);
     api.appChat.pushStatus().then(setPush).catch(() => undefined);
     // voltar ao app depois de um tempo também recebe o menu (o servidor decide pelo tempo parado)
-    const onShow = () => { if (document.visibilityState === "visible") api.appChat.open().catch(() => undefined); };
+    // (depois de um tempo fora a tela também volta limpa)
+    const onShow = () => {
+      if (document.visibilityState !== "visible") { hiddenAt.current = Date.now(); return; }
+      if (hiddenAt.current && Date.now() - hiddenAt.current > 5 * 60_000) {
+        setMessages((prev) => { cutoff.current = prev[prev.length - 1]?.createdAt ?? cutoff.current; return []; });
+      }
+      api.appChat.open().catch(() => undefined);
+    };
     document.addEventListener("visibilitychange", onShow);
     return () => document.removeEventListener("visibilitychange", onShow);
   }, []);
@@ -102,7 +112,7 @@ export default function ChatPage() {
     socket.on("chat:redacted", ({ id }: { id: string }) => setMessages((prev) => prev.map((m) => (m.id === id ? { ...m, text: "••••" } : m))));
     // Ao reconectar, busca o que chegou enquanto esteve fora
     socket.on("connect", () => setMessages((prev) => {
-      api.appChat.messages(prev[prev.length - 1]?.createdAt).then((novas) => novas.forEach(add)).catch(() => undefined);
+      api.appChat.messages(prev[prev.length - 1]?.createdAt ?? cutoff.current).then((novas) => novas.forEach(add)).catch(() => undefined);
       return prev;
     }));
     return () => { socket.disconnect(); };
