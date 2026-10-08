@@ -696,8 +696,17 @@ _Ou 0 para voltar._`;
         if (n !== 1 && n !== 2) return null;
         if (n === 2) await this.state.set(`intro-off:${ws}`, 1);
         else await this.state.del(`intro-off:${ws}`);
-        const menu = await this.mainMenu(ws, false);
+        const ask = await this.state.get(`city-ask:${ws}`);
+        if (ask) await this.state.del(`city-ask:${ws}`);
+        const menu = ask ? await this.cityAsk(ws) : await this.mainMenu(ws, false);
         return `${n === 2 ? "Combinado! Não mostro mais. Para rever, escreva *instruções*." : "Combinado, mostro de novo no próximo login."}\n\n${menu}`;
+      }
+      case "city_input": {
+        if (n === 0) return this.mainMenu(ws, false);
+        if (n === 1) return `Combinado, fico com *${d.current}*.\n\n${await this.mainMenu(ws, false)}`;
+        const out = await this.setCity(ws, text);
+        // cidade não encontrada: a tela continua aberta para tentar de novo
+        return out.startsWith("📍 *Localização atualizada") ? `${out}\n\n${await this.mainMenu(ws, false)}` : out;
       }
       case "notif": {
         if (n === 0) return this.mainMenu(ws, false);
@@ -1223,6 +1232,39 @@ _Ou 0 para voltar._`;
     const [icon, saud] = h < 12 ? ["☀️", "Bom dia"] : h < 18 ? ["🌤️", "Boa tarde"] : ["🌙", "Boa noite"];
     const first = (await this.ownerName(ws)).split(" ")[0];
     return `${icon} *${saud}, ${first}!* Bem-vindo ao MagoBox. Seu assistente está pronto 🧙`;
+  }
+
+  /** Pergunta a cidade quando o GPS não está disponível (negado, sem suporte ou erro). */
+  async cityAsk(ws: string): Promise<string> {
+    const loc = await loadLocation(this.state, ws);
+    await this.set(ws, "city_input", { current: loc.name });
+    return [
+      head("📍", "Onde você está agora?", "para o clima certinho"),
+      "Em que *cidade* você está? Escreva, por exemplo, *Recife, Pernambuco*.",
+      DIV,
+      opts([1, "✅", loc.source === "default" ? `Usar ${loc.name}` : `Manter ${loc.name}`]),
+    ].join("\n");
+  }
+
+  /** Se o usuário está lendo as instruções, a pergunta da cidade espera a resposta delas; senão vai agora (nulo = adiada). */
+  async cityAskOrDefer(ws: string): Promise<string | null> {
+    const st = await this.state.get<State>(this.key(ws));
+    if (st?.screen === "intro") {
+      await this.state.set(`city-ask:${ws}`, 1, 3600_000);
+      return null;
+    }
+    return this.cityAsk(ws);
+  }
+
+  /** O navegador informou onde o usuário está (GPS). Só devolve mensagem (cidade e clima) se a cidade mudou. */
+  async deviceLocation(ws: string, lat: number, lng: number): Promise<string | null> {
+    const name = (await this.weather?.reverse(lat, lng)) ?? "Localização compartilhada";
+    const prev = await loadLocation(this.state, ws);
+    if (prev.source !== "default" && prev.name === name) {
+      await saveLocation(this.state, ws, { lat, lng, name, source: "pin" });
+      return null;
+    }
+    return this.locationUpdated(ws, { lat, lng, name, source: "pin" });
   }
 
   /** Instruções de uso mostradas ao entrar, com a pergunta se devem aparecer de novo no próximo login. Nulo se o usuário pediu para pulá-las. */

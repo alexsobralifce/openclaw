@@ -68,11 +68,22 @@ export default function ChatPage() {
   const lastBotId = [...messages].reverse().find((x) => x.direction === "OUT")?.id;
   const add = useCallback((m: ChatMessage) => setMessages((prev) => (prev.some((p) => p.id === m.id) ? prev : [...prev, m])), []);
 
+  /** Login novo: pede o GPS ao navegador (funciona no PWA, com HTTPS). Sem permissão ou suporte, o assistente pergunta a cidade. */
+  function askLocation() {
+    const fallback = () => api.appChat.locationDenied().catch(() => undefined);
+    if (!("geolocation" in navigator)) return void fallback();
+    navigator.geolocation.getCurrentPosition(
+      (p) => api.appChat.location(p.coords.latitude, p.coords.longitude).catch(() => undefined),
+      fallback,
+      { timeout: 10_000, maximumAge: 10 * 60_000, enableHighAccuracy: false },
+    );
+  }
+
   useEffect(() => {
     // Carrega o histórico e, em seguida, pede o menu (o servidor só envia se a conversa está vazia ou parada)
     api.appChat.messages().then(setMessages).catch((e) => setError(e.message)).finally(() => {
       setLoaded(true);
-      api.appChat.open().catch(() => undefined);
+      api.appChat.open().then((r) => { if (r.askLocation) askLocation(); }).catch(() => undefined);
     });
     api.telegram.status().then(setTg).catch(() => undefined);
     api.appChat.pushStatus().then(setPush).catch(() => undefined);

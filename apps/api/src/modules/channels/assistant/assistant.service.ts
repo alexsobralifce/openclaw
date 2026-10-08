@@ -403,6 +403,19 @@ export class AssistantService {
     await this.scheduleIdle(c, instanceName);
   }
 
+  /** App: o GPS do navegador informou a cidade; só avisa no chat se ela mudou. */
+  async handleDeviceLocation(c: Commander, instanceName: string, loc: { lat: number; lng: number }) {
+    if (!validCoords(loc.lat, loc.lng)) return;
+    const answer = await this.menu.deviceLocation(c.workspaceId, loc.lat, loc.lng);
+    if (answer) await this.sendToUser(c, instanceName, answer);
+  }
+
+  /** App: sem GPS (negado, sem suporte ou erro), pergunta em que cidade o usuário está. */
+  async askCity(c: Commander, instanceName: string) {
+    const answer = await this.menu.cityAskOrDefer(c.workspaceId);
+    if (answer) await this.sendToUser(c, instanceName, answer);
+  }
+
   /** Executa uma ação já confirmada pelo dono, com registro de auditoria. */
   private async execute(ws: string, name: string, args: any) {
     this.logger.log(`[AUDIT] ws=${ws} ${name} to=${args.to ?? args.conversationId ?? ""} subject=${args.subject ?? args.title ?? ""}`);

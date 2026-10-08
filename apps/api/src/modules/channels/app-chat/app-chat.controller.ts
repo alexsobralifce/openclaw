@@ -42,13 +42,31 @@ export class AppChatController {
     const flag = `login-intro:${c.userId}`;
     const justLoggedIn = !!(await this.state.get(flag));
     if (justLoggedIn) await this.state.del(flag);
-    if (!justLoggedIn && last && Date.now() - new Date(last.createdAt).getTime() < OPEN_MENU_AFTER_MS) return { opened: false };
+    // askLocation: login novo → o app pede o GPS (ou a cidade, se o navegador negar)
+    if (!justLoggedIn && last && Date.now() - new Date(last.createdAt).getTime() < OPEN_MENU_AFTER_MS) return { opened: false, askLocation: false };
     this.chat.typing(c.userId, true);
     void this.assistant
       .openMenu(c, APP_INSTANCE)
       .catch(() => undefined)
       .finally(() => this.chat.typing(c.userId, false));
-    return { opened: true };
+    return { opened: true, askLocation: justLoggedIn };
+  }
+
+  /** O navegador deu a posição (GPS): atualiza a cidade do clima; o chat só avisa se ela mudou. */
+  @Post("location")
+  async location(@Request() req: any, @Body() body: { lat?: number; lng?: number }) {
+    if (typeof body?.lat !== "number" || typeof body?.lng !== "number") throw new BadRequestException("Posição inválida.");
+    const c = await this.commander(req);
+    await this.assistant.handleDeviceLocation(c, APP_INSTANCE, { lat: body.lat, lng: body.lng });
+    return { ok: true };
+  }
+
+  /** Sem GPS (negado, sem suporte ou erro): o assistente pergunta em que cidade a pessoa está. */
+  @Post("location/denied")
+  async locationDenied(@Request() req: any) {
+    const c = await this.commander(req);
+    await this.assistant.askCity(c, APP_INSTANCE);
+    return { ok: true };
   }
 
   /** Mensagem do usuário: guarda, responde pelo assistente (a resposta chega pelo tempo real) e apaga o que for segredo. */
