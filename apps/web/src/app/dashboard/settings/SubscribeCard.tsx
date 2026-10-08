@@ -15,6 +15,7 @@ export function SubscribeCard() {
   const [error, setError] = useState("");
   const [card, setCard] = useState<PlanInfo | null>(null); // plano com o formulário de cartão aberto
   const [done, setDone] = useState(false);
+  const [confirmed, setConfirmed] = useState(false); // plano ativado depois do pagamento feito aqui dentro
 
   useEffect(() => {
     // Se ainda não há plano pago ativo, confere no Mercado Pago (cobre o aviso que atrasou) antes de mostrar a situação
@@ -31,7 +32,7 @@ export function SubscribeCard() {
     let tries = 0;
     const t = setInterval(() => {
       tries += 1;
-      api.billing.sync().then((s) => { setInfo((cur) => (cur ? { ...cur, ...s } : cur)); if (s.planUntil && !s.expired) { setDone(false); clearInterval(t); } }).catch(() => undefined);
+      api.billing.sync().then((s) => { setInfo((cur) => (cur ? { ...cur, ...s } : cur)); if (s.planUntil && !s.expired) { setDone(false); setConfirmed(true); clearInterval(t); } }).catch(() => undefined);
       if (tries >= 30) clearInterval(t);
     }, 10_000);
   }
@@ -65,6 +66,13 @@ export function SubscribeCard() {
           <p className="text-xs text-gray-500 mt-1">Escolha um plano e pague pelo Mercado Pago. Cartão renova sozinho todo mês; no Pix você paga a cada mês.</p>
         )}
       </div>
+      {confirmed && info.planUntil && (
+        <div role="status" className="rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-3 py-3 text-sm text-emerald-300">
+          <p className="font-medium">Pagamento confirmado! 🎉</p>
+          <p className="text-xs mt-0.5">Seu plano {info.plans.find((p) => p.id === info.plan)?.name ?? ""} está ativo até {day(info.planUntil)}. O assistente já voltou a responder.</p>
+          <button type="button" onClick={() => setConfirmed(false)} className="mt-2 text-xs underline underline-offset-2">Fechar</button>
+        </div>
+      )}
       {done && <p role="status" className="text-sm text-violet-300">Cartão recebido! O Mercado Pago confirma o primeiro pagamento em instantes; esta tela atualiza sozinha.</p>}
       {card && info.publicKey && <CardBrick plan={card} publicKey={info.publicKey} onDone={afterCard} onCancel={() => setCard(null)} />}
       {info.plans.map((p) => (
