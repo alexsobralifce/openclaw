@@ -51,11 +51,13 @@ export function sanitizeTags(input: unknown, max = MAX_TAGS): string[] {
 }
 
 /** Lê a resposta da IA ({"titulo","assunto","tags","resumo","erro"}) e devolve a ficha pronta, ou o motivo de não haver. */
-export function parseDocPlan(raw: string): { doc?: DocFields; error?: string } {
+export function parseDocPlan(raw: string, fallbackText = ""): { doc?: DocFields; error?: string } {
   const j = extractJson(raw);
-  const summary = String(j?.resumo ?? "").replace(/\s+/g, " ").trim().slice(0, MAX_SUMMARY);
+  let summary = String(j?.resumo ?? "").replace(/\s+/g, " ").trim().slice(0, MAX_SUMMARY);
   const title = String(j?.titulo ?? "").trim();
   if (!summary && !title) return { error: String(j?.erro ?? "não encontrei texto aproveitável") };
+  // A IA não resumiu: sem resumo o documento ficaria difícil de achar na busca, então entra o começo do texto ou título + assunto
+  if (!summary) summary = (fallbackText.replace(/\s+/g, " ").trim() || [title, String(j?.assunto ?? "")].filter(Boolean).join(" — ")).slice(0, 400);
   return { doc: { title: cleanTitle(title, "Documento"), topic: cleanTopic(j?.assunto), tags: sanitizeTags(j?.tags), summary } };
 }
 

@@ -9,6 +9,7 @@ import { assistantInstance, can, workspaceCommander } from "./commander";
 import { loadMute } from "./email-mute";
 import { channelOfInstance } from "./channel-route";
 import { StateService } from "../../state/state.service";
+import { notifyOn } from "./notify-prefs";
 
 const INTERVAL_MS = Number(process.env.EMAIL_POLL_SECONDS || 60) * 1000;
 
@@ -112,8 +113,11 @@ export class EmailWatcherService implements OnModuleInit, OnModuleDestroy {
       const instance = await assistantInstance(workspaceId);
       if (owner && can(owner, "assistant") && can(owner, "email") && instance) {
         // No app (web e celular) não há mensagem: o e-mail entra na fila e o menu mostra quantos não lidos há
-        if (channelOfInstance(instance) === "app") await this.assistant.notifyUnread(owner, await this.menu.enqueueNew(workspaceId, fresh));
-        else await this.assistant.sendToUser(owner, instance, await this.menu.notifyNew(workspaceId, fresh));
+        // Avisos de e-mail desligados no menu: a fila e o contador continuam, só não há push nem mensagem
+        const loud = await notifyOn(this.state, workspaceId, "email");
+        if (channelOfInstance(instance) === "app") await this.assistant.notifyUnread(owner, await this.menu.enqueueNew(workspaceId, fresh), loud);
+        else if (loud) await this.assistant.sendToUser(owner, instance, await this.menu.notifyNew(workspaceId, fresh));
+        else await this.menu.enqueueNew(workspaceId, fresh);
       } else if (!instance) {
         this.logger.warn(`Novo e-mail no workspace ${workspaceId}, mas não há WhatsApp para avisar.`);
       }

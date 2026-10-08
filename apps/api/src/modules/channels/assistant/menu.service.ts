@@ -9,6 +9,8 @@ import { WeatherService } from "./weather.service";
 import { VaultService } from "../../vault/vault.service";
 import { isVaultHome, isVaultLock, looksLikeSharedSecret, vaultQuery } from "./vault-command";
 import { describeCode, weatherDetail, weatherLines } from "./weather";
+import { countText, dayBlocks, dayLabel, dayOf, DayEvent, weekSummary } from "./agenda-view";
+import { evremKey, loadNotify, NOTIFY_KINDS, NOTIFY_LABEL, parseNotifyCommand, remindPlan, RemindChoice, setNotify } from "./notify-prefs";
 import { isLocationQuery, isWeatherQuery, loadLocation, parseCityCommand, saveLocation, UserLocation } from "./location";
 import { todayItems, when as routineWhen } from "./routine";
 import { AssistantConfig, configKey, fmtInterval, IDLE_MENU_MS, intervalProblem, parseInterval, PRESETS } from "./chat-clean";
@@ -267,6 +269,11 @@ export class MenuService {
       // Clima, localização, Drive e rotina: de qualquer tela (menos onde há algo a digitar ou confirmar)
       if (!isInput && !pending) {
         if (isWeatherQuery(flat)) return await this.weatherView(workspaceId);
+        const nc = parseNotifyCommand(flat);
+        if (nc) {
+          await setNotify(this.state, workspaceId, nc.kind, nc.on);
+          return `${NOTIFY_LABEL[nc.kind].icon} *${NOTIFY_LABEL[nc.kind].label}:* ${nc.on ? "ligado ✅" : "desligado ⏸️"}\n\n${await this.notifyMenu(workspaceId)}`;
+        }
         const city = parseCityCommand(text);
         if (city) return await this.setCity(workspaceId, city);
         if (isLocationQuery(flat)) return await this.locationView(workspaceId);
@@ -385,6 +392,7 @@ export class MenuService {
       // Configurações
       case "config": {
         if (n === 0) return this.mainMenu(ws, false);
+        if (n === 3) return this.notifyMenu(ws);
         if (n === 1) {
           await this.set(ws, "config_clean_input");
           return [
@@ -823,15 +831,39 @@ _Ou 0 para voltar._`;
       // Agenda
       case "agenda": {
         if (n === 0) return this.mainMenu(ws, false);
-        if (n === 1) return this.agendaList(ws, 0, 0, "hoje");
-        if (n === 2) return this.agendaList(ws, 1, 1, "amanhã");
-        if (n === 3) return this.agendaList(ws, 0, 7, "nos próximos 7 dias");
-        if (n === 4) {
-          await this.set(ws, "event_input");
-          return `${head("➕", "Novos eventos")}\nDescreva do seu jeito, por texto ou áudio 🎙️. Pode mandar *vários de uma vez*: cole a lista, um *link*, uma *imagem/print*, um PDF ou um post encaminhado, que eu leio e crio tudo.\n_Ex.: "reunião com o João amanhã às 15h por 1 hora"_\n${DIV}\n${opts(BACK)}`;
-        }
+        if (n === 1) return this.agendaDayEntry(ws, 0);
+        if (n === 2) return this.agendaDayEntry(ws, 1);
+        if (n === 3) return this.agendaWeek(ws);
+        if (n === 4) return this.eventInputEntry(ws);
         if (n === 5) return this.eventDeletePick(ws);
         return n === null ? null : this.invalid();
+      }
+      case "agenda_week": {
+        if (n === 0) return this.agendaMenu(ws);
+        const day = n !== null ? d.days?.[n - 1] : null;
+        if (!day) return n === null ? null : this.invalid();
+        return this.agendaDayView(ws, day, d.events, d.multi, d.days);
+      }
+      case "agenda_day": {
+        if (n === 0) return d.days ? this.agendaWeekView(ws, d.days, d.events, d.multi) : this.agendaMenu(ws);
+        if (n === 1) return this.eventInputEntry(ws);
+        return n === null ? null : this.invalid();
+      }
+      case "event_remind": {
+        if (n === null) return null;
+        const none = d.allDay ? 3 : 4;
+        if (n === 0 || n === none) return this.eventRemindSave(ws, d, "none");
+        const choice = (d.allDay ? ["eve", "day"] : ["15m", "1h", "1d"])[n - 1] as RemindChoice | undefined;
+        return choice ? this.eventRemindSave(ws, d, choice) : this.invalid();
+      }
+      case "notify": {
+        if (n === 0) return this.configMenu(ws);
+        const kind = n !== null ? NOTIFY_KINDS[n - 1] : undefined;
+        if (!kind) return n === null ? null : this.invalid();
+        const was = (await loadNotify(this.state, ws))[kind];
+        await setNotify(this.state, ws, kind, !was);
+        const L = NOTIFY_LABEL[kind];
+        return `${L.icon} *${L.label}:* ${was ? "desligado ⏸️" : "ligado ✅"}\n\n${await this.notifyMenu(ws)}`;
       }
       case "event_delete": {
         if (n === 0) return this.agendaMenu(ws);
@@ -1037,7 +1069,7 @@ _Ou 0 para voltar._`;
       labels.push({ id: "vault", icon: "🔐", label: "Cofre de senhas", sub: "peça: senha do github" });
     }
     options.push({ type: "config" });
-    labels.push({ id: "config", icon: "⚙️", label: "Configurações", sub: "limpeza do chat" });
+    labels.push({ id: "config", icon: "⚙️", label: "Configurações", sub: "avisos e limpeza do chat" });
     // Itens que o dono escondeu no painel (menos os sempre visíveis): saem da lista, mas o comando escrito ou falado continua valendo
     const hidden = new Set(sanitizeHidden(await this.state.get(menuHiddenKey(ws))));
     const keep = labels.map((l) => !hidden.has(l.id));
@@ -1890,7 +1922,7 @@ _Ou 0 para voltar._`;
       header,
       `🏷️ ${tagsLine(d.tags) || "_sem tags_"}`,
       `📅 ${this.docDate(d)}${d.sizeBytes ? ` · ${fmtSize(d.sizeBytes)}` : ""}${d.pages ? ` · ${d.pages} pág.` : ""}`,
-      d.summary ? `_${short(d.summary, 320)}_` : "",
+      d.summary ? `📝 _${short(d.summary, 320)}_\n🔎 _Você acha este documento buscando por palavras do resumo._` : "",
       DIV,
       opts([1, "🏷️", "Editar tags"], [2, "📥", "Receber o arquivo"], [3, "🗑️", "Apagar"], [4, "📂", "Mudar categoria"], BACK),
       foot("Diga *tags: contrato, aluguel* ou *categoria: Saúde*"),
@@ -2189,7 +2221,7 @@ _Ou 0 para voltar._`;
           `tags: de 3 a 6 palavras-chave curtas (1 ou 2 palavras), minúsculas, que o dono usaria para BUSCAR este documento (tipo, empresa ou pessoa, tema)${vocabulary.length ? `; reaproveite estas se combinarem: ${vocabulary.join(", ")}` : ""}. ` +
           `resumo: até 400 caracteres. Nunca inclua senhas, CPF ou números de cartão.`;
         try {
-          const plan = parseDocPlan(await this.gemini.extract(system, { text: body }));
+          const plan = parseDocPlan(await this.gemini.extract(system, { text: body }), body);
           if (!plan.doc) continue;
           await createDocument({
             workspaceId: ws,
@@ -2471,7 +2503,7 @@ _Ou 0 para voltar._`;
       `🧹 *Limpeza do chat:* ${fmtInterval(cfg.cleanMinutes)}${next}`,
       `⏱️ *Volto ao menu principal* após ${Math.round(IDLE_MENU_MS / 60_000)} min sem resposta`,
       DIV,
-      opts([1, "🧹", "Mudar a limpeza do chat"], [2, "🗑️", "Limpar agora"], BACK),
+      opts([1, "🧹", "Mudar a limpeza do chat"], [2, "🗑️", "Limpar agora"], [3, "🔔", "Avisos (e-mail, agenda, notas)"], BACK),
       foot("Só apago mensagens enviadas pelo número conectado (as minhas respostas) e recentes, de até 2 dias. As suas mensagens para mim o WhatsApp não me deixa apagar: limpe por aí."),
     ].join("\n");
   }
@@ -2917,39 +2949,89 @@ _Ou 0 para voltar._`;
     return opts([1, "📌", "Hoje"], [2, "🌅", "Amanhã"], [3, "🗓️", "Próximos 7 dias"], [4, "➕", "Criar evento"], [5, "🗑️", "Apagar evento"], BACK);
   }
 
-  private async agendaList(ws: string, fromDay: number, toDay: number, label: string) {
+  private async agendaFetch(ws: string, fromDay: number, toDay: number) {
     const accounts = await this.google.listAccounts(ws);
     const min = `${dateStr(fromDay)}T00:00:00-03:00`;
     const max = `${dateStr(toDay)}T23:59:59-03:00`;
-    const all: any[] = [];
+    const events: DayEvent[] = [];
     for (const account of accounts) {
-      const evs = await this.google.calendarList(ws, min, max, account);
-      evs.forEach((e: any) => all.push({ ...e, account }));
+      for (const e of await this.google.calendarList(ws, min, max, account)) {
+        events.push({ titulo: e.titulo, inicio: e.inicio, fim: e.fim, local: e.local, account });
+      }
     }
-    all.sort((a, b) => String(a.inicio).localeCompare(String(b.inicio)));
-    await this.set(ws, "agenda");
-    const title = `Agenda · ${label}`;
-    if (!all.length) return [head("📅", title), "🙌 Nada marcado por aqui.", DIV, this.agendaOptions()].join("\n");
+    return { events, multi: accounts.length > 1 };
+  }
 
-    const multi = accounts.length > 1;
-    const letter = (acc: string) => String.fromCharCode(65 + accounts.indexOf(acc));
-    const days = new Map<string, any[]>();
-    for (const e of all) {
-      const k = String(e.inicio).includes("T") ? new Date(e.inicio).toLocaleDateString("sv-SE", { timeZone: TZ }) : String(e.inicio).slice(0, 10);
-      days.set(k, [...(days.get(k) ?? []), e]);
+  /** Hoje ou amanhã: direto no dia. */
+  private async agendaDayEntry(ws: string, offset: number) {
+    const { events, multi } = await this.agendaFetch(ws, offset, offset);
+    return this.agendaDayView(ws, dateStr(offset), events, multi);
+  }
+
+  /** Próximos 7 dias: um cartão por dia, inclusive os livres (os botões ficam sempre no mesmo lugar). */
+  private async agendaWeek(ws: string) {
+    const days = Array.from({ length: 7 }, (_, i) => dateStr(i));
+    const { events, multi } = await this.agendaFetch(ws, 0, 6);
+    return this.agendaWeekView(ws, days, events, multi);
+  }
+
+  private async agendaWeekView(ws: string, days: string[], events: DayEvent[], multi: boolean) {
+    await this.set(ws, "agenda_week", { days, events: events.slice(0, 80), multi });
+    const rows = weekSummary(days, events, TZ).map((w, i) => `${key(i + 1)} ${w.count ? "📌" : "🌿"} ${dayLabel(w.day, TZ, dateStr(0), dateStr(1))}\n     _${countText(w)}_`);
+    return [head("🗓️", "Próximos 7 dias", "Toque num dia para ver os compromissos"), rows.join("\n\n"), foot("Responda com o número do dia"), opts(BACK)].join("\n");
+  }
+
+  /** Os compromissos de um dia, em ordem e um bloco por compromisso. `week` volta à semana; sem ela, volta ao menu da agenda. */
+  private async agendaDayView(ws: string, day: string, events: DayEvent[], multi: boolean, week?: string[]) {
+    await this.set(ws, "agenda_day", { day, events: events.slice(0, 80), multi, days: week });
+    const evs = events.filter((e) => dayOf(e, TZ) === day);
+    return [
+      head("📅", dayLabel(day, TZ, dateStr(0), dateStr(1)), evs.length ? `${evs.length} compromisso${evs.length > 1 ? "s" : ""}` : undefined),
+      evs.length ? dayBlocks(evs, TZ, multi).join("\n\n") : "🙌 Nada marcado para este dia.",
+      DIV,
+      opts([1, "➕", "Criar evento"], [0, "⬅️", week ? "Voltar aos 7 dias" : "Voltar"]),
+    ].join("\n");
+  }
+
+  private async eventInputEntry(ws: string) {
+    await this.set(ws, "event_input");
+    return `${head("➕", "Novos eventos")}\nDescreva do seu jeito, por texto ou áudio 🎙️. Pode mandar *vários de uma vez*: cole a lista, um *link*, uma *imagem/print*, um PDF ou um post encaminhado, que eu leio e crio tudo.\n_Ex.: "reunião com o João amanhã às 15h por 1 hora"_\n${DIV}\n${opts(BACK)}`;
+  }
+
+  /** Depois de criar: uma pergunta só, valendo para todos os eventos criados. */
+  private async eventRemindAsk(ws: string, created: { id: string; title: string; start: string; account: string }[]) {
+    const allDay = created.every((e) => !e.start.includes("T"));
+    await this.set(ws, "event_remind", { created, allDay });
+    const what = created.length === 1 ? `de *${short(created[0].title, 40)}*` : `dos ${created.length} eventos`;
+    return [
+      head("🔔", "Quer um lembrete?", `eu aviso você ${what}`),
+      allDay
+        ? opts([1, "🌙", "Na véspera, às 18h"], [2, "☀️", "No dia, às 8h"], [3, "🙅", "Não precisa"])
+        : opts([1, "⏰", "15 minutos antes"], [2, "🕐", "1 hora antes"], [3, "📆", "1 dia antes"], [4, "🙅", "Não precisa"]),
+    ].join("\n");
+  }
+
+  private async eventRemindSave(ws: string, d: { created: { id: string; title: string; start: string; account: string }[] }, choice: RemindChoice) {
+    let saved = 0;
+    if (choice !== "none") {
+      for (const e of d.created) {
+        const plan = remindPlan(e.start, choice);
+        if (!plan) continue;
+        await this.state.set(evremKey(ws, e.id), { at: plan.at, title: e.title, start: e.start, account: e.account, label: plan.label }, plan.at - Date.now() + 3 * 3600_000);
+        saved++;
+      }
     }
-    const blocks = [...days.entries()].map(([k, evs]) => {
-      const dl = new Date(`${k}T12:00:00-03:00`).toLocaleDateString("pt-BR", { timeZone: TZ, weekday: "long", day: "2-digit", month: "2-digit" });
-      const rows = evs.map((e) => {
-        const time = String(e.inicio).includes("T")
-          ? new Date(e.inicio).toLocaleTimeString("pt-BR", { timeZone: TZ, hour: "2-digit", minute: "2-digit" })
-          : "dia todo";
-        return `${padTo(time, 8)} ${multi ? `${letter(e.account)} ` : ""}${short(e.titulo ?? "(sem título)", multi ? 22 : 24)}`;
-      });
-      return `📆 *${k === dateStr(0) ? "Hoje · " : ""}${dl}*\n${mono(rows)}`;
-    });
-    const legend = multi ? `\n🔖 _${accounts.map((a: string) => `${letter(a)} = ${a.split("@")[0]}`).join(" · ")}_` : "";
-    return [head("📅", title), blocks.join("\n"), legend, DIV, this.agendaOptions()].filter(Boolean).join("\n");
+    await this.set(ws, "agenda");
+    const off = saved && !(await loadNotify(this.state, ws)).agenda ? "\n⚠️ _Os lembretes da agenda estão desligados. Para ligar: *Configurações → Avisos*._" : "";
+    const msg = choice === "none" ? "👍 Sem lembrete." : saved ? `🔔 Combinado! Aviso você ${saved > 1 ? `dos ${saved} eventos` : "do evento"}.` : "⏳ Esse horário de lembrete já passou, então não vou avisar.";
+    return [msg + off, DIV, this.agendaOptions()].join("\n");
+  }
+
+  private async notifyMenu(ws: string) {
+    const prefs = await loadNotify(this.state, ws);
+    await this.set(ws, "notify");
+    const rows = NOTIFY_KINDS.map((k, i) => `${key(i + 1)} ${NOTIFY_LABEL[k].icon} ${NOTIFY_LABEL[k].label}\n     _${prefs[k] ? "✅ ligado" : "⏸️ desligado"} · toque para ${prefs[k] ? "desligar" : "ligar"}_`);
+    return [head("🔔", "Avisos", "o que eu te aviso"), rows.join("\n\n"), foot("Toque num item para ligar ou desligar"), opts(BACK)].join("\n");
   }
 
   /** Apagar evento, passo 1: os eventos dos próximos 7 dias, numerados, de todas as contas. */
@@ -3068,14 +3150,16 @@ _Ou 0 para voltar._`;
     const ok: AgendaEvent[] = [];
     const dup: AgendaEvent[] = [];
     const failed: AgendaEvent[] = [];
+    const created: { id: string; title: string; start: string; account: string }[] = [];
     for (const ev of events) {
       try {
         if (await this.alreadyExists(ws, ev, account)) {
           dup.push(ev);
           continue;
         }
-        await this.google.calendarCreate(ws, ev, account);
+        const made = await this.google.calendarCreate(ws, ev, account);
         ok.push(ev);
+        if (made?.id) created.push({ id: made.id, title: ev.title, start: ev.start, account });
       } catch (e: any) {
         this.logger.warn(`Criar evento "${ev.title}" falhou: ${e.message}`);
         failed.push(ev);
@@ -3083,15 +3167,16 @@ _Ou 0 para voltar._`;
     }
     await this.set(ws, "agenda");
     const title = ok.length === 1 ? "Evento criado!" : ok.length ? `${ok.length} eventos criados!` : "Nenhum evento criado";
-    return [
+    const lines = [
       head(ok.length ? "✅" : "😕", title),
       ...ok.map((e) => `📌 *${short(e.title, 60)}*\n🕐 ${this.when(e.start, e.end)}`),
       dup.length ? `↩️ _Já estavam na agenda: ${short(dup.map((e) => e.title).join("; "), 150)}._` : "",
       failed.length ? `⚠️ Não consegui criar: ${short(failed.map((e) => e.title).join("; "), 150)}.` : "",
       `📥 ${account}`,
-      DIV,
-      this.agendaOptions(),
-    ].filter(Boolean).join("\n");
+    ];
+    // O lembrete é escolhido por quem agenda: uma pergunta só, para todos os eventos criados
+    if (created.length) return [...lines, await this.eventRemindAsk(ws, created)].filter(Boolean).join("\n");
+    return [...lines, DIV, this.agendaOptions()].filter(Boolean).join("\n");
   }
 
   private async alreadyExists(ws: string, ev: AgendaEvent, account: string): Promise<boolean> {

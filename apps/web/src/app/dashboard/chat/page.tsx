@@ -50,6 +50,7 @@ export default function ChatPage() {
   const firstScroll = useRef(true);
   const [text, setText] = useState("");
   const [typing, setTyping] = useState(false);
+  const [unread, setUnread] = useState(0); // e-mails não lidos, atualizado ao vivo pelo servidor
   const [error, setError] = useState("");
   const [panel, setPanel] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -97,6 +98,7 @@ export default function ChatPage() {
     const socket = io(`${API}/chat`, { withCredentials: true, transports: ["websocket"] });
     socket.on("chat:message", add);
     socket.on("chat:typing", (p: { on: boolean }) => setTyping(p.on));
+    socket.on("chat:unread", (p: { total: number }) => setUnread(p.total));
     socket.on("chat:redacted", ({ id }: { id: string }) => setMessages((prev) => prev.map((m) => (m.id === id ? { ...m, text: "••••" } : m))));
     // Ao reconectar, busca o que chegou enquanto esteve fora
     socket.on("connect", () => setMessages((prev) => {
@@ -146,6 +148,16 @@ export default function ChatPage() {
     setError("");
     try {
       add(await api.appChat.send("menu"));
+    } catch (e: any) {
+      setError(e.message);
+    }
+  }
+
+  /** Toque num atalho (selo de e-mails): manda o texto como se tivesse sido digitado. */
+  async function pickText(t: string) {
+    setError("");
+    try {
+      add(await api.appChat.send(t));
     } catch (e: any) {
       setError(e.message);
     }
@@ -419,6 +431,11 @@ export default function ChatPage() {
       </div>
       </div>
 
+      {unread > 0 && (
+        <button type="button" onClick={() => { setUnread(0); void pickText("fila"); }} className="mx-3 mb-1 text-left text-sm rounded-lg px-3 py-2 bg-violet-500/15 text-violet-200 hover:bg-violet-500/25" aria-live="polite">
+          📧 {unread} e-mail{unread > 1 ? "s" : ""} não lido{unread > 1 ? "s" : ""} · toque para ver
+        </button>
+      )}
       {error && <div className="mx-3 mb-1 text-xs rounded-lg px-3 py-2 bg-red-500/10 text-red-300" role="alert">{error}</div>}
 
       <input ref={fileInput} type="file" accept="image/*,application/pdf" className="hidden" onChange={(e) => { const f = e.target.files?.[0]; e.target.value = ""; if (f) void sendFile(f); }} />

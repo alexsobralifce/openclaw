@@ -7,7 +7,10 @@ import { assistantInstance, Commander, workspaceCommander } from "./commander";
 import { claimReminder, dueReminders, updateNote } from "./list-notes-store";
 import { AssistantConfig, CLEAN_MIN_AGE_MS, configKey, idleKey } from "./chat-clean";
 
+import { EventReminder, eventReminderText, notifyOn } from "./notify-prefs";
+
 const TICK_MS = 20_000;
+const TZ = process.env.ASSISTANT_TZ || "America/Fortaleza";
 /** Lembrete que falhou no envio (WhatsApp fora do ar, por exemplo) é tentado de novo até esta idade; depois disso desiste. */
 const REMINDER_RETRY_MS = 6 * 3_600_000;
 
@@ -45,6 +48,7 @@ export class AssistantSchedulerService implements OnModuleInit, OnModuleDestroy 
       await this.returnIdle(now);
       await this.cleanDue(now);
       await this.remindersDue(now);
+      await this.eventRemindersDue(now);
     } catch (e: any) {
       this.logger.error(`Tarefas do assistente falharam: ${e.message}`);
     } finally {
@@ -86,10 +90,30 @@ export class AssistantSchedulerService implements OnModuleInit, OnModuleDestroy 
     }
   }
 
+  /** Lembretes de compromissos da agenda, escolhidos por quem agendou. Apaga a reserva antes de enviar: nunca repete. */
+  private async eventRemindersDue(now: number) {
+    for (const row of await this.live("evrem:", now)) {
+      const r = row.value as EventReminder | null;
+      if (!r?.at || r.at > now) continue;
+      await this.state.del(row.key);
+      const ws = row.key.split(":")[1];
+      try {
+        if (!(await notifyOn(this.state, ws, "agenda"))) continue;
+        const owner = await workspaceCommander(ws);
+        const instance = owner ? await assistantInstance(ws, owner) : null;
+        if (owner && instance) await this.assistant.sendToUser(owner, instance, eventReminderText(r, TZ));
+        else this.logger.warn(`Lembrete de evento: sem canal para avisar o workspace ${ws}.`);
+      } catch (e: any) {
+        this.logger.warn(`Lembrete de evento falhou: ${e.message}`);
+      }
+    }
+  }
+
   /** Manda a nota como lembrete. Reserva o envio antes (nunca repete); se o envio falha, devolve a vez por algumas horas. */
   private async remindersDue(now: number) {
     for (const n of await dueReminders(new Date(now))) {
       if (!n.remindAt || !(await claimReminder(n.id, n.remindAt, new Date(now)))) continue;
+      if (!(await notifyOn(this.state, n.workspaceId, "notes"))) continue; // avisos de notas desligados: o lembrete é descartado
       let sent = false;
       try {
         const owner = await workspaceCommander(n.workspaceId);

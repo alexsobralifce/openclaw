@@ -50,6 +50,11 @@ export class AppChatService {
 
   constructor(private state: StateService, private gateway: AppChatGateway, private push: PushService) {}
 
+  /** Total de e-mails não lidos, ao vivo, para o selo do chat (sem mensagem no histórico). */
+  unread(userId: string, total: number) {
+    this.gateway.emit(userId, "chat:unread", { total });
+  }
+
   /** Só a notificação (nada no histórico), e só com o app fechado. `tag` faz o aviso novo substituir o anterior. Quem não quer, desliga em Assistente → Notificações. */
   async pushNotice(userId: string, body: string, tag: string) {
     if (await this.gateway.online(userId)) return;

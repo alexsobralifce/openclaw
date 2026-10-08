@@ -692,8 +692,9 @@ export class AssistantService {
   }
 
   /** E-mail novo no app: só uma notificação com o total de não lidos (sem mensagem no chat). */
-  async notifyUnread(c: Commander, total: number): Promise<void> {
-    await this.appChat?.pushNotice(c.userId, `📧 ${total} e-mail${total > 1 ? "s" : ""} não lido${total > 1 ? "s" : ""}`, "email");
+  async notifyUnread(c: Commander, total: number, push = true): Promise<void> {
+    this.appChat?.unread(c.userId, total); // com o app aberto, o selo de não lidos muda na hora
+    if (push) await this.appChat?.pushNotice(c.userId, `📧 ${total} e-mail${total > 1 ? "s" : ""} não lido${total > 1 ? "s" : ""}`, "email");
   }
 
   /** O usuário abriu o app: mostra o menu principal (com a dica de conectar canais, se faltar), sem mensagem dele no histórico. */
