@@ -53,6 +53,10 @@ model User {
   services     String[]     @default([])
   // Plano comercial (aprendiz, mago, arquimago, teste); nulo = sem plano (valem os limites gerais do ambiente). Sem @unique de propósito.
   plan         String?
+  // Cobrança (Mercado Pago). Colunas novas: sem @unique. planUntil nulo = sem vencimento (plano dado pelo admin).
+  planUntil        DateTime?
+  mpSubscriptionId String?
+  billingStatus    String? // estado da assinatura no Mercado Pago: authorized | paused | cancelled | pending
   // Canal principal do assistente: whatsapp (padrão) | app | telegram. Sem @unique: a unicidade do Telegram é garantida no código.
   assistantChannel String?
   telegramChatId   String?
@@ -70,6 +74,7 @@ model User {
   // numa coluna nova faz o `prisma db push` de produção parar pedindo --accept-data-loss
   @@index([phone])
   @@index([telegramChatId])
+  @@index([mpSubscriptionId])
 }
 
 model WorkspaceMember {

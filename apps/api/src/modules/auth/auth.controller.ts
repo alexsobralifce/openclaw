@@ -3,7 +3,7 @@ import type { Response } from "express";
 import { Transform } from "class-transformer";
 import { IsEmail, IsOptional, IsString, Matches, MaxLength, MinLength } from "class-validator";
 import { AuthService } from "./auth.service";
-import { Access } from "./access";
+import { Access, AllowExpired } from "./access";
 import { RateLimit, RateLimitGuard } from "./rate-limit";
 import { SERVICES } from "./permissions";
 import { clearSessionCookie, setSessionCookie } from "./session-cookie";
@@ -132,6 +132,7 @@ export class AuthController {
   }
 
   @Access()
+  @AllowExpired()
   @Get("me")
   me(@Request() req: any) {
     return this.auth.me(req.user.id);

@@ -1,10 +1,15 @@
 import { applyDecorators, CanActivate, ExecutionContext, ForbiddenException, Injectable, SetMetadata, UseGuards } from "@nestjs/common";
 import { Reflector } from "@nestjs/core";
 import { AuthGuard } from "@nestjs/passport";
+import { planExpired } from "./plans";
 import { canManageUsers, effectiveServices, Service, SERVICES } from "./permissions";
 
 const SERVICE_KEY = "access:service";
 const ADMIN_KEY = "access:admin";
+const EXPIRED_OK_KEY = "access:expired-ok";
+
+/** Rota que continua aberta com a assinatura vencida (o perfil, o plano e a própria cobrança). */
+export const AllowExpired = () => SetMetadata(EXPIRED_OK_KEY, true);
 
 @Injectable()
 export class AccessGuard implements CanActivate {
@@ -15,6 +20,9 @@ export class AccessGuard implements CanActivate {
     const targets = [ctx.getHandler(), ctx.getClass()];
     if (this.reflector.getAllAndOverride<boolean>(ADMIN_KEY, targets) && !canManageUsers(user.role)) {
       throw new ForbiddenException("Apenas administradores da plataforma");
+    }
+    if (planExpired(user) && !this.reflector.getAllAndOverride<boolean>(EXPIRED_OK_KEY, targets)) {
+      throw new ForbiddenException({ statusCode: 403, code: "PLAN_EXPIRED", message: "Sua assinatura venceu. Renove em Configurações para voltar a usar." });
     }
     const service = this.reflector.getAllAndOverride<Service>(SERVICE_KEY, targets);
     if (service && !effectiveServices(user.role, user.services).includes(service)) {

@@ -1,0 +1,114 @@
+import { BadRequestException, Injectable, Logger, ServiceUnavailableException } from "@nestjs/common";
+import { prisma } from "@openclaw/database";
+import { MercadoPagoConfig, Payment, PreApproval, Preference } from "mercadopago";
+import { isPlan, planExpired, PLANS } from "../auth/plans";
+import { StateService } from "../state/state.service";
+import { makeReference, nextPlanUntil, parseReference } from "./mp-utils";
+
+export type PayMethod = "card" | "pix";
+
+/** Cobrança do MagoBox pelo Mercado Pago: o usuário paga na página do Mercado Pago e a API confere cada aviso consultando o pagamento lá. */
+@Injectable()
+export class BillingService {
+  private readonly logger = new Logger(BillingService.name);
+
+  constructor(private state: StateService) {}
+
+  private client() {
+    const accessToken = process.env.MERCADOPAGO_ACCESS_TOKEN;
+    if (!accessToken) throw new ServiceUnavailableException("Cobrança ainda não configurada.");
+    return new MercadoPagoConfig({ accessToken, options: { timeout: 10_000 } });
+  }
+
+  private webUrl() {
+    return (process.env.WEB_URL || "http://localhost:3000").replace(/\/+$/, "");
+  }
+
+  private notificationUrl() {
+    return `${(process.env.API_URL || "http://localhost:3001").replace(/\/+$/, "")}/api/v1/billing/webhook`;
+  }
+
+  async status(userId: string) {
+    const u = await prisma.user.findUnique({ where: { id: userId }, select: { role: true, plan: true, planUntil: true, billingStatus: true } });
+    return { plan: u?.plan ?? null, planUntil: u?.planUntil ?? null, billingStatus: u?.billingStatus ?? null, expired: !!u && planExpired(u), configured: !!process.env.MERCADOPAGO_ACCESS_TOKEN };
+  }
+
+  /** Cria o checkout e devolve o endereço da página do Mercado Pago. */
+  async checkout(userId: string, planId: string, method: PayMethod): Promise<{ url: string }> {
+    if (!isPlan(planId) || PLANS[planId].priceBrl <= 0) throw new BadRequestException("Plano inválido para assinatura.");
+    const plan = PLANS[planId];
+    const user = await prisma.user.findUnique({ where: { id: userId }, select: { email: true } });
+    if (!user) throw new BadRequestException("Usuário não encontrado.");
+    const reference = makeReference(userId, planId);
+    const back = `${this.webUrl()}/dashboard/settings`;
+    const mp = this.client();
+
+    if (method === "card") {
+      const sub = await new PreApproval(mp).create({
+        body: {
+          reason: `MagoBox · plano ${plan.name}`,
+          external_reference: reference,
+          payer_email: user.email,
+          back_url: back,
+          status: "pending",
+          auto_recurring: { frequency: 1, frequency_type: "months", transaction_amount: plan.priceBrl, currency_id: "BRL" },
+        },
+      });
+      if (!sub.init_point) throw new ServiceUnavailableException("O Mercado Pago não devolveu o link de pagamento.");
+      return { url: sub.init_point };
+    }
+
+    const pref = await new Preference(mp).create({
+      body: {
+        items: [{ id: planId, title: `MagoBox · plano ${plan.name} (1 mês)`, quantity: 1, unit_price: plan.priceBrl, currency_id: "BRL" }],
+        payer: { email: user.email },
+        external_reference: reference,
+        notification_url: this.notificationUrl(),
+        back_urls: { success: back, pending: back, failure: back },
+        auto_return: "approved",
+        payment_methods: { excluded_payment_types: [{ id: "credit_card" }, { id: "debit_card" }, { id: "ticket" }, { id: "atm" }], installments: 1 },
+      },
+    });
+    if (!pref.init_point) throw new ServiceUnavailableException("O Mercado Pago não devolveu o link de pagamento.");
+    return { url: pref.init_point };
+  }
+
+  /** Trata um aviso já autenticado. Sempre confere o estado real consultando o Mercado Pago, nunca o corpo do aviso. */
+  async handleNotification(type: string, id: string) {
+    const mp = this.client();
+    if (type === "payment") return this.onPayment(await new Payment(mp).get({ id }));
+    if (type === "subscription_preapproval") return this.onSubscription(await new PreApproval(mp).get({ id }));
+  }
+
+  private async onPayment(pay: { id?: number; status?: string; external_reference?: string; transaction_amount?: number }) {
+    if (pay.status !== "approved" || !pay.id) return;
+    const ref = parseReference(pay.external_reference);
+    if (!ref || !isPlan(ref.planId)) return;
+    const plan = PLANS[ref.planId];
+    if ((pay.transaction_amount ?? 0) + 0.01 < plan.priceBrl) {
+      this.logger.warn(`[AUDIT] mp_valor_menor payment=${pay.id} user=${ref.userId} pago=${pay.transaction_amount} plano=${plan.priceBrl}`);
+      return;
+    }
+    // O Mercado Pago repete avisos: cada pagamento só soma o período uma vez
+    const key = `mp-paid:${pay.id}`;
+    if (await this.state.get(key)) return;
+    const user = await prisma.user.findUnique({ where: { id: ref.userId }, select: { id: true, role: true, planUntil: true, plan: true } });
+    if (!user) return;
+    await prisma.user.update({
+      where: { id: user.id },
+      data: {
+        plan: plan.id,
+        planUntil: nextPlanUntil(user.plan === plan.id ? user.planUntil : null),
+        ...(user.role === "USER" ? { services: plan.services } : {}),
+      },
+    });
+    await this.state.set(key, 1, 90 * 24 * 3600 * 1000);
+    this.logger.log(`[AUDIT] mp_plano_ativo user=${user.id} plano=${plan.id} payment=${pay.id}`);
+  }
+
+  private async onSubscription(sub: { id?: string; status?: string; external_reference?: string }) {
+    const ref = parseReference(sub.external_reference);
+    if (!ref || !sub.id) return;
+    await prisma.user.updateMany({ where: { id: ref.userId }, data: { mpSubscriptionId: sub.id, billingStatus: sub.status ?? null } });
+  }
+}

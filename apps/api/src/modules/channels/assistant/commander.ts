@@ -1,5 +1,9 @@
 import { prisma } from "@openclaw/database";
 import { effectiveServices, Service } from "../../auth/permissions";
+import { planExpired } from "../../auth/plans";
+
+/** Serviços liberados; assinatura vencida pausa o assistente (nenhum serviço) até o pagamento voltar. */
+const servicesOf = (u: { role: any; services: string[]; plan?: string | null; planUntil?: Date | null }): Service[] => (planExpired(u) ? [] : effectiveServices(u.role, u.services));
 import { phoneVariants } from "../whatsapp/phone";
 import { ChannelKind, connKey, ConnState, isChannelKind, isWhatsappDown, pickChannel, APP_INSTANCE, TELEGRAM_INSTANCE } from "./channel-route";
 
@@ -44,7 +48,7 @@ export async function findCommander(phone: string, channelWorkspaceId: string, i
   const workspaceId = user?.workspaces[0]?.workspaceId;
   if (!user || !workspaceId) return null;
   if (workspaceId !== channelWorkspaceId && sharedInstance() !== instance) return null;
-  return { userId: user.id, name: user.name, phone: user.phone!, workspaceId, services: effectiveServices(user.role, user.services), role: user.role, plan: user.plan ?? null, ...extras(user) };
+  return { userId: user.id, name: user.name, phone: user.phone!, workspaceId, services: servicesOf(user), role: user.role, plan: user.plan ?? null, ...extras(user) };
 }
 
 /** Dono do workspace, para avisos que não partem de uma mensagem (e-mails novos, automações). */
@@ -52,7 +56,7 @@ export async function workspaceCommander(workspaceId: string): Promise<Commander
   const m = await prisma.workspaceMember.findFirst({ where: { workspaceId, role: "OWNER" }, include: { user: true } });
   const u = m?.user;
   if (!u || u.status !== "ACTIVE") return null;
-  return { userId: u.id, name: u.name, phone: u.phone ?? "", workspaceId, services: effectiveServices(u.role, u.services), role: u.role, plan: u.plan ?? null, ...extras(u) };
+  return { userId: u.id, name: u.name, phone: u.phone ?? "", workspaceId, services: servicesOf(u), role: u.role, plan: u.plan ?? null, ...extras(u) };
 }
 
 /** O usuário logado no app ou vinculado ao Telegram, como comandante do assistente (sem passar pelo número de telefone). */
@@ -60,7 +64,7 @@ export async function commanderForUser(userId: string): Promise<Commander | null
   const u = await prisma.user.findUnique({ where: { id: userId }, include: { workspaces: true } });
   const workspaceId = u?.workspaces[0]?.workspaceId;
   if (!u || u.status !== "ACTIVE" || !workspaceId) return null;
-  return { userId: u.id, name: u.name, phone: u.phone ?? "", workspaceId, services: effectiveServices(u.role, u.services), role: u.role, plan: u.plan ?? null, ...extras(u) };
+  return { userId: u.id, name: u.name, phone: u.phone ?? "", workspaceId, services: servicesOf(u), role: u.role, plan: u.plan ?? null, ...extras(u) };
 }
 
 /** O usuário que está vinculado a este chat do Telegram. */

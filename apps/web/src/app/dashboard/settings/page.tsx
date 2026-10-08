@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { api, type PlanInfo, MenuItem } from "@/lib/api";
 import { setUser } from "@/lib/auth";
 import { useMe } from "@/hooks/useMe";
+import { SubscribeCard } from "./SubscribeCard";
 
 const card = "bg-gray-900 border border-gray-800 rounded-xl p-4";
 const input = "w-full bg-gray-950 border border-gray-700 rounded-lg px-3 py-2 text-sm text-gray-200 placeholder-gray-600 focus:outline-none focus:border-violet-500";
@@ -100,6 +101,8 @@ export default function SettingsPage() {
           )}
         </div>
       )}
+
+      <SubscribeCard />
 
       <form onSubmit={save} className={`${card} space-y-3`}>
         {msg && (

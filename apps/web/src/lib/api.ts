@@ -42,6 +42,10 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   if (!res.ok) {
     const err = await res.json().catch(() => ({}));
     // Conta desativada ou pendente: encerra a sessão e mostra o motivo no login
+    // Assinatura vencida: leva para Configurações, onde se renova
+    if (res.status === 403 && err.code === "PLAN_EXPIRED" && typeof window !== "undefined" && !window.location.pathname.startsWith("/dashboard/settings")) {
+      window.location.href = "/dashboard/settings";
+    }
     if (res.status === 403 && err.code === "ACCOUNT_INACTIVE" && typeof window !== "undefined") {
       await endSession();
       window.location.href = `/auth/login?motivo=${encodeURIComponent(err.message)}`;
@@ -225,6 +229,10 @@ export const api = {
     services: () => request<Record<string, string>>("/auth/services"),
     updateMe: (data: { name?: string; phone?: string }) =>
       request<any>("/auth/me", { method: "PATCH", body: JSON.stringify(data) }),
+  },
+  billing: {
+    me: () => request<{ plans: PlanInfo[]; plan: string | null; planUntil: string | null; billingStatus: string | null; expired: boolean; configured: boolean }>("/billing/me"),
+    checkout: (plan: string, method: "card" | "pix") => request<{ url: string }>("/billing/checkout", { method: "POST", body: JSON.stringify({ plan, method }) }),
   },
   bugReports: {
     create: (message: string, page: string) => request<{ id: string }>("/bug-reports", { method: "POST", body: JSON.stringify({ message, page }) }),

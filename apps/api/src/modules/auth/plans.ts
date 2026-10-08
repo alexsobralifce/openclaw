@@ -29,3 +29,7 @@ export const PLAN_IDS = Object.keys(PLANS);
 export const isPlan = (id: unknown): id is string => typeof id === "string" && Object.prototype.hasOwnProperty.call(PLANS, id);
 /** O plano do usuário, ou null se não tem (ou se o valor guardado não existe mais). */
 export const planOf = (id?: string | null): PlanDef | null => (isPlan(id) ? PLANS[id] : null);
+
+/** Assinatura vencida: só vale para usuário comum com plano e data de vencimento (admin e root nunca pausam; sem data = sem vencimento). */
+export const planExpired = (u: { role?: string | null; plan?: string | null; planUntil?: Date | null }, now = new Date()): boolean =>
+  u.role === "USER" && !!u.plan && !!u.planUntil && u.planUntil.getTime() < now.getTime();

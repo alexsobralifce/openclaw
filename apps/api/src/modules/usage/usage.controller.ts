@@ -1,6 +1,6 @@
 import { Controller, ForbiddenException, Get, Query, Request } from "@nestjs/common";
 import { prisma } from "@openclaw/database";
-import { Access } from "../auth/access";
+import { Access, AllowExpired } from "../auth/access";
 import { planOf } from "../auth/plans";
 import { dayStamp } from "../channels/assistant/notes";
 import { loadPrices, monthlyLimitUsd, monthSpend, rollup, SYSTEM_USER } from "../channels/assistant/usage";
@@ -18,6 +18,7 @@ function limitFor(role?: string | null, plan?: string | null): number {
 export class UsageController {
   /** O próprio usuário vê o plano, o teto e quanto já gastou de IA no mês. */
   @Access()
+  @AllowExpired()
   @Get("me")
   async mine(@Request() req: any) {
     const prices = loadPrices();
