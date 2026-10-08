@@ -21,6 +21,10 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
     },
   });
   if (res.status === 401 && typeof window !== "undefined") {
+    // Só a sessão inválida (resposta padrão "Unauthorized") derruba o login; um 401 com mensagem própria
+    // (ex.: senha mestra ou chave de recuperação do cofre incorretas) é erro da tela, não fim de sessão.
+    const err = await res.json().catch(() => ({}));
+    if (err.message && err.message !== "Unauthorized") throw new Error(err.message);
     await endSession();
     window.location.href = "/auth/login";
     throw new Error("Sessão expirada. Faça login novamente.");
