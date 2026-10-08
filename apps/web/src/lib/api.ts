@@ -232,6 +232,7 @@ export const api = {
   },
   billing: {
     me: () => request<{ plans: PlanInfo[]; plan: string | null; planUntil: string | null; billingStatus: string | null; expired: boolean; configured: boolean }>("/billing/me"),
+    sync: () => request<{ plan: string | null; planUntil: string | null; billingStatus: string | null; expired: boolean }>("/billing/sync", { method: "POST" }),
     checkout: (plan: string, method: "card" | "pix") => request<{ url: string }>("/billing/checkout", { method: "POST", body: JSON.stringify({ plan, method }) }),
   },
   bugReports: {

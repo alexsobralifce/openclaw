@@ -14,7 +14,11 @@ export function SubscribeCard() {
   const [error, setError] = useState("");
 
   useEffect(() => {
-    api.billing.me().then(setInfo).catch(() => undefined);
+    // Se ainda não há plano pago ativo, confere no Mercado Pago (cobre o aviso que atrasou) antes de mostrar a situação
+    api.billing.me().then((i) => {
+      setInfo(i);
+      if (i.configured && (!i.planUntil || i.expired)) api.billing.sync().then((s) => setInfo((cur) => (cur ? { ...cur, ...s } : cur))).catch(() => undefined);
+    }).catch(() => undefined);
   }, []);
 
   async function pay(plan: string, method: "card" | "pix") {

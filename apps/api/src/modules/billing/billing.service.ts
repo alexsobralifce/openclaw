@@ -88,11 +88,31 @@ export class BillingService {
   /** Trata um aviso já autenticado. Sempre confere o estado real consultando o Mercado Pago, nunca o corpo do aviso. */
   async handleNotification(type: string, id: string) {
     const mp = this.client();
+    this.logger.log(`[AUDIT] mp_aviso tipo=${type} id=${id}`);
     if (type === "payment") return this.onPayment(await new Payment(mp).get({ id }));
+    if (type === "subscription_authorized_payment") {
+      const r = await fetch(`https://api.mercadopago.com/authorized_payments/${encodeURIComponent(id)}`, { headers: { Authorization: `Bearer ${process.env.MERCADOPAGO_ACCESS_TOKEN}` }, signal: AbortSignal.timeout(10_000) });
+      const ap: any = r.ok ? await r.json() : null;
+      if (ap?.preapproval_id) return this.onSubscription(await new PreApproval(mp).get({ id: String(ap.preapproval_id) }));
+      return;
+    }
     if (type === "subscription_preapproval") return this.onSubscription(await new PreApproval(mp).get({ id }));
   }
 
-  private async onPayment(pay: { id?: number; status?: string; external_reference?: string; transaction_amount?: number }) {
+  /**
+   * Confere no Mercado Pago os pagamentos aprovados deste usuário e ativa o plano. Cobre aviso que atrasou ou não chegou:
+   * o resultado é o mesmo do webhook (cada pagamento só conta uma vez).
+   */
+  async sync(userId: string) {
+    const mp = this.client();
+    for (const plan of Object.values(PLANS).filter((p) => p.priceBrl > 0)) {
+      const found = await new Payment(mp).search({ options: { external_reference: makeReference(userId, plan.id), status: "approved", sort: "date_created", criteria: "desc", limit: 10 } });
+      for (const pay of found.results ?? []) await this.onPayment(pay);
+    }
+    return this.status(userId);
+  }
+
+  private async onPayment(pay: { id?: number | string; status?: string; external_reference?: string; transaction_amount?: number }) {
     if (pay.status !== "approved" || !pay.id) return;
     const ref = parseReference(pay.external_reference);
     if (!ref || !isPlan(ref.planId)) return;
@@ -122,5 +142,7 @@ export class BillingService {
     const ref = parseReference(sub.external_reference);
     if (!ref || !sub.id) return;
     await prisma.user.updateMany({ where: { id: ref.userId }, data: { mpSubscriptionId: sub.id, billingStatus: sub.status ?? null } });
+    // O pagamento da assinatura pode chegar por aviso de outro tipo: confere os pagamentos dela aqui também
+    if (sub.status === "authorized") await this.sync(ref.userId);
   }
 }
