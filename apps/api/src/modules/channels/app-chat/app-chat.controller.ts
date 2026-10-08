@@ -9,6 +9,8 @@ import { AppChatService } from "./app-chat.service";
 import { PushService } from "./push.service";
 
 const MAX_TEXT = 4000;
+/** Ao abrir o app, o menu só é mostrado de novo se a conversa está parada há mais que isso (mesmo prazo da tela guardada do menu). */
+const OPEN_MENU_AFTER_MS = 30 * 60_000;
 const FILE_MIMES = /^(image\/(jpeg|png|webp|gif|heic|heif)|application\/pdf)$/;
 
 const bytesOf = (base64: unknown) => (typeof base64 === "string" ? Math.floor(base64.length * 0.75) : 0);
@@ -29,6 +31,20 @@ export class AppChatController {
   async messages(@Request() req: any, @Query("after") after?: string, @Query("limit") limit?: string) {
     const c = await this.commander(req);
     return this.chat.list(c.userId, c.workspaceId, { after, limit: limit ? Number(limit) : undefined });
+  }
+
+  /** O app abriu: se a conversa está vazia ou parada, entrega o menu principal na hora (chega pelo tempo real). */
+  @Post("open")
+  async open(@Request() req: any) {
+    const c = await this.commander(req);
+    const last = (await this.chat.list(c.userId, c.workspaceId, { limit: 1 }))[0];
+    if (last && Date.now() - new Date(last.createdAt).getTime() < OPEN_MENU_AFTER_MS) return { opened: false };
+    this.chat.typing(c.userId, true);
+    void this.assistant
+      .openMenu(c, APP_INSTANCE)
+      .catch(() => undefined)
+      .finally(() => this.chat.typing(c.userId, false));
+    return { opened: true };
   }
 
   /** Mensagem do usuário: guarda, responde pelo assistente (a resposta chega pelo tempo real) e apaga o que for segredo. */

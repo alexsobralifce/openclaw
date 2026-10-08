@@ -160,6 +160,8 @@ export const api = {
   },
   appChat: {
     messages: (after?: string) => request<ChatMessage[]>(`/app-chat/messages${after ? `?after=${encodeURIComponent(after)}` : ""}`),
+    /** Ao abrir o app: pede o menu principal se a conversa está vazia ou parada (a resposta chega pelo tempo real). */
+    open: () => request<{ opened: boolean }>("/app-chat/open", { method: "POST" }),
     send: (text: string) => request<ChatMessage>("/app-chat/messages", { method: "POST", body: JSON.stringify({ text }) }),
     sendAudio: (body: { base64: string; mime: string; seconds: number }) => request<ChatMessage>("/app-chat/audio", { method: "POST", body: JSON.stringify(body) }),
     sendFile: (body: { base64: string; mime: string; name: string; caption?: string }) => request<ChatMessage>("/app-chat/file", { method: "POST", body: JSON.stringify(body) }),

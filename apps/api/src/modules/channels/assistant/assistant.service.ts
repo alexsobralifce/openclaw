@@ -678,6 +678,13 @@ export class AssistantService {
     return { redact };
   }
 
+  /** O usuário abriu o app: mostra o menu principal (com a dica de conectar canais, se faltar), sem mensagem dele no histórico. */
+  async openMenu(c: Commander, instanceName: string): Promise<void> {
+    const answer = await this.menu.respond(c.workspaceId, "menu");
+    if (answer) await this.sendToUser(c, instanceName, answer);
+    await this.scheduleIdle(c, instanceName);
+  }
+
   /**
    * Imagem ou PDF enviado pelo dono: se ele está criando eventos (ou pediu "agenda" na legenda), o arquivo é lido e vira uma
    * lista para confirmar. Fora disso só orienta, sem baixar nada.

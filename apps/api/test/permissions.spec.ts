@@ -1,12 +1,17 @@
 import { describe, expect, it } from "vitest";
-import { ALL_SERVICES, canEditUser, canManageUsers, effectiveServices, serviceForScope } from "../src/modules/auth/permissions";
+import { ALL_SERVICES, PAUSED_SERVICES, canEditUser, canManageUsers, effectiveServices, serviceForScope } from "../src/modules/auth/permissions";
 import { toolAllowed } from "../src/modules/channels/assistant/assistant.service";
 
 describe("permissões", () => {
   it("root tem tudo; os demais só o que foi liberado (e só nomes válidos)", () => {
     expect(effectiveServices("ROOT", [])).toEqual(ALL_SERVICES);
-    expect(effectiveServices("USER", ["inbox", "hackear"])).toEqual(["inbox"]);
+    expect(effectiveServices("USER", ["email", "hackear"])).toEqual(["email"]);
     expect(effectiveServices("ADMIN", [])).toEqual([]);
+  });
+
+  it("serviços pausados somem para os demais, mas o root continua com tudo", () => {
+    expect(effectiveServices("USER", ["inbox", "api", "email"])).toEqual(["email"]);
+    expect(effectiveServices("ROOT", [])).toEqual(expect.arrayContaining(PAUSED_SERVICES));
   });
 
   it("gestão de usuários", () => {

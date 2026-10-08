@@ -30,10 +30,16 @@ export function isService(s: string): s is Service {
   return Object.prototype.hasOwnProperty.call(SERVICES, s);
 }
 
-/** O root sempre tem tudo; os demais, o que foi liberado individualmente. */
+/**
+ * Serviços pausados para todos, menos o root (decisão de 08/10/2026). O que foi liberado em cada usuário continua guardado:
+ * para reabrir, tire o serviço desta lista.
+ */
+export const PAUSED_SERVICES: Service[] = ["inbox", "contacts", "automations", "api"];
+
+/** O root sempre tem tudo; os demais, o que foi liberado individualmente, menos os serviços pausados. */
 export function effectiveServices(role: PlatformRole, services: string[]): Service[] {
   if (role === "ROOT") return ALL_SERVICES;
-  return services.filter(isService);
+  return services.filter(isService).filter((s) => !PAUSED_SERVICES.includes(s));
 }
 
 export function canManageUsers(role: PlatformRole) {

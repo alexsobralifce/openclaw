@@ -706,7 +706,7 @@ _Ou 0 para voltar._`;
         return n === null ? null : this.invalid();
       }
       case "email": {
-        if (n === 0) return this.emailList(ws, d.account);
+        if (n === 0) return d.q ? this.queueShow(ws) : this.emailList(ws, d.account);
         if (n === 1) {
           await this.set(ws, "email_reply_input", d);
           return `${head("🎙️", "Responder e-mail")}\nMe diga por texto ou áudio o que responder, que eu escrevo o e-mail.\n_Ex.: "confirmo presença" ou "peça mais prazo"_\n${DIV}\n${opts(BACK)}`;
@@ -1084,7 +1084,10 @@ _Ou 0 para voltar._`;
   /** Mostra a fila: um e-mail sozinho vira cartão com ações; vários viram lista numerada em ordem de chegada. */
   private async queueShow(ws: string): Promise<string> {
     const q = await this.queueGet(ws);
-    if (!q.length) return `📭 *Nenhum e-mail novo na fila.*\n💡 _Diga *e-mails* para ver os não lidos._`;
+    if (!q.length) {
+      await this.set(ws, "free");
+      return `📭 *Nenhum e-mail novo na fila.*\n💡 _Diga *e-mails* para ver os não lidos._\n${DIV}\n${opts([0, "🏠", "Menu"])}`;
+    }
     if (q.length === 1) {
       const m = q[0];
       await this.set(ws, "notif", { ...m, q: true });
@@ -1094,7 +1097,7 @@ _Ou 0 para voltar._`;
         `📌 *Assunto:* ${short(m.assunto ?? "(sem assunto)", 80)}`,
         `📥 *Conta:* ${accountLabel(m.account)}${this.arrivedAt(m.at)}`,
         DIV,
-        opts([1, "📖", "Ler"], [2, "🗑️", "Apagar"], [3, "↩️", "Responder"], [4, "🚫", "Spam"], [6, "👎", "Sem interesse"]),
+        opts([1, "📖", "Ler"], [2, "🗑️", "Apagar"], [3, "↩️", "Responder"], [4, "🚫", "Spam"], [6, "👎", "Sem interesse"], [0, "🏠", "Menu"]),
       ].join("\n");
     }
     // Os mais antigos primeiro; dentro deles, pessoas antes dos automáticos (a numeração segue a ordem da tela)
@@ -1117,7 +1120,10 @@ _Ou 0 para voltar._`;
     if (opts2.skip) await this.queueRemove(ws, opts2.skip.id, opts2.skip.account);
     for (let tries = 0; tries < 5; tries++) {
       const q = await this.queueGet(ws);
-      if (!q.length) return `✅ *Fila vazia.* Você viu todos os e-mails novos.\n💡 _Digite *menu* quando quiser._`;
+      if (!q.length) {
+        await this.set(ws, "free");
+        return `✅ *Fila vazia.* Você viu todos os e-mails novos.\n${DIV}\n${opts([0, "🏠", "Menu"])}`;
+      }
       const m = q[0];
       try {
         return await this.emailOpen(ws, m.account, m.id, true, m.kind);
@@ -1127,7 +1133,8 @@ _Ou 0 para voltar._`;
         await this.queueRemove(ws, m.id, m.account);
       }
     }
-    return `😕 Não consegui abrir os próximos e-mails da fila. Digite *e-mails* para ver os não lidos.`;
+    await this.set(ws, "free");
+    return `😕 Não consegui abrir os próximos e-mails da fila. Digite *e-mails* para ver os não lidos.\n${DIV}\n${opts([0, "🏠", "Menu"])}`;
   }
 
   /** Depois de tratar um e-mail: se veio da fila, já abre o próximo; senão, volta à lista de não lidos. */
@@ -1135,8 +1142,8 @@ _Ou 0 para voltar._`;
     const left = (await this.queueGet(ws)).length;
     if (fromQueue && left) return `${msg}\n\n${await this.nextFromQueue(ws)}`;
     if (fromQueue) {
-      await this.setMain(ws);
-      return `${msg}\n\n✅ *Fila vazia.* Você viu todos os e-mails novos.\n💡 _Digite *menu* quando quiser._`;
+      await this.set(ws, "free");
+      return `${msg}\n\n✅ *Fila vazia.* Você viu todos os e-mails novos.\n${DIV}\n${opts([0, "🏠", "Menu"])}`;
     }
     return `${msg}\n\n${await this.emailList(ws, account)}`;
   }
@@ -1182,7 +1189,18 @@ _Ou 0 para voltar._`;
     const title = greet ? `${saud}! Sou o MagoBox` : "Menu principal";
     const items = labels.map((l, i) => `${key(i + 1)} ${l.icon} ${l.label}${l.sub ? `\n     _${l.sub}_` : ""}`);
     // Linha em branco entre os itens: no WhatsApp cada opção vira um "cartão", como no app (o app ignora as linhas vazias)
-    return [head(greet ? icon : "🏠", title, "O que vamos ver agora?"), ...(await this.contextLines(ws, greet)), items.join("\n\n"), foot("Responda com o número, escreva ou mande um áudio 🎙️")].join("\n");
+    return [head(greet ? icon : "🏠", title, "O que vamos ver agora?"), ...(await this.contextLines(ws, greet)), ...(greet ? await this.connectHint(ws) : []), items.join("\n\n"), foot("Responda com o número, escreva ou mande um áudio 🎙️")].join("\n");
+  }
+
+  /** Primeiros passos: sem conta Google conectada o menu não mostra e-mail, agenda nem Drive, então explica como conectar. */
+  private async connectHint(ws: string): Promise<string[]> {
+    try {
+      if ((await this.google.listAccounts(ws)).length) return [];
+    } catch (e: any) {
+      this.logger.warn(`Dica de canais indisponível: ${e.message}`);
+      return [];
+    }
+    return ["🔌 *Primeiro passo: conecte seus canais*\nAbra *Canais* no menu do painel e toque em *Conectar Google*: isso libera e-mails, agenda e Drive aqui no menu.", DIV];
   }
 
   /** Volta à tela principal guardando opções e rótulos (os rótulos permitem escolher falando o nome). */
@@ -1532,9 +1550,10 @@ _Ou 0 para voltar._`;
       .slice(0, size)
       .map((m: any) => ({ ...m, kind: classifyEmail(m).kind === "person" ? "person" : "auto" }));
     if (!found.length) {
+      await this.set(ws, "free");
       return failed && !settled.some((r) => r.status === "fulfilled")
-        ? `😕 Não consegui buscar no Gmail: ${short(String(failed.reason?.message ?? failed.reason), 200)}`
-        : [`🤔 Não achei e-mails ${spec.label}.`, warnLine(failed)].filter(Boolean).join("\n");
+        ? `😕 Não consegui buscar no Gmail: ${short(String(failed.reason?.message ?? failed.reason), 200)}\n${DIV}\n${opts([0, "🏠", "Menu"])}`
+        : [`🤔 Não achei e-mails ${spec.label}.`, warnLine(failed), DIV, opts([0, "🏠", "Menu"])].filter(Boolean).join("\n");
     }
     await this.set(ws, "emails", { account: accounts[0], items: found, hidden: [], search: spec });
     return [

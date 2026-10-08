@@ -69,7 +69,11 @@ export default function ChatPage() {
   const add = useCallback((m: ChatMessage) => setMessages((prev) => (prev.some((p) => p.id === m.id) ? prev : [...prev, m])), []);
 
   useEffect(() => {
-    api.appChat.messages().then(setMessages).catch((e) => setError(e.message)).finally(() => setLoaded(true));
+    // Carrega o histórico e, em seguida, pede o menu (o servidor só envia se a conversa está vazia ou parada)
+    api.appChat.messages().then(setMessages).catch((e) => setError(e.message)).finally(() => {
+      setLoaded(true);
+      api.appChat.open().catch(() => undefined);
+    });
     api.telegram.status().then(setTg).catch(() => undefined);
     api.appChat.pushStatus().then(setPush).catch(() => undefined);
   }, []);
