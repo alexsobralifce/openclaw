@@ -389,13 +389,21 @@ export default function ChatPage() {
                         <div key={i}><Rich segs={parseWaRich(b.text)} /></div>
                       ) : m.id === lastBotId ? (
                         // Só a última resposta tem botões ativos: as anteriores são de telas que já mudaram
-                        <button key={i} onClick={() => void pick(b.n)} disabled={busy || typing} className="my-1 flex w-full items-center gap-3 rounded-xl bg-black/20 px-3 py-2 text-left active:bg-black/30 hover:bg-black/25 disabled:opacity-60">
-                          <span className="grid h-6 w-6 flex-shrink-0 place-items-center rounded-full bg-violet-500/40 text-xs font-semibold tabular-nums" aria-hidden>{b.n}</span>
-                          <span className="min-w-0 flex-1">
-                            <span className="block"><Rich segs={parseWaRich(b.label)} /></span>
-                            {b.sub && <span className="block text-xs opacity-70"><Rich segs={parseWaRich(b.sub)} /></span>}
-                          </span>
-                        </button>
+                        <div key={i} className="my-1 flex w-full items-stretch gap-1">
+                          <button onClick={() => void pick(b.n)} disabled={busy || typing} className="flex min-w-0 flex-1 items-center gap-3 rounded-xl bg-black/20 px-3 py-2 text-left active:bg-black/30 hover:bg-black/25 disabled:opacity-60">
+                            <span className="grid h-6 w-6 flex-shrink-0 place-items-center rounded-full bg-violet-500/40 text-xs font-semibold tabular-nums" aria-hidden>{b.n}</span>
+                            <span className="min-w-0 flex-1">
+                              <span className="block"><Rich segs={parseWaRich(b.label)} /></span>
+                              {b.sub && <span className="block text-xs opacity-70"><Rich segs={parseWaRich(b.sub)} /></span>}
+                            </span>
+                          </button>
+                          {/* Lista de arquivos: o botão de baixar fica na própria linha (o número da linha é o do arquivo) */}
+                          {b.n >= 1 && m.meta?.files?.[b.n - 1] && (
+                            <button onClick={() => void downloadListed(m.meta!.files![b.n - 1])} disabled={downloading === m.meta.files[b.n - 1].id} aria-label={`Baixar ${m.meta.files[b.n - 1].nome}`} className="grid w-11 flex-shrink-0 place-items-center rounded-xl bg-black/20 active:bg-black/30 hover:bg-black/25 disabled:opacity-60">
+                              <svg width="20" height="20" fill="none" viewBox="0 0 24 24" aria-hidden><path d="M12 3v12m0 0-4-4m4 4 4-4M5 21h14" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" /></svg>
+                            </button>
+                          )}
+                        </div>
                       ) : (
                         // Resposta antiga: continua no formato de botões (apagado e sem toque), nunca como lista de texto do WhatsApp
                         <div key={i} aria-disabled className="my-1 flex w-full items-center gap-3 rounded-xl bg-black/10 px-3 py-2 opacity-50">
@@ -423,7 +431,7 @@ export default function ChatPage() {
                   </button>
                 )
               )}
-              {!!m.meta?.files?.length && (
+              {!!m.meta?.files?.length && !(m.direction === "OUT" && m.id === lastBotId && splitOptions(m.text).some((b) => b.kind !== "text" && b.n >= 1)) && (
                 <div className="mt-1.5 space-y-1">
                   {m.meta.files.map((f, i) => (
                     <button key={f.id} onClick={() => void downloadListed(f)} disabled={downloading === f.id} aria-label={`Baixar ${f.nome}`}
