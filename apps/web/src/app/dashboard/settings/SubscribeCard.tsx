@@ -64,7 +64,9 @@ export function SubscribeCard() {
     <div className="bg-gray-900 border border-gray-800 rounded-xl p-4 space-y-3">
       <div>
         <h2 className="text-sm font-medium text-gray-200">Assinatura</h2>
-        {info.expired ? (
+        {info.expired && !info.plan ? (
+          <p role="alert" className="text-xs text-amber-400 mt-1">Você ainda não tem um plano. Escolha um abaixo para começar a usar.</p>
+        ) : info.expired ? (
           <p role="alert" className="text-xs text-red-400 mt-1">Sua assinatura venceu{info.planUntil ? ` em ${day(info.planUntil)}` : ""}. O assistente está pausado até você renovar; seus dados estão guardados.</p>
         ) : info.planUntil ? (
           <p className="text-xs text-gray-500 mt-1">Plano pago até {day(info.planUntil)}.</p>

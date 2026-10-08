@@ -30,6 +30,12 @@ export const isPlan = (id: unknown): id is string => typeof id === "string" && O
 /** O plano do usuário, ou null se não tem (ou se o valor guardado não existe mais). */
 export const planOf = (id?: string | null): PlanDef | null => (isPlan(id) ? PLANS[id] : null);
 
-/** Assinatura vencida: só vale para usuário comum com plano e data de vencimento (admin e root nunca pausam; sem data = sem vencimento). */
-export const planExpired = (u: { role?: string | null; plan?: string | null; planUntil?: Date | null }, now = new Date()): boolean =>
-  u.role === "USER" && !!u.plan && !!u.planUntil && u.planUntil.getTime() < now.getTime();
+/** Dias da cortesia que o admin dá ao escolher o plano Teste. */
+export const TRIAL_DAYS = 7;
+
+/**
+ * Sem acesso: usuário comum com plano vencido (admin e root nunca pausam; sem data = sem vencimento) ou cadastro novo que
+ * ainda não assinou nem ganhou plano do admin (`planRequired`).
+ */
+export const planExpired = (u: { role?: string | null; plan?: string | null; planUntil?: Date | null; planRequired?: boolean | null }, now = new Date()): boolean =>
+  u.role === "USER" && ((!!u.plan && !!u.planUntil && u.planUntil.getTime() < now.getTime()) || (!u.plan && !!u.planRequired));

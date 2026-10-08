@@ -30,7 +30,7 @@ export class BillingService {
   }
 
   async status(userId: string) {
-    const u = await prisma.user.findUnique({ where: { id: userId }, select: { role: true, plan: true, planUntil: true, billingStatus: true } });
+    const u = await prisma.user.findUnique({ where: { id: userId }, select: { role: true, plan: true, planUntil: true, planRequired: true, billingStatus: true } });
     return { plan: u?.plan ?? null, planUntil: u?.planUntil ?? null, billingStatus: u?.billingStatus ?? null, expired: !!u && planExpired(u), configured: !!process.env.MERCADOPAGO_ACCESS_TOKEN, publicKey: process.env.MERCADOPAGO_PUBLIC_KEY || null };
   }
 

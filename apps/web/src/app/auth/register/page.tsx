@@ -30,7 +30,7 @@ export default function RegisterPage() {
       }
       startSession();
       setUser(res.user);
-      router.push("/dashboard/inbox");
+      router.push("/dashboard/settings");
     } catch (err: any) {
       setError(err.message || "Erro ao criar conta");
     } finally {
@@ -115,7 +115,7 @@ export default function RegisterPage() {
           >
             {loading ? "Criando..." : "Criar workspace"}
           </button>
-          <p className="text-[11px] text-gray-500 text-center">Novos cadastros passam pela aprovação do administrador.</p>
+          <p className="text-[11px] text-gray-500 text-center">Depois de criar a conta, você escolhe um plano para começar a usar.</p>
         </form>
         )}
 

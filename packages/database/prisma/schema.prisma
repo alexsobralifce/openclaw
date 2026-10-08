@@ -48,13 +48,15 @@ model User {
   phone        String? // WhatsApp (só dígitos, com DDI) usado para falar com o assistente
   // Nível na plataforma. ROOT/ADMIN aprovam cadastros e liberam serviços, sem ver o conteúdo dos workspaces.
   role         PlatformRole @default(USER)
-  // ACTIVE por padrão para que contas já existentes continuem entrando; o cadastro público cria como PENDING
+  // ACTIVE por padrão para que contas já existentes continuem entrando; o cadastro público também entra ACTIVE, mas com planRequired (precisa de plano para usar)
   status       UserStatus   @default(ACTIVE)
   services     String[]     @default([])
   // Plano comercial (aprendiz, mago, arquimago, teste); nulo = sem plano (valem os limites gerais do ambiente). Sem @unique de propósito.
   plan         String?
   // Cobrança (Mercado Pago). Colunas novas: sem @unique. planUntil nulo = sem vencimento (plano dado pelo admin).
   planUntil        DateTime?
+  // Cadastro público: entra sem aprovação, mas só usa depois de assinar ou de o admin dar um plano. Sem @unique.
+  planRequired     Boolean   @default(false)
   mpSubscriptionId String?
   billingStatus    String? // estado da assinatura no Mercado Pago: authorized | paused | cancelled | pending
   // Canal principal do assistente: whatsapp (padrão) | app | telegram. Sem @unique: a unicidade do Telegram é garantida no código.

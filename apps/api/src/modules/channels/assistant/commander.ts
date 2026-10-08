@@ -3,7 +3,7 @@ import { effectiveServices, Service } from "../../auth/permissions";
 import { planExpired } from "../../auth/plans";
 
 /** Serviços liberados; assinatura vencida pausa o assistente (nenhum serviço) até o pagamento voltar. */
-const servicesOf = (u: { role: any; services: string[]; plan?: string | null; planUntil?: Date | null }): Service[] => (planExpired(u) ? [] : effectiveServices(u.role, u.services));
+const servicesOf = (u: { role: any; services: string[]; plan?: string | null; planUntil?: Date | null; planRequired?: boolean | null }): Service[] => (planExpired(u) ? [] : effectiveServices(u.role, u.services));
 import { phoneVariants } from "../whatsapp/phone";
 import { ChannelKind, connKey, ConnState, isChannelKind, isWhatsappDown, pickChannel, APP_INSTANCE, TELEGRAM_INSTANCE } from "./channel-route";
 

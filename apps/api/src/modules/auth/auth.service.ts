@@ -1,4 +1,4 @@
-import { Injectable, UnauthorizedException, ConflictException, ForbiddenException, HttpException, HttpStatus, ServiceUnavailableException } from "@nestjs/common";
+import { Injectable, UnauthorizedException, ConflictException, ForbiddenException, HttpException, HttpStatus } from "@nestjs/common";
 import { JwtService } from "@nestjs/jwt";
 import { prisma } from "@openclaw/database";
 import * as bcrypt from "bcryptjs";
@@ -13,9 +13,6 @@ import { planOf } from "./plans";
 // Falhas de senha por e-mail: depois de tantas, a conta espera um tempo (vale mesmo com IPs diferentes)
 const MAX_FAILS = 8;
 const FAIL_WINDOW_MS = 15 * 60_000;
-// Cadastros aguardando aprovação: teto para o cadastro público não encher a fila do administrador
-const MAX_PENDING = Number(process.env.MAX_PENDING_SIGNUPS || 30);
-
 // Hash de uma senha qualquer, só para gastar o mesmo tempo quando o e-mail não existe
 const DUMMY_HASH = bcrypt.hashSync("nao-e-uma-senha-real", 12);
 
@@ -29,7 +26,7 @@ export class AuthService {
 
   /**
    * Cada cadastro ganha o próprio workspace. O primeiro usuário do sistema vira ROOT;
-   * os demais ficam pendentes até um ROOT/ADMIN aprovar e liberar os serviços.
+   * os demais entram na hora, mas sem acesso aos serviços até assinarem um plano ou um ROOT/ADMIN dar um (planRequired).
    */
   async register(email: string, name: string, password: string, workspaceName: string) {
     const passwordHash = await bcrypt.hash(password, 12);
@@ -39,7 +36,7 @@ export class AuthService {
     return this.buildResponse(user);
   }
 
-  /** Conta nova de quem entrou com o Google (sem senha): mesmas regras do cadastro, então fica pendente até o administrador aprovar. */
+  /** Conta nova de quem entrou com o Google (sem senha): mesmas regras do cadastro: entra na hora, mas só usa depois de assinar ou ganhar um plano. */
   async registerFromGoogle(email: string, name: string) {
     const display = name.trim().slice(0, 80) || email.split("@")[0];
     // O Google já confirmou o e-mail
@@ -61,15 +58,15 @@ export class AuthService {
   private async sendVerification(user: { id: string; email: string; name: string }) {
     const token = await issueToken(this.state, "verify-email", user.id);
     const url = `${this.webUrl()}/auth/confirmar?token=${token}`;
-    await this.mail.send(user.email, "Confirme seu e-mail no MagoBox", mailHtml(`Olá, ${user.name.split(" ")[0]}!`, ["Confirme que este e-mail é seu para concluir o cadastro no MagoBox.", "Depois da confirmação, sua conta ainda precisa ser aprovada pelo administrador; você será liberado em seguida.", "O link vale por 48 horas."], { label: "Confirmar e-mail", url }));
+    await this.mail.send(user.email, "Confirme seu e-mail no MagoBox", mailHtml(`Olá, ${user.name.split(" ")[0]}!`, ["Confirme que este e-mail é seu para concluir o cadastro no MagoBox.", "Para usar o assistente, escolha um plano em Configurações.", "O link vale por 48 horas."], { label: "Confirmar e-mail", url }));
   }
 
-  /** Todo cadastro novo avisa o(s) usuário(s) root, com o plano. Hoje o cadastro não escolhe plano: o administrador define ao aprovar. */
+  /** Todo cadastro novo avisa o(s) usuário(s) root. O cadastro não escolhe plano: ele assina sozinho ou o admin dá um plano (ex.: Teste, 7 dias). */
   private async notifyRoot(user: { email: string; name: string; plan?: string | null }, via: string) {
     const roots = await prisma.user.findMany({ where: { role: "ROOT", status: "ACTIVE" }, select: { email: true } });
     if (!roots.length) return;
     const plan = planOf(user.plan)?.name ?? "nenhum plano escolhido ainda";
-    await this.mail.send(roots.map((r) => r.email), `Novo cadastro no MagoBox: ${user.name}`, mailHtml("Novo cadastro aguardando aprovação", [`Nome: ${user.name}`, `E-mail: ${user.email}`, `Plano: ${plan}`, `Entrou por: ${via}`], { label: "Abrir o painel", url: `${this.webUrl()}/dashboard` }));
+    await this.mail.send(roots.map((r) => r.email), `Novo cadastro no MagoBox: ${user.name}`, mailHtml("Novo cadastro", [`Nome: ${user.name}`, `E-mail: ${user.email}`, `Plano: ${plan}`, `Entrou por: ${via}`], { label: "Abrir o painel", url: `${this.webUrl()}/dashboard` }));
   }
 
   /** Link de confirmação do e-mail. */
@@ -101,10 +98,6 @@ export class AuthService {
   }
 
   private async createAccount(email: string, name: string, passwordHash: string | null, workspaceName: string, emailVerified = false) {
-    // O primeiro usuário (root) sempre pode se cadastrar; depois, há um teto de pendentes
-    if ((await prisma.user.count()) > 0 && (await prisma.user.count({ where: { status: "PENDING" } })) >= MAX_PENDING) {
-      throw new ServiceUnavailableException("Cadastros temporariamente indisponíveis. Fale com o administrador.");
-    }
     const existing = await prisma.user.findFirst({ where: { email: { equals: email, mode: "insensitive" } } });
     if (existing) throw new ConflictException("Email já cadastrado");
 
@@ -125,8 +118,9 @@ export class AuthService {
         name,
         passwordHash,
         role: first ? "ROOT" : "USER",
-        status: first ? "ACTIVE" : "PENDING",
-        approvedAt: first ? new Date() : null,
+        status: "ACTIVE",
+        approvedAt: new Date(),
+        planRequired: !first,
         emailVerifiedAt: emailVerified || first ? new Date() : null,
         workspaces: {
           create: {

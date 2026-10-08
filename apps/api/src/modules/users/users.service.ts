@@ -3,7 +3,7 @@ import { prisma } from "@openclaw/database";
 import * as bcrypt from "bcryptjs";
 import { EvolutionService } from "../channels/evolution/evolution.service";
 import { canEditUser, effectiveServices, isService, PlatformRole, ROLE_DEFAULTS, UserStatus } from "../auth/permissions";
-import { isPlan, PLANS } from "../auth/plans";
+import { isPlan, PLANS, TRIAL_DAYS } from "../auth/plans";
 
 export interface UserPatch {
   name?: string;
@@ -97,6 +97,7 @@ export class UsersService implements OnModuleInit {
         status: "ACTIVE",
         approvedAt: new Date(),
         plan,
+        ...(plan === "teste" ? { planUntil: new Date(Date.now() + TRIAL_DAYS * 24 * 3600_000) } : {}),
         services: this.cleanServices(data.services ?? (plan ? PLANS[plan].services : ROLE_DEFAULTS[role])),
         workspaces: {
           create: { role: "OWNER", workspace: { create: { name: wsName, slug: `${slugify(wsName)}-${Date.now().toString(36)}` } } },
@@ -127,6 +128,7 @@ export class UsersService implements OnModuleInit {
         ...(patch.status ? { status: patch.status } : {}),
         ...(approving ? { approvedAt: new Date() } : {}),
         ...(plan !== undefined ? { plan } : {}),
+        ...(plan === "teste" && target.plan !== "teste" ? { planUntil: new Date(Date.now() + TRIAL_DAYS * 24 * 3600_000) } : {}),
         ...(services ? { services } : {}),
       },
       select: SELECT,

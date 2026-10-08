@@ -49,10 +49,10 @@ describe("ticket do login com Google", () => {
 describe("conta nova pelo Google", () => {
   beforeEach(() => users.splice(0));
 
-  it("fica pendente e sem senha quando já existe usuário", async () => {
+  it("entra ativa, sem senha e sem plano quando já existe usuário", async () => {
     users.push({ id: "root", status: "ACTIVE", email: "root@a.com" });
     const u = await new AuthService(jwt as any, state as any, { send: async () => true } as any).registerFromGoogle("novo@gmail.com", "Maria Silva");
-    expect(u).toMatchObject({ status: "PENDING", role: "USER", passwordHash: null, name: "Maria Silva" });
+    expect(u).toMatchObject({ status: "ACTIVE", planRequired: true, role: "USER", passwordHash: null, name: "Maria Silva" });
   });
 
   it("não duplica e-mail já cadastrado", async () => {

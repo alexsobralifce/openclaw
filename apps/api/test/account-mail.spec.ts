@@ -9,7 +9,7 @@ vi.mock("@openclaw/database", () => ({
       findMany: async ({ where }: any) => users.filter((u) => u.role === where.role && u.status === where.status),
       count: async ({ where }: any = {}) => users.filter((u) => !where?.status || u.status === where.status).length,
       create: async ({ data }: any) => {
-        const u = { id: `n${users.length}`, ...data, workspaces: [] };
+        const u = { id: `n${users.length}`, services: [], ...data, workspaces: [] };
         users.push(u);
         return u;
       },
@@ -52,22 +52,23 @@ describe("e-mail do sistema", () => {
 });
 
 describe("cadastro por e-mail e senha", () => {
-  it("confirma o e-mail ao usuário e avisa o root com o plano; a conta segue pendente", async () => {
+  it("confirma o e-mail ao usuário e avisa o root com o plano; a conta entra ativa, mas sem plano", async () => {
     users.push({ id: "r", role: "ROOT", status: "ACTIVE", email: "root@x.com", name: "Root" });
     const res: any = await make().register("ana@x.com", "Ana Lima", "senha-forte-1", "Espaço da Ana");
     await tick();
-    expect(res.pending).toBe(true);
+    expect(res.pending).toBeUndefined();
+    expect(res.accessToken).toBeTruthy();
     const toUser = sent.find((m) => m.to === "ana@x.com")!;
     expect(toUser.html).toContain("/auth/confirmar?token=");
     const toRoot = sent.find((m) => Array.isArray(m.to) && m.to.includes("root@x.com"))!;
     expect(toRoot.html).toContain("Ana Lima");
     expect(toRoot.html).toContain("nenhum plano escolhido ainda");
-    // o link confirma o e-mail mas não ativa a conta
+    // o link só confirma o e-mail; o acesso continua dependendo de plano
     const token = /token=([\w-]+)/.exec(toUser.html)![1];
     await make().verifyEmail(token);
     const ana = users.find((u) => u.email === "ana@x.com");
     expect(ana.emailVerifiedAt).toBeInstanceOf(Date);
-    expect(ana.status).toBe("PENDING");
+    expect(ana).toMatchObject({ status: "ACTIVE", planRequired: true });
   });
 
   it("cadastro pelo Google já vem com e-mail confirmado e também avisa o root", async () => {

@@ -104,12 +104,10 @@ describe("login: força bruta", () => {
 });
 
 describe("cadastro público", () => {
-  it("recusa e-mail repetido com outra caixa e respeita o teto de pendentes", async () => {
+  it("recusa e-mail repetido com outra caixa", async () => {
     db.users = [{ id: "r", email: "Root@x.com", status: "ACTIVE" }];
     const auth = new AuthService({ sign: () => "t" } as any, fakeState() as any);
     await expect(auth.register("root@x.com", "R", "12345678", "W")).rejects.toMatchObject({ status: 409 });
-    db.users = [{ id: "r", email: "r@x.com", status: "ACTIVE" }, ...Array.from({ length: 30 }, (_, i) => ({ id: `p${i}`, email: `p${i}@x.com`, status: "PENDING" }))];
-    await expect(auth.register("novo@x.com", "N", "12345678", "W")).rejects.toMatchObject({ status: 503 });
   });
 });
 

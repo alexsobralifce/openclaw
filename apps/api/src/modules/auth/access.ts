@@ -22,7 +22,8 @@ export class AccessGuard implements CanActivate {
       throw new ForbiddenException("Apenas administradores da plataforma");
     }
     if (planExpired(user) && !this.reflector.getAllAndOverride<boolean>(EXPIRED_OK_KEY, targets)) {
-      throw new ForbiddenException({ statusCode: 403, code: "PLAN_EXPIRED", message: "Sua assinatura venceu. Renove em Configurações para voltar a usar." });
+      const semPlano = !user.plan;
+      throw new ForbiddenException({ statusCode: 403, code: "PLAN_EXPIRED", message: semPlano ? "Assine um plano em Configurações para começar a usar." : "Sua assinatura venceu. Renove em Configurações para voltar a usar." });
     }
     const service = this.reflector.getAllAndOverride<Service>(SERVICE_KEY, targets);
     if (service && !effectiveServices(user.role, user.services).includes(service)) {

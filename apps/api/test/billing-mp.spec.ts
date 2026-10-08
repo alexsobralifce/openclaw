@@ -38,5 +38,8 @@ describe("referência e vencimento", () => {
     expect(planExpired({ role: "USER", plan: "mago", planUntil: null }, now)).toBe(false);
     expect(planExpired({ role: "USER", plan: null, planUntil: past }, now)).toBe(false);
     expect(planExpired({ role: "ADMIN", plan: "mago", planUntil: past }, now)).toBe(false);
-  });
+    // cadastro novo: bloqueado até ter plano (assinado ou dado pelo admin); admin/root e quem já tem plano passam
+    expect(planExpired({ role: "USER", plan: null, planRequired: true }, now)).toBe(true);
+    expect(planExpired({ role: "USER", plan: "teste", planUntil: new Date("2026-10-17"), planRequired: true }, now)).toBe(false);
+    expect(planExpired({ role: "ADMIN", plan: null, planRequired: true }, now)).toBe(false);  });
 });
