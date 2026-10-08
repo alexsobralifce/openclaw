@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { api } from "@/lib/api";
 import { RecoveryKeyBox } from "@/components/vault/RecoveryKeyBox";
+import { parsePasswordList, rowProblem, type ImportRow } from "@/lib/vault-import";
 
 const card = "bg-gray-900 border border-gray-800 rounded-xl p-4";
 const input = "w-full bg-gray-950 border border-gray-700 rounded-lg px-3 py-2 text-sm text-gray-200 placeholder-gray-600 focus:outline-none focus:border-violet-500";
@@ -216,6 +217,7 @@ function Unlocked({ status, setMsg, fail, refresh, showKey }: { status: Status; 
   const [confirmDel, setConfirmDel] = useState<string | null>(null);
   const [integrity, setIntegrity] = useState<{ ok: boolean; text: string } | null>(null);
   const [changing, setChanging] = useState(false);
+  const [importing, setImporting] = useState(false);
   const [newKeyPw, setNewKeyPw] = useState<string | null>(null);
   const timers = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
   const { left, label } = useCountdown(status.expiresAt);
@@ -386,7 +388,10 @@ function Unlocked({ status, setMsg, fail, refresh, showKey }: { status: Status; 
       <div className="flex gap-2">
         <input className={input} placeholder="Buscar" aria-label="Buscar por site, usuário ou e-mail" value={search} onChange={(e) => setSearch(e.target.value)} />
         <button onClick={() => setEditing({ form: { ...empty, password: generatePassword() } })} className={`${primary} whitespace-nowrap`} aria-label="Nova entrada">+ Nova</button>
+        <button onClick={() => setImporting((v) => !v)} className={`${ghost} whitespace-nowrap`}>Importar lista</button>
       </div>
+
+      {importing && <ImportList setMsg={setMsg} onDone={() => { setImporting(false); void load(); }} onCancel={() => setImporting(false)} />}
 
       {editing && (
         <form onSubmit={save} className={`${card} space-y-3`}>
@@ -474,6 +479,89 @@ function Unlocked({ status, setMsg, fail, refresh, showKey }: { status: Status; 
         </div>
       )}
     </>
+  );
+}
+
+/** Cola uma lista, confere e edita cada item e só então grava; cada senha vira uma entrada separada. */
+function ImportList({ setMsg, onDone, onCancel }: { setMsg: (m: any) => void; onDone: () => void; onCancel: () => void }) {
+  const [text, setText] = useState("");
+  const [rows, setRows] = useState<ImportRow[] | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [errors, setErrors] = useState<Record<number, string>>({});
+
+  const upd = (i: number, k: keyof ImportRow, v: string) => setRows((r) => r && r.map((x, j) => (j === i ? { ...x, [k]: v } : x)));
+  const drop = (i: number) => setRows((r) => r && r.filter((_, j) => j !== i));
+  const bad = rows?.filter((r) => rowProblem(r)).length ?? 0;
+
+  async function saveAll() {
+    if (!rows) return;
+    setBusy(true);
+    setMsg(null);
+    const failed: ImportRow[] = [];
+    const errs: Record<number, string> = {};
+    for (const r of rows) {
+      try {
+        await api.vault.create(r);
+      } catch (e: any) {
+        errs[failed.length] = e?.message ?? "não salvou";
+        failed.push(r);
+      }
+    }
+    setBusy(false);
+    const ok = rows.length - failed.length;
+    if (!failed.length) {
+      setMsg({ ok: true, text: `${ok} ${ok === 1 ? "senha salva" : "senhas salvas"}.` });
+      return onDone();
+    }
+    setRows(failed);
+    setErrors(errs);
+    setMsg({ ok: false, text: `${ok} salvas; ${failed.length} não salvaram. Corrija abaixo e tente de novo.` });
+  }
+
+  if (!rows)
+    return (
+      <div className={`${card} space-y-3`}>
+        <h2 className="text-sm font-semibold text-gray-300">Importar lista de senhas</h2>
+        <p className="text-xs text-gray-400">
+          Cole uma senha por linha (<code>site | usuário | senha</code>) ou blocos com rótulos (<code>Site:</code>, <code>Usuário:</code>, <code>Senha:</code>) separados por linha em branco.
+          O texto é lido aqui no navegador; nada é enviado antes de você confirmar.
+        </p>
+        <textarea className={`${input} h-40 font-mono`} aria-label="Lista de senhas" autoComplete="off" spellCheck={false} value={text} onChange={(e) => setText(e.target.value)} />
+        <div className="flex gap-2">
+          <button className={primary} disabled={!text.trim()} onClick={() => { setRows(parsePasswordList(text)); setText(""); }}>Reconhecer</button>
+          <button className={ghost} onClick={onCancel}>Cancelar</button>
+        </div>
+      </div>
+    );
+
+  return (
+    <div className={`${card} space-y-3`}>
+      <h2 className="text-sm font-semibold text-gray-300">Confira antes de salvar ({rows.length})</h2>
+      {!rows.length && <p className="text-xs text-gray-500">Nada para salvar.</p>}
+      {rows.map((r, i) => {
+        const problem = rowProblem(r);
+        return (
+          <div key={i} className={`rounded-lg border p-3 space-y-2 ${problem || errors[i] ? "border-amber-500/40" : "border-gray-800"}`}>
+            <div className="grid sm:grid-cols-2 gap-2">
+              <input className={input} placeholder="Nome do site ou serviço" aria-label="Nome" value={r.title} onChange={(e) => upd(i, "title", e.target.value)} />
+              <input className={input} placeholder="Endereço (opcional)" aria-label="Endereço" value={r.url} onChange={(e) => upd(i, "url", e.target.value)} />
+              <input className={input} placeholder="Usuário ou e-mail" aria-label="Usuário" autoComplete="off" value={r.username} onChange={(e) => upd(i, "username", e.target.value)} />
+              <input className={`${input} font-mono`} placeholder="Senha" aria-label="Senha" autoComplete="off" value={r.password} onChange={(e) => upd(i, "password", e.target.value)} />
+            </div>
+            <div className="flex items-center gap-2">
+              <span className="text-[11px] text-amber-300 flex-1">{errors[i] ?? (problem ? `Revise: ${problem}` : "")}</span>
+              <button className={danger} onClick={() => drop(i)}>Remover</button>
+            </div>
+          </div>
+        );
+      })}
+      <div className="flex flex-wrap gap-2">
+        <button className={primary} disabled={busy || !rows.length || bad > 0} onClick={saveAll}>{busy ? "Salvando…" : `Salvar ${rows.length} ${rows.length === 1 ? "senha" : "senhas"}`}</button>
+        <button className={ghost} disabled={busy} onClick={() => { setRows(null); setErrors({}); }}>Voltar</button>
+        <button className={ghost} disabled={busy} onClick={onCancel}>Cancelar</button>
+        {bad > 0 && <span className="text-[11px] text-amber-300 self-center">{bad} para revisar</span>}
+      </div>
+    </div>
   );
 }
 

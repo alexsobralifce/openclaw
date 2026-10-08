@@ -387,7 +387,14 @@ export default function ChatPage() {
                           </span>
                         </button>
                       ) : (
-                        <div key={i}><Rich segs={parseWaRich(`${b.n}. ${b.label}${b.sub ? ` — ${b.sub}` : ""}`)} /></div>
+                        // Resposta antiga: continua no formato de botões (apagado e sem toque), nunca como lista de texto do WhatsApp
+                        <div key={i} aria-disabled className="my-1 flex w-full items-center gap-3 rounded-xl bg-black/10 px-3 py-2 opacity-50">
+                          <span className="grid h-6 w-6 flex-shrink-0 place-items-center rounded-full bg-violet-500/20 text-xs font-semibold tabular-nums" aria-hidden>{b.n}</span>
+                          <span className="min-w-0 flex-1">
+                            <span className="block"><Rich segs={parseWaRich(b.label)} /></span>
+                            {b.sub && <span className="block text-xs opacity-70"><Rich segs={parseWaRich(b.sub)} /></span>}
+                          </span>
+                        </div>
                       ),
                     )
                   : <Rich segs={parseWaRich(m.text)} />

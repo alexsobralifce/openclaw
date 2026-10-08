@@ -257,6 +257,9 @@ export class MenuService {
       // Navegação direta por voz, de qualquer tela (fora das telas de digitação)
       if (!isInput && /^(ver |abrir |mostrar )?(as |minhas )?conversas( de clientes| em aberto)?$/.test(flat) && (await this.services(workspaceId)).includes("inbox")) return await this.clientList(workspaceId);
       if (!isInput && /^(ver |abrir |mostrar )?(a |minha )?agenda$/.test(flat) && (await this.services(workspaceId)).includes("calendar")) return await this.agendaMenu(workspaceId);
+      // "agenda de hoje / de amanhã / da semana": direto no cartão, sem passar pela IA (que responde em texto puro, sem botões)
+      const ag = !isInput && flat.match(/^(?:ver |abrir |mostrar )?(?:a |minha )?agenda (?:de |para |d[aeo] )?(hoje|amanha|semana|proximos 7 dias|7 dias)$/);
+      if (ag && (await this.services(workspaceId)).includes("calendar")) return ag[1] === "hoje" ? await this.agendaDayEntry(workspaceId, 0) : ag[1] === "amanha" ? await this.agendaDayEntry(workspaceId, 1) : await this.agendaWeek(workspaceId);
       if (!isInput && !pending && /^((ver|mostrar|abrir) )?(os )?(remetentes )?silenciados$|^((ver|mostrar|abrir) )?(os )?remetentes sem interesse$/.test(flat) && (await this.services(workspaceId)).includes("email")) return await this.mutedList(workspaceId);
       // Senha digitada no chat: fica gravada em texto puro no servidor por dias e nunca deve chegar à IA
       if (!isInput && looksLikeSharedSecret(text)) return this.secretWarning();
