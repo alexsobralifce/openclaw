@@ -232,6 +232,7 @@ export const api = {
   },
   billing: {
     me: () => request<{ plans: PlanInfo[]; plan: string | null; planUntil: string | null; billingStatus: string | null; expired: boolean; configured: boolean; publicKey: string | null }>("/billing/me"),
+    pix: (plan: string) => request<{ qrCode: string; qrCodeBase64: string; expiresAt: string }>("/billing/pix", { method: "POST", body: JSON.stringify({ plan }) }),
     subscribeCard: (plan: string, token: string) => request<{ status: string }>("/billing/subscribe-card", { method: "POST", body: JSON.stringify({ plan, token }) }),
     sync: () => request<{ plan: string | null; planUntil: string | null; billingStatus: string | null; expired: boolean }>("/billing/sync", { method: "POST" }),
     checkout: (plan: string, method: "card" | "pix") => request<{ url: string }>("/billing/checkout", { method: "POST", body: JSON.stringify({ plan, method }) }),

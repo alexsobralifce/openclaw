@@ -1,5 +1,6 @@
 import { BadGatewayException, BadRequestException, HttpException, Injectable, Logger, ServiceUnavailableException } from "@nestjs/common";
 import { prisma } from "@openclaw/database";
+import { randomUUID } from "crypto";
 import { MercadoPagoConfig, Payment, PreApproval, Preference } from "mercadopago";
 import { isPlan, planExpired, PLANS } from "../auth/plans";
 import { StateService } from "../state/state.service";
@@ -68,6 +69,36 @@ export class BillingService {
       if (e instanceof HttpException) throw e;
       this.logger.warn(`Mercado Pago recusou a assinatura no cartão: ${e?.message ?? e}`);
       throw new BadGatewayException(`O Mercado Pago recusou o cartão: ${e?.message ?? "erro desconhecido"}`);
+    }
+  }
+
+  /** Pix dentro do app: cria a cobrança e devolve o QR code e o código "copia e cola". O plano ativa quando o pagamento aprova (webhook ou conferência). */
+  async createPix(userId: string, planId: string): Promise<{ qrCode: string; qrCodeBase64: string; expiresAt: string }> {
+    if (!isPlan(planId) || PLANS[planId].priceBrl <= 0) throw new BadRequestException("Plano inválido para assinatura.");
+    const plan = PLANS[planId];
+    const user = await prisma.user.findUnique({ where: { id: userId }, select: { email: true, name: true } });
+    if (!user) throw new BadRequestException("Usuário não encontrado.");
+    const expires = new Date(Date.now() + 30 * 60_000);
+    try {
+      const pay = await new Payment(this.client()).create({
+        body: {
+          transaction_amount: plan.priceBrl,
+          description: `MagoBox · plano ${plan.name} (1 mês)`,
+          payment_method_id: "pix",
+          payer: { email: process.env.MERCADOPAGO_PAYER_EMAIL_OVERRIDE || user.email },
+          external_reference: makeReference(userId, planId),
+          notification_url: this.notificationUrl(),
+          date_of_expiration: expires.toISOString(),
+        },
+        requestOptions: { idempotencyKey: randomUUID() },
+      });
+      const data = pay.point_of_interaction?.transaction_data;
+      if (!data?.qr_code || !data.qr_code_base64) throw new ServiceUnavailableException("O Mercado Pago não devolveu o código Pix.");
+      return { qrCode: data.qr_code, qrCodeBase64: data.qr_code_base64, expiresAt: expires.toISOString() };
+    } catch (e: any) {
+      if (e instanceof HttpException) throw e;
+      this.logger.warn(`Mercado Pago recusou o Pix: ${e?.message ?? e}`);
+      throw new BadGatewayException(`O Mercado Pago não gerou o Pix: ${e?.message ?? "erro desconhecido"}`);
     }
   }
 

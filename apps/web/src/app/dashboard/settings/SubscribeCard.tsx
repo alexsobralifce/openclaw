@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { api, type PlanInfo } from "@/lib/api";
 import { CardBrick } from "./CardBrick";
+import { PixModal } from "./PixModal";
 
 type Info = { plans: PlanInfo[]; plan: string | null; planUntil: string | null; billingStatus: string | null; expired: boolean; configured: boolean; publicKey: string | null };
 const brl = (v: number) => v.toLocaleString("pt-BR", { minimumFractionDigits: 2 });
@@ -14,6 +15,7 @@ export function SubscribeCard() {
   const [busy, setBusy] = useState("");
   const [error, setError] = useState("");
   const [card, setCard] = useState<PlanInfo | null>(null); // plano com o formulário de cartão aberto
+  const [pixPlan, setPixPlan] = useState<PlanInfo | null>(null); // plano com o Pix aberto
   const [done, setDone] = useState(false);
   const [confirmed, setConfirmed] = useState(false); // plano ativado depois do pagamento feito aqui dentro
 
@@ -38,6 +40,10 @@ export function SubscribeCard() {
   }
 
   async function pay(plan: string, method: "card" | "pix") {
+    if (method === "pix") {
+      setPixPlan(info?.plans.find((p) => p.id === plan) ?? null);
+      return;
+    }
     if (method === "card" && info?.publicKey) {
       setCard(info?.plans.find((p) => p.id === plan) ?? null);
       return;
@@ -74,6 +80,7 @@ export function SubscribeCard() {
         </div>
       )}
       {done && <p role="status" className="text-sm text-violet-300">Cartão recebido! O Mercado Pago confirma o primeiro pagamento em instantes; esta tela atualiza sozinha.</p>}
+      {pixPlan && <PixModal plan={pixPlan} planUntilBefore={info.planUntil} onCancel={() => setPixPlan(null)} onPaid={() => { setPixPlan(null); setConfirmed(true); api.billing.me().then(setInfo).catch(() => undefined); }} />}
       {card && info.publicKey && <CardBrick plan={card} publicKey={info.publicKey} onDone={afterCard} onCancel={() => setCard(null)} />}
       {info.plans.map((p) => (
         <div key={p.id} className="border border-gray-800 rounded-lg p-3 space-y-2">

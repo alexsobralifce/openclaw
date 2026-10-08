@@ -11,6 +11,10 @@ class CheckoutDto {
   @IsIn(["card", "pix"]) method!: "card" | "pix";
 }
 
+class PixDto {
+  @IsString() @IsIn(PLAN_IDS) plan!: string;
+}
+
 class CardDto {
   @IsString() @IsIn(PLAN_IDS) plan!: string;
   @IsString() @MinLength(10) @MaxLength(200) token!: string;
@@ -39,6 +43,17 @@ export class BillingController {
   @HttpCode(200)
   sync(@Request() req: any) {
     return this.billing.sync(req.user.id);
+  }
+
+  /** Pix dentro do app: devolve o QR code e o código copia e cola. */
+  @Access()
+  @AllowExpired()
+  @UseGuards(RateLimitGuard)
+  @RateLimit("pix", 20, 3600)
+  @Post("pix")
+  @HttpCode(200)
+  pix(@Request() req: any, @Body() dto: PixDto) {
+    return this.billing.createPix(req.user.id, dto.plan);
   }
 
   /** Assinatura no cartão dentro do app (o formulário do Mercado Pago entrega só o token do cartão). */
