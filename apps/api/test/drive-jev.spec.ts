@@ -16,7 +16,7 @@ import { MenuService } from "../src/modules/channels/assistant/menu.service";
 
 const file = (id: string, nome: string, tipo = "audio/mpeg") => ({ id, nome, tipo, modificado: "2026-09-01T10:00:00Z", tamanho: 2048 });
 
-function build(opts: { strict?: any[]; fuzzy?: any[]; topics?: { id: string; name: string }[]; pickFile?: number | null; pickTopic?: number | null } = {}) {
+function build(opts: { driveRequest?: any; strict?: any[]; fuzzy?: any[]; topics?: { id: string; name: string }[]; pickFile?: number | null; pickTopic?: number | null } = {}) {
   const store = new Map<string, any>();
   const state = { get: async (k: string) => store.get(k) ?? null, set: async (k: string, v: any) => void store.set(k, v), del: async (k: string) => void store.delete(k) };
   const driveSearch = vi.fn(async (_ws: string, _spec: any, _acc: string, _max: number, mode: string) => (mode === "fuzzy" ? opts.fuzzy : opts.strict) ?? []);
@@ -26,6 +26,7 @@ function build(opts: { strict?: any[]; fuzzy?: any[]; topics?: { id: string; nam
   const intents = {
     enabled: () => true,
     classify: async () => null,
+    driveRequest: vi.fn(async () => opts.driveRequest ?? null),
     pickFile: vi.fn(async () => opts.pickFile ?? null),
     pickNoteTopic: vi.fn(async () => opts.pickTopic ?? null),
   };
@@ -74,6 +75,39 @@ describe("música e arquivo: o Jev escolhe entre os achados", () => {
     await menu.respond("w1", "me manda a música evidencias do drive");
     expect(intents.pickFile).not.toHaveBeenCalled();
     expect(fileSender).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("livros: o Jev entende o tipo e que é para listar", () => {
+  const books = [file("b1", "Clean Code.pdf", "application/pdf"), file("b2", "Python Fluente.epub", "application/epub+zip")];
+
+  it("lista os livros sem enviar nada, sem busca aproximada e sem pickFile", async () => {
+    const { menu, intents, fileSender } = build({ strict: books, driveRequest: { kind: "book", list: true } });
+    const out = (await menu.respond("w1", "Liste os livros que encontrou no drive?")) as string;
+    expect(out).toContain("Achei 2 livros");
+    expect(out).toContain("Clean Code.pdf");
+    expect(intents.pickFile).not.toHaveBeenCalled();
+    expect(fileSender).not.toHaveBeenCalled();
+  });
+
+  it("um único livro na listagem também só aparece na lista", async () => {
+    const { menu, fileSender } = build({ strict: [books[0]], driveRequest: { kind: "book", list: true } });
+    const out = (await menu.respond("w1", "liste os livros do drive")) as string;
+    expect(out).toContain("Achei 1 livro");
+    expect(fileSender).not.toHaveBeenCalled();
+  });
+
+  it("sem livros no Drive, avisa e não cai em arquivos de outro tipo", async () => {
+    const { menu } = build({ strict: [], fuzzy: [file("x", "query.py", "text/x-python")], driveRequest: { kind: "book", list: true } });
+    const out = (await menu.respond("w1", "liste os livros do drive")) as string;
+    expect(out).toContain("Não achei livros");
+    expect(out).not.toContain("query.py");
+  });
+
+  it("com o Jev fora do ar, a regra de palavras dá o mesmo resultado", async () => {
+    const { menu } = build({ strict: books });
+    const out = (await menu.respond("w1", "liste os livros do drive")) as string;
+    expect(out).toContain("Achei 2 livros");
   });
 });
 

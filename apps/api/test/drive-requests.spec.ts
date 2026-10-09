@@ -3,7 +3,7 @@ import { describe, expect, it, vi } from "vitest";
 vi.mock("@openclaw/database", () => ({ prisma: { workspaceMember: { findFirst: async () => ({ user: { role: "ROOT", services: [], name: "Ana" } }) } } }));
 
 import { AssistantService } from "../src/modules/channels/assistant/assistant.service";
-import { driveQueryFrom, looksLikeMediaRequest, parseDriveQuery } from "../src/modules/channels/assistant/drive";
+import { KIND_Q, driveQueryFrom, looksLikeDriveRequest, looksLikeMediaRequest, parseDriveQuery } from "../src/modules/channels/assistant/drive";
 import { MenuService } from "../src/modules/channels/assistant/menu.service";
 import { normalize, parseChoice } from "../src/modules/channels/assistant/voice";
 
@@ -83,5 +83,40 @@ describe("a IA livre lista arquivos em texto", () => {
     expect(menu.rememberDriveResults).toHaveBeenCalledWith("w1", items, "musica catingueira");
     expect(r.arquivos.map((a: any) => a.n)).toEqual([1, 2]);
     expect(r.instrucao).toContain("mesma ordem");
+  });
+});
+
+describe("livros: PDF ou EPUB", () => {
+  it("'liste os livros que encontrou no drive' é listagem de livros, sem nome de arquivo", () => {
+    const q = "Liste os livros que encontrou no drive?";
+    expect(parseDriveQuery(q)).toMatchObject({ terms: [], kind: "book", list: true });
+    expect(looksLikeDriveRequest(flat(q))).toBe(true);
+  });
+  it("livro com assunto vira filtro de tipo mais o nome", () => {
+    expect(parseDriveQuery("me manda o livro de python")).toMatchObject({ terms: ["python"], kind: "book" });
+    expect(parseDriveQuery("me manda o livro de python").list).toBeUndefined();
+  });
+  it("o filtro de livro cobre PDF e EPUB", () => {
+    expect(KIND_Q.book).toContain("application/pdf");
+    expect(KIND_Q.book).toContain("epub");
+  });
+});
+
+describe("busca de livros no Drive: o filtro de tipo nunca é largado", () => {
+  it("sem acerto por nome, a busca aproximada e a por conteúdo continuam só em PDF/EPUB", async () => {
+    const { GoogleService } = await import("../src/modules/integrations/google/google.service");
+    const s: any = new GoogleService();
+    const queries: string[] = [];
+    s.g = vi.fn(async (_ws: string, _acc: string, url: string) => {
+      queries.push(decodeURIComponent(new URL(url).searchParams.get("q") ?? ""));
+      return { files: [] };
+    });
+    await s.driveSearch("w1", { terms: ["python"], kind: "book", alternates: [] }, "a@x.com", 6, "fuzzy");
+    expect(queries.length).toBeGreaterThan(0);
+    for (const q of queries) expect(q).toContain("application/pdf");
+    // tipo comum (música) ainda pode largar o filtro como último recurso
+    queries.length = 0;
+    await s.driveSearch("w1", { terms: ["evidencias"], kind: "audio", alternates: [] }, "a@x.com", 6, "fuzzy");
+    expect(queries.some((q) => !q.includes("audio/"))).toBe(true);
   });
 });

@@ -2,7 +2,7 @@ import { Injectable, Logger, OnModuleInit } from "@nestjs/common";
 import { prisma } from "@openclaw/database";
 import { isSealed, openToken, sealToken } from "../../webhooks/crypto";
 import { nextDay } from "../../channels/assistant/agenda-events";
-import { DriveKind, KIND_Q, wordVariants } from "../../channels/assistant/drive";
+import { DriveKind, KIND_Q, STRICT_KINDS, wordVariants } from "../../channels/assistant/drive";
 import { buildBook, parseAddresses, SeenAddress } from "../../channels/assistant/email-book";
 import { DOCS_FOLDER } from "../../channels/assistant/documents";
 import { CONTACTS_FOLDER, Contact, EMAIL_BOOK_FOLDER, fileOfLetter, findContacts, fuzzyCandidates, fromPerson, groupByLetter, parseLetterFile, renderLetterFile } from "../../channels/assistant/contacts";
@@ -386,7 +386,9 @@ export class GoogleService implements OnModuleInit {
       if (!words.length) return [];
       const byName = `(${words.map((w) => `name contains '${esc(w)}'`).join(" or ")})`;
       const byText = `(${words.map((w) => `fullText contains '${esc(w)}'`).join(" or ")})`;
-      const attempts: [string, boolean][] = [[byName, true], ...(kindQ ? ([[byName, false]] as [string, boolean][]) : []), [byText, true], ...(kindQ ? ([[byText, false]] as [string, boolean][]) : [])];
+      // Tipo estrito (livro): o filtro nunca é largado, senão a busca por conteúdo devolve código e notas
+      const loose = !!kindQ && !(spec.kind && STRICT_KINDS.has(spec.kind));
+      const attempts: [string, boolean][] = [[byName, true], ...(loose ? ([[byName, false]] as [string, boolean][]) : []), [byText, true], ...(loose ? ([[byText, false]] as [string, boolean][]) : [])];
       for (const [cond, withKind] of attempts) {
         const found = await run(cond, withKind);
         if (found.length) return found;

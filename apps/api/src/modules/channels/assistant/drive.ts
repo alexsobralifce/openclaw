@@ -5,18 +5,19 @@ const FILLER = new Set(
   ("me mim a o as os um uma de do da dos das no na nos nas em pra para por favor pode poder podia quero preciso queria gostaria " +
     "buscar busque busca busco procurar procure procura achar ache pegar pegue pega baixar baixe mandar manda mande enviar envia envie " +
     "passar passe passa trazer traga traz abrir abra ver mostrar mostre arquivo arquivos documento documentos meu minha meus minhas " +
-    "ouvir escutar tocar toca toque google drive gdrive ai la ali agora rapido rapidinho").split(" "),
+    "ouvir escutar tocar toca toque google drive gdrive ai la ali agora rapido rapidinho " +
+    "liste listar listem mostra encontrou encontrei encontre achou achei tem tenho existe existem quais qual que todos todas").split(" "),
 );
 
 const strip = (w: string) => w.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase().replace(/[^a-z0-9]/g, "");
 
 /** O texto pede algo do Drive? ("me manda o contrato do drive", "drive relatório", "buscar no drive"). */
 export function looksLikeDriveRequest(flat: string): boolean {
-  return /\b(g?drive)\b/.test(flat) && (/^(g?drive|google drive)\b/.test(flat) || /\b(busc\w*|procur\w*|ach\w*|peg\w*|baix\w*|mand\w*|envi\w*|pass\w*|traz\w*|quer\w*|precis\w*|abr\w*)\b/.test(flat));
+  return /\b(g?drive)\b/.test(flat) && (/^(g?drive|google drive)\b/.test(flat) || /\b(busc\w*|procur\w*|ach\w*|peg\w*|baix\w*|mand\w*|envi\w*|pass\w*|traz\w*|quer\w*|precis\w*|abr\w*|list\w*|encontr\w*|mostr\w*)\b/.test(flat));
 }
 
-const MEDIA_NOUN = "(?:musicas?|cancao|cancoes|audios?|mp3|faixas?|fotos?|imagens?|videos?|planilhas?|pdfs?|apresentacao|slides?)";
-const MEDIA_ASK = "(?:quer\\w*|preciso|precisa\\w*|baix\\w*|mand\\w*|envi\\w*|peg\\w*|traz\\w*|toc\\w*|ouvir|escutar|busc\\w*|procur\\w*|ach\\w*|abr\\w*|me da|tem)";
+const MEDIA_NOUN = "(?:musicas?|cancao|cancoes|audios?|mp3|faixas?|fotos?|imagens?|videos?|planilhas?|pdfs?|apresentacao|slides?|livros?|ebooks?)";
+const MEDIA_ASK = "(?:quer\\w*|list\\w*|preciso|precisa\\w*|baix\\w*|mand\\w*|envi\\w*|peg\\w*|traz\\w*|toc\\w*|ouvir|escutar|busc\\w*|procur\\w*|ach\\w*|abr\\w*|me da|tem)";
 /** Depois do tipo vem outra coisa que não o nome do arquivo ("foto pro João", "pdf no e-mail"). */
 const NOT_A_FILE_NAME = /^(para|pra|pro|ao|aos|no|na|nos|nas|num|numa|em|por|com|e|ou)$/;
 
@@ -65,7 +66,13 @@ export function fmtSize(bytes?: number): string {
 
 // ─── Busca aproximada: tipo de arquivo, variações das palavras e ordenação por semelhança ───
 
-export type DriveKind = "audio" | "image" | "video" | "pdf" | "sheet" | "slides";
+export type DriveKind = "audio" | "image" | "video" | "pdf" | "sheet" | "slides" | "book";
+
+/** Tipos em que o filtro nunca é largado na busca aproximada (livro é só PDF ou EPUB, nunca código nem nota). */
+export const STRICT_KINDS = new Set<DriveKind>(["book"]);
+
+/** Como o tipo aparece na lista ("Achei 5 livros"). */
+export const KIND_LABEL: Partial<Record<DriveKind, string>> = { book: "livros" };
 
 /** Filtro de tipo na sintaxe de busca do Drive. */
 export const KIND_Q: Record<DriveKind, string> = {
@@ -75,6 +82,8 @@ export const KIND_Q: Record<DriveKind, string> = {
   pdf: "mimeType = 'application/pdf'",
   sheet: "(mimeType contains 'spreadsheet' or mimeType contains 'excel' or mimeType = 'text/csv')",
   slides: "(mimeType contains 'presentation' or mimeType contains 'powerpoint')",
+  // EPUB às vezes sobe ao Drive como application/octet-stream: vale também pela extensão
+  book: "(mimeType = 'application/pdf' or mimeType = 'application/epub+zip' or name contains '.epub')",
 };
 
 const KIND_WORDS: [RegExp, DriveKind][] = [
@@ -84,6 +93,7 @@ const KIND_WORDS: [RegExp, DriveKind][] = [
   [/^pdf$/, "pdf"],
   [/^(planilha|planilhas|excel|xlsx|csv|tabela)$/, "sheet"],
   [/^(apresentacao|apresentacoes|slide|slides|powerpoint|ppt|pptx)$/, "slides"],
+  [/^(livro|livros|ebook|ebooks|epub|epubs)$/, "book"],
 ];
 
 export interface DriveSpec {
@@ -91,6 +101,8 @@ export interface DriveSpec {
   terms: string[];
   /** tipo pedido: "música X" filtra áudios, "planilha de gastos" filtra planilhas */
   kind?: DriveKind;
+  /** pedido de listagem ("liste os livros", "quais planilhas eu tenho"): mostra a lista, nunca envia sozinho */
+  list?: boolean;
   /** palavras extras para a busca aproximada: sinônimos, correções, a palavra do tipo... */
   alternates: string[];
 }
@@ -107,7 +119,9 @@ export function parseDriveQuery(text: string): DriveSpec {
       alternates.push(w);
     } else terms.push(w);
   }
-  return { terms: terms.slice(0, 6), kind, alternates };
+  const flat = text.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase().trim();
+  const list = /^(liste|listar|lista|listem|quais|mostre|mostra|ver)\b/.test(flat) || /\btod[oa]s\s+(os|as)\b/.test(flat);
+  return { terms: terms.slice(0, 6), kind, alternates, ...(list ? { list: true } : {}) };
 }
 
 const noAccent = (w: string) => w.normalize("NFD").replace(/[̀-ͯ]/g, "");

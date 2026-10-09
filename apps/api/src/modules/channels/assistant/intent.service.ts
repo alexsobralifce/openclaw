@@ -2,6 +2,7 @@ import { Injectable, Logger } from "@nestjs/common";
 import { TypeSafeClient, choice, noul } from "@typesafe-ai/sdk";
 import { DomainJudgment, GROUP_IDS, groupQuestion } from "./tool-select";
 import { recordUsage } from "./usage";
+import type { DriveKind } from "./drive";
 
 /** O que o dono quer com a mensagem, entre os pedidos que o menu atende sozinho (sem chamar o GPT). */
 export type Intent = "agenda_add" | "drive_file" | "note_add" | "other";
@@ -22,6 +23,27 @@ const QUESTION = choice("O que o dono da secretária virtual quer fazer com esta
   drive_file: "Achar, baixar ou receber um arquivo salvo no Google Drive: música, áudio, foto, vídeo, contrato, planilha, PDF, documento (ex.: \"quero a música Catingueira\", \"baixe a música X\", \"me manda o contrato\", \"tem a foto do evento?\").",
   other: "Qualquer outra coisa: perguntar algo, ver a agenda, e-mails, clima, conversar, mandar e-mail, cofre de senhas, procurar o que já foi anotado.",
 });
+
+const DRIVE_TIPO = choice("Que tipo de arquivo do Google Drive o dono pediu?", {
+  livro: "Livros: PDF ou EPUB, e-books, apostilas (ex.: \"liste os livros\", \"me manda o livro de python\").",
+  pdf: "Arquivos PDF que não são livros (contrato, documento, boleto).",
+  musica: "Música ou áudio.",
+  foto: "Foto ou imagem.",
+  video: "Vídeo.",
+  planilha: "Planilha ou tabela (xlsx, csv).",
+  apresentacao: "Apresentação ou slides.",
+  qualquer: "Nenhum tipo específico, ou um documento comum pelo nome.",
+});
+const DRIVE_MODO = choice("O dono quer ver uma lista ou receber um arquivo específico?", {
+  listar: "Ver ou listar os arquivos de um tipo ou assunto, sem um nome exato (\"liste os livros\", \"quais planilhas eu tenho\", \"mostre as músicas\").",
+  buscar: "Achar ou baixar um arquivo específico pelo nome ou descrição (\"me manda o contrato de aluguel\").",
+});
+const DRIVE_KIND: Record<string, DriveKind> = { livro: "book", pdf: "pdf", musica: "audio", foto: "image", video: "video", planilha: "sheet", apresentacao: "slides" };
+
+export interface DriveRequest {
+  kind?: DriveKind;
+  list: boolean;
+}
 
 interface PickKind {
   id: string;
@@ -64,6 +86,28 @@ export class IntentService {
       return { intent, confidence };
     } catch (e: any) {
       this.logger.warn(`Jev indisponível, usando regras: ${e.message}`);
+      return null;
+    }
+  }
+
+  /**
+   * Pedido do Drive: que tipo de arquivo e se é para listar ou achar um específico ("liste os livros" → livro + listar).
+   * Só vale com confiança; sem chave, com erro ou com demora devolve null e fica a regra local de palavras.
+   */
+  async driveRequest(text: string): Promise<DriveRequest | null> {
+    if (!this.enabled()) return null;
+    try {
+      this.client ??= new TypeSafeClient({ timeout: TIMEOUT_MS, retry: { maxRetries: 0 } });
+      const res = (await this.client.systemOne({ state: { mensagem: text.slice(0, 300) }, questions: { tipo: DRIVE_TIPO, modo: DRIVE_MODO } })) as any;
+      this.count(res);
+      const { tipo, modo } = res.answers;
+      this.logger.log(`Jev (drive): ${tipo.choice}/${modo.choice} (confiança ${Number(tipo.confidence).toFixed(2)}/${Number(modo.confidence).toFixed(2)})`);
+      return {
+        kind: tipo.confidence >= MIN_CONFIDENCE ? DRIVE_KIND[tipo.choice] : undefined,
+        list: modo.confidence >= MIN_CONFIDENCE && modo.choice === "listar",
+      };
+    } catch (e: any) {
+      this.logger.warn(`Jev indisponível para o pedido do Drive, usando regras: ${e.message}`);
       return null;
     }
   }
