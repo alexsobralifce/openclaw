@@ -1477,7 +1477,7 @@ _Ou 0 para voltar._`;
    * Procura nas contas Google vinculadas, todas ao mesmo tempo. Primeiro pelo nome exato (todas as palavras); se nada
    * for achado, faz a busca aproximada: variações, sinônimos sugeridos pela IA e, por fim, o conteúdo dos arquivos.
    */
-  async driveFind(ws: string, query: string): Promise<{ items: any[]; fuzzy: boolean; errors: string[]; accounts: string[]; list: boolean; kind?: DriveKind }> {
+  async driveFind(ws: string, query: string): Promise<{ items: any[]; fuzzy: boolean; errors: string[]; accounts: string[]; list: boolean; kind?: DriveKind; filters: string[] }> {
     const accounts: string[] = await this.google.listAccounts(ws);
     const size = await this.listSize(ws, 6);
     const spec = parseDriveQuery(query);
@@ -1487,7 +1487,9 @@ _Ou 0 para voltar._`;
       spec.kind ??= jev.kind;
       spec.list ||= jev.list;
     }
-    const list = !!spec.list && !!spec.kind && !spec.terms.length;
+    const filtered = !!(spec.ext || spec.folder || spec.author?.length);
+    const list = !!spec.list && (!!spec.kind || filtered) && !spec.terms.length;
+    const filters = [spec.kind && KIND_LABEL[spec.kind], spec.ext && `.${spec.ext}`, spec.folder && `pasta ${spec.folder}`, spec.author?.length && `autor ${spec.author.join(" ")}`].filter(Boolean) as string[];
     const gather = async (sp: typeof spec, mode: "strict" | "fuzzy") => {
       const settled = await Promise.allSettled(accounts.map((a) => this.google.driveSearch(ws, sp, a, size, mode)));
       const found: any[] = [];
@@ -1509,7 +1511,7 @@ _Ou 0 para voltar._`;
       fuzzy = true;
       if (!errors.length) errors = r.errors;
     }
-    return { items: rankFiles(found, spec.terms, alternates).slice(0, size), fuzzy, errors, accounts, list, kind: spec.kind };
+    return { items: rankFiles(found, spec.terms, alternates).slice(0, size), fuzzy, errors, accounts, list, kind: spec.kind, filters };
   }
 
   /** Palavras parecidas com o que o dono descreveu (sinônimos, correções, artista...). Sem IA, só a busca literal. */
@@ -1529,13 +1531,13 @@ _Ou 0 para voltar._`;
 
   /** Um resultado exato já é enviado; vários (ou qualquer resultado aproximado) viram lista numerada para o dono escolher. */
   private async driveSearch(ws: string, query: string): Promise<string> {
-    const { items, fuzzy, errors, accounts, list, kind } = await this.driveFind(ws, query);
+    const { items, fuzzy, errors, accounts, list, kind, filters } = await this.driveFind(ws, query);
     const what = (kind && KIND_LABEL[kind]) || "arquivos";
     if (!accounts.length) return this.noGoogle();
     const warn = errors.length ? `⚠️ _${short(errors.join("; "), 220)}_` : "";
     if (!items.length) {
       await this.set(ws, "drive_input");
-      if (list) return [head("📁", "Google Drive"), `🤔 Não achei ${what} (${kind === "book" ? "PDF ou EPUB" : "desse tipo"}) no seu Drive.`, warn, "_Diga o nome de um arquivo ou digite 0 para voltar._"].filter(Boolean).join("\n");
+      if (list || filters.length) return [head("📁", "Google Drive"), `🤔 Não achei ${what}${filters.length ? ` (${filters.join(" · ")})` : ""} no seu Drive.`, warn, "_Diga o nome de um arquivo ou digite 0 para voltar._"].filter(Boolean).join("\n");
       return [head("📁", "Google Drive"), `🤔 Não achei nada parecido com *${short(query, 40)}*.`, warn, "_Diga outras palavras (parte do nome, o artista, o assunto) ou digite 0 para voltar._"].filter(Boolean).join("\n");
     }
     await this.set(ws, "drive", { items, query });
@@ -1553,7 +1555,7 @@ _Ou 0 para voltar._`;
     const multi = accounts.length > 1;
     const rows = items.map((f, i) => `${key(i + 1)} ${fileIcon(f.tipo)} *${short(f.nome, 45)}*\n     _${[this.fmtDate(f.modificado), fmtSize(f.tamanho), multi ? accountLabel(f.account) : ""].filter(Boolean).join(" · ")}_`);
     const title = fuzzy ? "Não achei igual, mas parecem com o que você descreveu" : `Achei ${items.length} ${items.length === 1 ? what.replace(/s$/, "") : what}`;
-    return [head("📁", short(title, 60), `"${short(query, 30)}"`), rows.join("\n"), warn, foot("Responda com o número para eu enviar o arquivo aqui"), opts(BACK)].filter(Boolean).join("\n");
+    return [head("📁", short(title, 60), filters.length ? short(filters.join(" · "), 40) : `"${short(query, 30)}"`), rows.join("\n"), warn, foot("Responda com o número para eu enviar o arquivo aqui"), opts(BACK)].filter(Boolean).join("\n");
   }
 
   private async driveSend(ws: string, it: { id: string; account: string; nome: string }): Promise<string> {

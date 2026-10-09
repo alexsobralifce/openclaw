@@ -120,3 +120,72 @@ describe("busca de livros no Drive: o filtro de tipo nunca é largado", () => {
     expect(queries.some((q) => !q.includes("audio/"))).toBe(true);
   });
 });
+
+describe("filtros do pedido: extensão, pasta e autor", () => {
+  it("tira pasta, autor e extensão do texto e não deixa virar nome de arquivo", () => {
+    expect(parseDriveQuery("livros do autor Machado de Assis na pasta Faculdade")).toMatchObject({ kind: "book", terms: [], folder: "Faculdade", author: ["Machado", "Assis"] });
+    expect(parseDriveQuery("me manda o livro de python em epub")).toMatchObject({ kind: "book", terms: ["python"], ext: "epub" });
+    expect(parseDriveQuery('arquivos .pdf na pasta "Meus Livros"')).toMatchObject({ ext: "pdf", folder: "Meus Livros", terms: [] });
+    expect(parseDriveQuery("planilha de gastos na pasta contas que eu tenho")).toMatchObject({ kind: "sheet", terms: ["gastos"], folder: "contas" });
+  });
+  it("sem filtros, o pedido segue como antes", () => {
+    const s = parseDriveQuery("baixe a música Catingueira");
+    expect(s.folder).toBeUndefined();
+    expect(s.author).toBeUndefined();
+    expect(s.ext).toBeUndefined();
+  });
+});
+
+describe("GoogleService: filtros duros na busca do Drive", () => {
+  const svc = async () => {
+    const { GoogleService } = await import("../src/modules/integrations/google/google.service");
+    const s: any = new GoogleService();
+    const queries: string[] = [];
+    const answers: Record<string, any[]> = {};
+    s.g = vi.fn(async (_ws: string, _acc: string, url: string) => {
+      const q = decodeURIComponent(new URL(url).searchParams.get("q") ?? "").replace(/\+/g, " ");
+      queries.push(q);
+      return { files: Object.entries(answers).find(([k]) => q.includes(k))?.[1] ?? [] };
+    });
+    return { s, queries, answers };
+  };
+
+  it("pasta: acha a pasta pelo nome, entra nas subpastas e restringe a busca a elas", async () => {
+    const { s, queries, answers } = await svc();
+    answers["name contains 'Faculdade'"] = [{ id: "F1" }];
+    answers["'F1' in parents) and mimeType='application/vnd.google-apps.folder'"] = [{ id: "F2" }];
+    await s.driveSearch("w1", { terms: [], kind: "book", folder: "Faculdade" }, "a@x.com", 6, "strict");
+    const last = queries[queries.length - 1];
+    expect(last).toContain("'F1' in parents");
+    expect(last).toContain("'F2' in parents");
+    expect(last).toContain("application/pdf");
+  });
+
+  it("pasta que não existe: nada é devolvido (não busca no Drive inteiro)", async () => {
+    const { s, queries } = await svc();
+    expect(await s.driveSearch("w1", { terms: [], kind: "book", folder: "Inexistente" }, "a@x.com", 6, "strict")).toEqual([]);
+    expect(queries.every((q) => q.includes("mimeType='application/vnd.google-apps.folder'"))).toBe(true);
+  });
+
+  it("autor vai como texto do arquivo e extensão epub confere pelo nome", async () => {
+    const { s, queries, answers } = await svc();
+    answers["fullText contains 'Machado'"] = [
+      { id: "1", name: "Dom Casmurro.epub", mimeType: "application/octet-stream" },
+      { id: "2", name: "notas.bin", mimeType: "application/octet-stream" },
+    ];
+    const r = await s.driveSearch("w1", { terms: [], kind: "book", ext: "epub", author: ["Machado"] }, "a@x.com", 6, "strict");
+    expect(queries[0]).toContain("fullText contains 'Machado'");
+    expect(r.map((f: any) => f.nome)).toEqual(["Dom Casmurro.epub"]);
+  });
+
+  it("livro: arquivo genérico que não termina em .pdf/.epub sai da lista", async () => {
+    const { s, answers } = await svc();
+    answers["mimeType"] = [
+      { id: "1", name: "Clean Code.pdf", mimeType: "application/pdf" },
+      { id: "2", name: "dados.bin", mimeType: "application/octet-stream" },
+      { id: "3", name: "Livro.epub", mimeType: "application/octet-stream" },
+    ];
+    const r = await s.driveSearch("w1", { terms: [], kind: "book" }, "a@x.com", 6, "strict");
+    expect(r.map((f: any) => f.nome)).toEqual(["Clean Code.pdf", "Livro.epub"]);
+  });
+});

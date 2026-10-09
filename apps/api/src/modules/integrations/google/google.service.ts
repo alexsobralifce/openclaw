@@ -2,7 +2,7 @@ import { Injectable, Logger, OnModuleInit } from "@nestjs/common";
 import { prisma } from "@openclaw/database";
 import { isSealed, openToken, sealToken } from "../../webhooks/crypto";
 import { nextDay } from "../../channels/assistant/agenda-events";
-import { DriveKind, KIND_Q, STRICT_KINDS, wordVariants } from "../../channels/assistant/drive";
+import { DriveKind, KIND_Q, STRICT_KINDS, extQuery, isBook, nameHasExt, needsNameCheck, wordVariants } from "../../channels/assistant/drive";
 import { buildBook, parseAddresses, SeenAddress } from "../../channels/assistant/email-book";
 import { DOCS_FOLDER } from "../../channels/assistant/documents";
 import { CONTACTS_FOLDER, Contact, EMAIL_BOOK_FOLDER, fileOfLetter, findContacts, fuzzyCandidates, fromPerson, groupByLetter, parseLetterFile, renderLetterFile } from "../../channels/assistant/contacts";
@@ -355,19 +355,52 @@ export class GoogleService implements OnModuleInit {
     return e instanceof Error ? e : new Error(m);
   }
 
+  /** Pastas com esse nome (e as subpastas, até 3 níveis, no máximo 40): é onde a busca "na pasta X" procura. */
+  async driveFolderIds(workspaceId: string, account: string | undefined, name: string): Promise<string[]> {
+    const esc = (w: string) => w.replace(/\\/g, "\\\\").replace(/'/g, "\\'");
+    const list = async (q: string) => {
+      const p = new URLSearchParams({ q: `${q} and mimeType='application/vnd.google-apps.folder' and trashed=false`, pageSize: "50", fields: "files(id)", corpora: "allDrives", includeItemsFromAllDrives: "true", supportsAllDrives: "true" });
+      const r = await this.g<any>(workspaceId, account, `https://www.googleapis.com/drive/v3/files?${p}`);
+      return (r.files ?? []).map((f: any) => String(f.id));
+    };
+    const found = new Set<string>((await list(`name contains '${esc(name)}'`)).slice(0, 5));
+    let level = [...found];
+    for (let depth = 0; depth < 3 && level.length && found.size < 40; depth++) {
+      const kids: string[] = (await list(`(${level.map((id) => `'${id}' in parents`).join(" or ")})`)).filter((id: string) => !found.has(id));
+      kids.slice(0, 40 - found.size).forEach((id) => found.add(id));
+      level = kids;
+    }
+    return [...found];
+  }
+
   /**
    * Busca no Drive de uma conta. strict: o nome tem TODAS as palavras lembradas. fuzzy: o nome tem QUALQUER uma delas
    * (mais as variações/sinônimos), e, se ainda assim nada aparecer, procura dentro do texto dos arquivos.
    * Em fuzzy devolve até 25 candidatos para quem chamou ordenar por semelhança.
    */
-  async driveSearch(workspaceId: string, spec: { terms: string[]; alternates?: string[]; kind?: DriveKind }, account?: string, max = 8, mode: "strict" | "fuzzy" = "strict") {
+  async driveSearch(
+    workspaceId: string,
+    spec: { terms: string[]; alternates?: string[]; kind?: DriveKind; ext?: string; folder?: string; author?: string[] },
+    account?: string,
+    max = 8,
+    mode: "strict" | "fuzzy" = "strict",
+  ) {
     const esc = (w: string) => w.replace(/\\/g, "\\\\").replace(/'/g, "\\'");
     const kindQ = spec.kind ? KIND_Q[spec.kind] : "";
+    // Filtros duros (valem em toda tentativa): extensão, autor (no nome ou no texto) e pasta. Os termos do nome é que afrouxam no fuzzy.
+    const extQ = spec.ext ? extQuery(spec.ext) || `name contains '${esc(spec.ext)}'` : "";
+    const authorQ = (spec.author ?? []).map((w) => `fullText contains '${esc(w)}'`).join(" and ");
+    const hard = [extQ, authorQ];
+    // O Drive não filtra por extensão nem sabe o que é "livro": o resto sai pelo nome, numa página maior
+    const post = (f: { nome: string; tipo?: string }) => (spec.kind !== "book" || isBook(f)) && (!spec.ext || !needsNameCheck(spec.ext) || nameHasExt(f.nome, spec.ext));
+    const needPost = spec.kind === "book" || (!!spec.ext && needsNameCheck(spec.ext));
+    let parentQ = "";
     const run = async (cond: string, withKind: boolean) => {
-      const q = [cond, "trashed=false", "mimeType!='application/vnd.google-apps.folder'", withKind && kindQ].filter(Boolean).join(" and ");
+      const q = [cond, ...hard, parentQ, "trashed=false", "mimeType!='application/vnd.google-apps.folder'", withKind && kindQ].filter(Boolean).join(" and ");
+      const want = mode === "fuzzy" ? 25 : max;
       const p = new URLSearchParams({
         q,
-        pageSize: String(mode === "fuzzy" ? 25 : max),
+        pageSize: String(needPost ? 100 : want),
         orderBy: "modifiedTime desc",
         fields: "files(id,name,mimeType,size,modifiedTime,webViewLink)",
         corpora: "allDrives",
@@ -375,11 +408,19 @@ export class GoogleService implements OnModuleInit {
         supportsAllDrives: "true",
       });
       const r = await this.g<any>(workspaceId, account, `https://www.googleapis.com/drive/v3/files?${p}`);
-      return (r.files ?? []).map((f: any) => ({ id: f.id, nome: f.name, tipo: f.mimeType, tamanho: f.size ? Number(f.size) : undefined, modificado: f.modifiedTime, link: f.webViewLink }));
+      return (r.files ?? [])
+        .map((f: any) => ({ id: f.id, nome: f.name, tipo: f.mimeType, tamanho: f.size ? Number(f.size) : undefined, modificado: f.modifiedTime, link: f.webViewLink }))
+        .filter(post)
+        .slice(0, want);
     };
     try {
+      if (spec.folder) {
+        const ids = await this.driveFolderIds(workspaceId, account, spec.folder);
+        if (!ids.length) return [];
+        parentQ = `(${ids.map((id) => `'${id}' in parents`).join(" or ")})`;
+      }
       if (mode === "strict") {
-        if (!spec.terms.length && !kindQ) return [];
+        if (!spec.terms.length && !kindQ && !extQ && !authorQ && !parentQ) return [];
         return await run(spec.terms.map((w) => `name contains '${esc(w)}'`).join(" and "), true);
       }
       const words = [...new Set([...spec.terms, ...(spec.alternates ?? [])].flatMap(wordVariants))].slice(0, 16);

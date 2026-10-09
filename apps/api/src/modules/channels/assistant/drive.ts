@@ -6,7 +6,8 @@ const FILLER = new Set(
     "buscar busque busca busco procurar procure procura achar ache pegar pegue pega baixar baixe mandar manda mande enviar envia envie " +
     "passar passe passa trazer traga traz abrir abra ver mostrar mostre arquivo arquivos documento documentos meu minha meus minhas " +
     "ouvir escutar tocar toca toque google drive gdrive ai la ali agora rapido rapidinho " +
-    "liste listar listem mostra encontrou encontrei encontre achou achei tem tenho existe existem quais qual que todos todas").split(" "),
+    "liste listar listem mostra encontrou encontrei encontre achou achei tem tenho existe existem quais qual que todos todas " +
+    "pasta autor autora escrito escrita extensao formato dentro eu").split(" "),
 );
 
 const strip = (w: string) => w.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase().replace(/[^a-z0-9]/g, "");
@@ -82,8 +83,8 @@ export const KIND_Q: Record<DriveKind, string> = {
   pdf: "mimeType = 'application/pdf'",
   sheet: "(mimeType contains 'spreadsheet' or mimeType contains 'excel' or mimeType = 'text/csv')",
   slides: "(mimeType contains 'presentation' or mimeType contains 'powerpoint')",
-  // EPUB às vezes sobe ao Drive como application/octet-stream: vale também pela extensão
-  book: "(mimeType = 'application/pdf' or mimeType = 'application/epub+zip' or name contains '.epub')",
+  // EPUB às vezes sobe ao Drive como application/octet-stream: entra na busca e o resto sai no isBook (pelo nome)
+  book: "(mimeType = 'application/pdf' or mimeType = 'application/epub+zip' or mimeType = 'application/octet-stream')",
 };
 
 const KIND_WORDS: [RegExp, DriveKind][] = [
@@ -96,11 +97,51 @@ const KIND_WORDS: [RegExp, DriveKind][] = [
   [/^(livro|livros|ebook|ebooks|epub|epubs)$/, "book"],
 ];
 
+/** Livro: PDF ou EPUB, pelo tipo ou pela extensão (o Drive às vezes guarda EPUB como arquivo genérico). */
+export function isBook(f: { nome?: string; tipo?: string }): boolean {
+  return f.tipo === "application/pdf" || f.tipo === "application/epub+zip" || /\.(pdf|epub)$/i.test(f.nome ?? "");
+}
+
+/** Extensão pedida → filtro de tipo na busca do Drive (o Drive não filtra por extensão). Sem tipo conhecido, só o nome serve. */
+const EXT_MIME: Record<string, string> = {
+  pdf: "mimeType = 'application/pdf'",
+  epub: "(mimeType = 'application/epub+zip' or mimeType = 'application/octet-stream')",
+  docx: "mimeType = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'",
+  xlsx: "mimeType = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'",
+  pptx: "mimeType = 'application/vnd.openxmlformats-officedocument.presentationml.presentation'",
+  csv: "mimeType = 'text/csv'",
+  txt: "mimeType = 'text/plain'",
+  mp3: "mimeType = 'audio/mpeg'",
+  mp4: "mimeType = 'video/mp4'",
+  jpg: "mimeType = 'image/jpeg'",
+  png: "mimeType = 'image/png'",
+};
+const EXT_ALIAS: Record<string, string> = { doc: "docx", xls: "xlsx", ppt: "pptx", jpeg: "jpg" };
+
+export function extQuery(ext: string): string {
+  return EXT_MIME[ext] ?? "";
+}
+
+/** Tipos ambíguos (EPUB e extensão desconhecida) só se confirmam pela terminação do nome. */
+export function needsNameCheck(ext: string): boolean {
+  return !EXT_MIME[ext] || ext === "epub";
+}
+
+export function nameHasExt(nome: string, ext: string): boolean {
+  return nome.toLowerCase().endsWith(`.${ext}`);
+}
+
 export interface DriveSpec {
   /** palavras do nome que o dono lembra (sem "me manda", "do drive"...) */
   terms: string[];
   /** tipo pedido: "música X" filtra áudios, "planilha de gastos" filtra planilhas */
   kind?: DriveKind;
+  /** extensão pedida ("em epub", ".pdf"): filtro duro */
+  ext?: string;
+  /** nome da pasta ("na pasta Faculdade"): procura dentro dela e das subpastas */
+  folder?: string;
+  /** palavras do nome do autor ("do autor Machado de Assis"): têm de aparecer no nome ou no texto do arquivo */
+  author?: string[];
   /** pedido de listagem ("liste os livros", "quais planilhas eu tenho"): mostra a lista, nunca envia sozinho */
   list?: boolean;
   /** palavras extras para a busca aproximada: sinônimos, correções, a palavra do tipo... */
@@ -108,7 +149,70 @@ export interface DriveSpec {
 }
 
 /** "me manda a música evidências do drive" → { terms: ["evidências"], kind: "audio", alternates: ["música"] }. */
+const NAME_STOP = new Set("que com na no nas nos em pasta arquivo arquivos livro livros pdf epub drive google e ou para pra por pelo pela".split(" "));
+const CONNECTOR = new Set(["de", "da", "do", "dos", "das"]);
+
+/** Pega o nome logo depois da deixa ("Machado de Assis que eu baixei" → "Machado de Assis"), até 4 palavras. */
+function takeName(rest: string): { name: string; used: string } {
+  const words = rest.trim().split(/\s+/);
+  const out: string[] = [];
+  for (let i = 0; i < words.length && out.length < 4; i++) {
+    const raw = words[i];
+    const w = raw.replace(/^[^\p{L}\p{N}]+|[^\p{L}\p{N}]+$/gu, "");
+    if (!w) break;
+    const next = (words[i + 1] ?? "").replace(/^[^\p{L}\p{N}]+/u, "");
+    const connector = CONNECTOR.has(strip(w)) && out.length > 0 && /^\p{Lu}/u.test(next);
+    if (NAME_STOP.has(strip(w)) || (CONNECTOR.has(strip(w)) && !connector)) break;
+    out.push(w);
+    if (/[,.;?!]$/.test(raw)) break;
+  }
+  const name = out.join(" ");
+  return { name, used: name };
+}
+
+/** Tira do texto os filtros ditos às claras (pasta, autor, extensão) e devolve o que sobrou. */
+function extractFilters(text: string): { rest: string; ext?: string; folder?: string; author?: string[] } {
+  let rest = text;
+  let folder: string | undefined;
+  let author: string[] | undefined;
+  let ext: string | undefined;
+  const q = rest.match(/\bpasta\s+(?:chamada\s+|de nome\s+)?(?:"([^"]+)"|“([^”]+)”)/iu);
+  if (q) {
+    folder = (q[1] ?? q[2]).trim();
+    rest = rest.replace(q[0], " ");
+  } else {
+    const m = rest.match(/\bpasta\s+(?:chamada\s+|de nome\s+)?(?=\S)/iu);
+    if (m) {
+      const after = rest.slice((m.index ?? 0) + m[0].length);
+      const { name } = takeName(after);
+      if (name) {
+        folder = name;
+        rest = rest.slice(0, m.index ?? 0) + " " + after.slice(after.indexOf(name) + name.length);
+      }
+    }
+  }
+  const a = rest.match(/\b(?:d[oa]s?\s+autor(?:a|es)?|de\s+autor(?:a)?|autor(?:a)?|escrit[oa]s?\s+por|de\s+autoria\s+d[aeo])\s*:?\s+(?=\S)/iu);
+  if (a) {
+    const after = rest.slice((a.index ?? 0) + a[0].length);
+    const { name } = takeName(after);
+    if (name) {
+      author = name.split(/\s+/).filter((w) => !CONNECTOR.has(strip(w)) && strip(w).length >= 2);
+      rest = rest.slice(0, a.index ?? 0) + " " + after.slice(after.indexOf(name) + name.length);
+    }
+  }
+  const e = rest.match(/(?:\bem\s+|\bformato\s+|\bextens[aã]o\s+|\s\.|^\.)(pdf|epub|docx?|xlsx?|pptx?|csv|txt|mp3|mp4|jpe?g|png)\b/iu);
+  if (e) {
+    const x = e[1].toLowerCase();
+    ext = EXT_ALIAS[x] ?? x;
+    rest = rest.replace(e[0], " ");
+  }
+  return { rest, ext, folder, author };
+}
+
 export function parseDriveQuery(text: string): DriveSpec {
+  const original = text;
+  const filters = extractFilters(text);
+  text = filters.rest;
   const terms: string[] = [];
   const alternates: string[] = [];
   let kind: DriveKind | undefined;
@@ -119,9 +223,17 @@ export function parseDriveQuery(text: string): DriveSpec {
       alternates.push(w);
     } else terms.push(w);
   }
-  const flat = text.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase().trim();
+  const flat = original.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase().trim();
   const list = /^(liste|listar|lista|listem|quais|mostre|mostra|ver)\b/.test(flat) || /\btod[oa]s\s+(os|as)\b/.test(flat);
-  return { terms: terms.slice(0, 6), kind, alternates, ...(list ? { list: true } : {}) };
+  return {
+    terms: terms.slice(0, 6),
+    kind,
+    alternates,
+    ...(filters.ext ? { ext: filters.ext } : {}),
+    ...(filters.folder ? { folder: filters.folder } : {}),
+    ...(filters.author?.length ? { author: filters.author } : {}),
+    ...(list ? { list: true } : {}),
+  };
 }
 
 const noAccent = (w: string) => w.normalize("NFD").replace(/[̀-ͯ]/g, "");
