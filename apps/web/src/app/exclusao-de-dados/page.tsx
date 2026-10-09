@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { UmamiRecorder } from "@/components/landing/umami-recorder";
 
 export const metadata: Metadata = { title: "Exclusão de dados", alternates: { canonical: "/exclusao-de-dados" } };
 
@@ -7,6 +8,7 @@ const CONTACT = process.env.NEXT_PUBLIC_CONTACT_EMAIL || "o contato de suporte i
 export default function DataDeletionPage() {
   return (
     <main className="max-w-2xl mx-auto px-6 py-12 text-gray-300 text-sm leading-relaxed space-y-6">
+      <UmamiRecorder />
       <h1 className="text-2xl font-semibold text-gray-100">Exclusão de dados</h1>
 
       <section className="space-y-2">

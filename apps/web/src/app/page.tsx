@@ -3,6 +3,7 @@ import type { Metadata } from "next";
 import { Bricolage_Grotesque, DM_Sans } from "next/font/google";
 import { Logo } from "@/components/brand/Logo";
 import { TemaPorHorario } from "@/components/landing/TemaPorHorario";
+import { UmamiRecorder } from "@/components/landing/umami-recorder";
 
 const display = Bricolage_Grotesque({ subsets: ["latin"], variable: "--font-display", weight: ["500", "700", "800"] });
 const body = DM_Sans({ subsets: ["latin"], variable: "--font-body" });
@@ -140,6 +141,7 @@ const TEMA_SCRIPT = "try{var h=new Date().getHours();document.currentScript.pare
 export default function Landing() {
   return (
     <div suppressHydrationWarning data-tema="noite" className={`${display.variable} ${body.variable} landing min-h-screen bg-[color:var(--l-bg)] font-[family-name:var(--font-body)] text-[color:var(--l-text)] antialiased`}>
+      <UmamiRecorder />
       <script dangerouslySetInnerHTML={{ __html: TEMA_SCRIPT }} />
       <TemaPorHorario />
       <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(JSON_LD).replace(/</g, "\\u003c") }} />

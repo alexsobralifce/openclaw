@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { UmamiRecorder } from "@/components/landing/umami-recorder";
 
 export const metadata: Metadata = { title: "Termos de Serviço", alternates: { canonical: "/termos" } };
 
@@ -7,6 +8,7 @@ const CONTACT = process.env.NEXT_PUBLIC_CONTACT_EMAIL || "o contato de suporte i
 export default function TermsPage() {
   return (
     <main className="max-w-2xl mx-auto px-6 py-12 text-gray-300 text-sm leading-relaxed space-y-6">
+      <UmamiRecorder />
       <h1 className="text-2xl font-semibold text-gray-100">Termos de Serviço</h1>
       <p className="text-gray-500">Última atualização: 3 de outubro de 2026</p>
 

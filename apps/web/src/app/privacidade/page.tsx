@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { UmamiRecorder } from "@/components/landing/umami-recorder";
 
 export const metadata: Metadata = { title: "Política de Privacidade", alternates: { canonical: "/privacidade" } };
 
@@ -10,6 +11,7 @@ const link = "text-violet-400 underline";
 export default function PrivacyPage() {
   return (
     <main className="max-w-2xl mx-auto px-6 py-12 text-gray-300 text-sm leading-relaxed space-y-6">
+      <UmamiRecorder />
       <h1 className="text-2xl font-semibold text-gray-100">Política de Privacidade</h1>
       <p className="text-gray-500">Última atualização: 3 de outubro de 2026</p>
 
