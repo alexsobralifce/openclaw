@@ -8,6 +8,7 @@ const API = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001";
  * depois de um XSS: carregar script de outro site, mandar dados para um servidor de terceiros (`connect-src` só aceita o próprio
  * site e a API), embutir o painel em outro site e trocar o destino de formulários.
  */
+const UMAMI = "https://umami-production-8dd4.up.railway.app";
 const MP_SCRIPT = "https://sdk.mercadopago.com https://http2.mlstatic.com";
 const MP_CONNECT = "https://api.mercadopago.com https://*.mercadopago.com https://*.mercadolibre.com https://api.mercadolibre.com https://http2.mlstatic.com";
 const MP_FRAME = "https://*.mercadopago.com https://*.mercadolibre.com";
@@ -21,12 +22,12 @@ export function contentSecurityPolicy(api: string = API, dev = process.env.NODE_
   const ws = origin.replace(/^http/, "ws");
   return [
     "default-src 'self'",
-    `script-src 'self' 'unsafe-inline'${dev ? " 'unsafe-eval'" : ""}${payments ? ` ${MP_SCRIPT}` : ""}`,
+    `script-src 'self' 'unsafe-inline' ${UMAMI}${dev ? " 'unsafe-eval'" : ""}${payments ? ` ${MP_SCRIPT}` : ""}`,
     "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
     "font-src 'self' data: https://fonts.gstatic.com",
     "img-src 'self' data: blob: https:",
     "media-src 'self' blob: data:",
-    `connect-src 'self' ${origin} ${ws}${dev ? " ws://localhost:*" : ""}${payments ? ` ${MP_CONNECT}` : ""}`,
+    `connect-src 'self' ${origin} ${ws} ${UMAMI}${dev ? " ws://localhost:*" : ""}${payments ? ` ${MP_CONNECT}` : ""}`,
     ...(payments ? [`frame-src ${MP_FRAME}`] : []),
     "worker-src 'self'",
     "manifest-src 'self'",
