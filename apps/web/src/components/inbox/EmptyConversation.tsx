@@ -1,6 +1,6 @@
 export function EmptyConversation() {
   return (
-    <div className="flex-1 flex items-center justify-center bg-gray-950">
+    <div className="hidden md:flex flex-1 items-center justify-center bg-gray-950">
       <div className="text-center">
         <div className="w-16 h-16 rounded-2xl bg-gray-800 flex items-center justify-center mx-auto mb-4">
           <svg width="28" height="28" fill="none" viewBox="0 0 24 24">

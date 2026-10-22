@@ -10,6 +10,7 @@ export const WEBHOOK_EVENTS = [
   "message.sent",
   "conversation.created",
   "conversation.status_changed",
+  "conversation.deleted",
   "contact.created",
   "contact.updated",
   "email.received",
@@ -72,7 +73,7 @@ export class WebhooksService implements OnModuleInit, OnModuleDestroy {
 
   async test(workspaceId: string, id: string) {
     const ep = await this.find(workspaceId, id);
-    await this.enqueue(ep.id, "webhook.test", { message: "Evento de teste do openclaw" });
+    await this.enqueue(ep.id, "webhook.test", { message: "Evento de teste do MagoBox" });
     return { ok: true };
   }
 

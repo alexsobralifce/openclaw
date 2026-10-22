@@ -1,0 +1,231 @@
+// Contador de tokens de IA por usuário: o contexto (quem está pedindo) viaja pela cadeia assíncrona, então as chamadas
+// à OpenAI/Gemini registram o consumo sem receber o usuário como parâmetro. Registrar nunca derruba o comando.
+
+import { AsyncLocalStorage } from "node:async_hooks";
+import { prisma } from "@openclaw/database";
+import { dayStamp } from "./notes";
+
+export const SYSTEM_USER = "sistema";
+const TZ = process.env.ASSISTANT_TZ || "America/Fortaleza";
+
+export interface UsageContext {
+  userId?: string;
+  workspaceId?: string;
+  /** root e admin não têm limite. */
+  exempt?: boolean;
+  /** A cota foi atingida neste fluxo: quem responde ao usuário acrescenta o aviso. */
+  quotaHit?: boolean;
+}
+const als = new AsyncLocalStorage<UsageContext>();
+
+/** Destino das respostas do fluxo atual, se houver. */
+export const currentInstance = () => als.getStore()?.instance;
+
+/** A partir daqui (e em tudo que este fluxo chamar), o consumo de IA é do usuário. */
+export const trackUser = (ctx: UsageContext) => als.enterWith(ctx);
+export const runAs = <T>(ctx: UsageContext, fn: () => T) => als.run(ctx, fn);
+
+export interface Tokens {
+  input: number;
+  output: number;
+}
+
+const num = (v: unknown) => (typeof v === "number" && Number.isFinite(v) && v > 0 ? Math.round(v) : 0);
+
+/** Resposta da OpenAI (chat): `usage.prompt_tokens` / `completion_tokens`. */
+export const openaiTokens = (data: any): Tokens => ({ input: num(data?.usage?.prompt_tokens), output: num(data?.usage?.completion_tokens) });
+
+/** Resposta do Gemini: `usageMetadata`; o que o modelo "pensou" também é cobrado como saída. */
+export const geminiTokens = (data: any): Tokens => ({
+  input: num(data?.usageMetadata?.promptTokenCount),
+  output: num(data?.usageMetadata?.candidatesTokenCount) + num(data?.usageMetadata?.thoughtsTokenCount),
+});
+
+/** Dono de cada workspace (cache de 10 min): chamadas de rotinas automáticas, sem usuário no contexto, contam para ele. */
+const ownerCache = new Map<string, { at: number; userId: string | null }>();
+const OWNER_CACHE_MS = 10 * 60_000;
+async function ownerOf(workspaceId: string): Promise<string | null> {
+  const hit = ownerCache.get(workspaceId);
+  if (hit && Date.now() - hit.at < OWNER_CACHE_MS) return hit.userId;
+  let userId: string | null = null;
+  try {
+    userId = (await prisma.workspaceMember.findFirst({ where: { workspaceId, role: "OWNER" }, select: { userId: true } }))?.userId ?? null;
+  } catch {
+    /* sem banco: cai em "sistema" */
+  }
+  ownerCache.set(workspaceId, { at: Date.now(), userId });
+  return userId;
+}
+export const resetOwnerCache = () => ownerCache.clear();
+
+/**
+ * Soma uma chamada ao contador do dia. O usuário vem do contexto; sem ele, vale o dono do workspace (rotinas automáticas);
+ * sem workspace, "sistema". Falhas (banco fora, tabela ainda não criada) só viram aviso no log.
+ */
+export function recordUsage(provider: string, model: string, tokens: Tokens, fallbackWs?: string, at = new Date()): void {
+  const ctx = als.getStore();
+  const workspaceId = ctx?.workspaceId ?? fallbackWs ?? "";
+  const day = dayStamp(at, TZ);
+  void (async () => {
+    // Com usuário no contexto, o gasto entra no cache da cota já, sem esperar nada
+    let userId = ctx?.userId;
+    if (userId) bumpMonth(userId, limitCost({ model, inputTokens: tokens.input, outputTokens: tokens.output }, loadPrices()));
+    else {
+      userId = (workspaceId && (await ownerOf(workspaceId))) || SYSTEM_USER;
+      if (userId !== SYSTEM_USER) bumpMonth(userId, limitCost({ model, inputTokens: tokens.input, outputTokens: tokens.output }, loadPrices()));
+    }
+    await prisma.aiUsage.upsert({
+      where: { userId_day_provider_model: { userId, day, provider, model } },
+      create: { userId, workspaceId, day, provider, model, calls: 1, inputTokens: tokens.input, outputTokens: tokens.output },
+      update: { calls: { increment: 1 }, inputTokens: { increment: tokens.input }, outputTokens: { increment: tokens.output } },
+    });
+  })().catch((e: any) => console.warn(`Contador de tokens falhou: ${String(e?.message ?? e).slice(0, 120)}`));
+}
+
+/** Preço em US$ por 1 milhão de tokens. */
+export interface Price {
+  in: number;
+  out: number;
+}
+
+/** Só o que está confirmado; os demais modelos entram pela variável AI_PRICES (JSON: {"modelo":{"in":0.1,"out":0.4}}). */
+const DEFAULT_PRICES: Record<string, Price> = { "gpt-4o-mini": { in: 0.15, out: 0.6 } };
+
+/** Tabela de preços: os padrões mais o que o dono definir em AI_PRICES (entradas inválidas são ignoradas). */
+export function loadPrices(raw = process.env.AI_PRICES): Record<string, Price> {
+  const out = { ...DEFAULT_PRICES };
+  try {
+    for (const [model, p] of Object.entries(JSON.parse(raw || "{}") as Record<string, any>)) {
+      if (Number.isFinite(p?.in) && Number.isFinite(p?.out) && p.in >= 0 && p.out >= 0) out[model] = { in: p.in, out: p.out };
+    }
+  } catch {
+    /* AI_PRICES inválida: fica só com os padrões */
+  }
+  return out;
+}
+
+/** Custo em US$ de uma linha, ou null quando o modelo não tem preço (não se inventa preço). Modelos datados (gpt-4o-mini-2024...) usam o preço do nome base. */
+export function costOf(r: { model: string; inputTokens: number; outputTokens: number }, prices: Record<string, Price>): number | null {
+  const key = Object.keys(prices).filter((k) => r.model === k || r.model.startsWith(`${k}-`)).sort((a, b) => b.length - a.length)[0];
+  const p = key && prices[key];
+  return p ? (r.inputTokens * p.in + r.outputTokens * p.out) / 1_000_000 : null;
+}
+
+export interface UsageRow {
+  userId: string;
+  provider: string;
+  model: string;
+  day: string;
+  calls: number;
+  inputTokens: number;
+  outputTokens: number;
+}
+
+export interface UserUsage {
+  userId: string;
+  calls: number;
+  inputTokens: number;
+  outputTokens: number;
+  totalTokens: number;
+  byProvider: Record<string, { calls: number; tokens: number }>;
+  lastDay: string;
+  firstDay: string;
+  /** Custo estimado só do que tem preço conhecido; o resto fica em `unpricedTokens`. */
+  costUsd: number;
+  unpricedTokens: number;
+  /** Projeção para 30 dias, pelo ritmo desde o primeiro uso (mínimo de 1 dia). */
+  monthlyUsd: number;
+}
+
+const DAY_MS = 86_400_000;
+const daysBetween = (from: string, to: string) => Math.max(1, Math.round((Date.parse(`${to}T00:00:00Z`) - Date.parse(`${from}T00:00:00Z`)) / DAY_MS) + 1);
+
+/** Agrupa as linhas por usuário (mais consumo primeiro) e soma o total geral. */
+export function rollup(rows: UsageRow[], prices: Record<string, Price> = {}, today = ""): { users: UserUsage[]; total: { calls: number; inputTokens: number; outputTokens: number; totalTokens: number }; byDay: { day: string; tokens: number }[] } {
+  const users = new Map<string, UserUsage>();
+  const days = new Map<string, number>();
+  for (const r of rows) {
+    const u = users.get(r.userId) ?? { userId: r.userId, calls: 0, inputTokens: 0, outputTokens: 0, totalTokens: 0, byProvider: {}, lastDay: "", firstDay: r.day, costUsd: 0, unpricedTokens: 0, monthlyUsd: 0 };
+    const t = r.inputTokens + r.outputTokens;
+    u.calls += r.calls;
+    u.inputTokens += r.inputTokens;
+    u.outputTokens += r.outputTokens;
+    u.totalTokens += t;
+    const p = (u.byProvider[r.provider] ??= { calls: 0, tokens: 0 });
+    p.calls += r.calls;
+    p.tokens += t;
+    if (r.day > u.lastDay) u.lastDay = r.day;
+    if (r.day < u.firstDay) u.firstDay = r.day;
+    const c = costOf(r, prices);
+    if (c === null) u.unpricedTokens += t;
+    else u.costUsd += c;
+    users.set(r.userId, u);
+    days.set(r.day, (days.get(r.day) ?? 0) + t);
+  }
+  for (const u of users.values()) u.monthlyUsd = (u.costUsd / daysBetween(u.firstDay, today || u.lastDay)) * 30;
+  const list = [...users.values()].sort((a, b) => b.totalTokens - a.totalTokens);
+  const total = list.reduce((s, u) => ({ calls: s.calls + u.calls, inputTokens: s.inputTokens + u.inputTokens, outputTokens: s.outputTokens + u.outputTokens, totalTokens: s.totalTokens + u.totalTokens }), { calls: 0, inputTokens: 0, outputTokens: 0, totalTokens: 0 });
+  return { users: list, total, byDay: [...days].map(([day, tokens]) => ({ day, tokens })).sort((a, b) => a.day.localeCompare(b.day)) };
+}
+
+// ─── Limite mensal de tokens por usuário ─────────────────────────
+
+/** Limite de tokens por usuário no mês (AI_MONTHLY_TOKEN_LIMIT); 0 ou vazio = sem limite. */
+export const monthlyLimit = () => {
+  const n = Math.trunc(Number(process.env.AI_MONTHLY_TOKEN_LIMIT));
+  return Number.isFinite(n) && n > 0 ? n : 0;
+};
+
+export class QuotaExceededError extends Error {
+  constructor(limit: number) {
+    super(`Limite mensal de uso de IA atingido (${limit.toLocaleString("pt-BR")} tokens).`);
+  }
+}
+
+/** Aviso para o usuário, acrescentado à resposta quando a cota barrou alguma chamada. */
+export const QUOTA_NOTICE = "⚠️ *Você atingiu o limite mensal de uso de IA.* O menu continua funcionando, mas leitura de arquivos, áudio e respostas da IA voltam no próximo mês. Se precisar de mais, fale com o administrador.";
+
+/** O fluxo atual bateu na cota? */
+export const quotaHit = () => !!als.getStore()?.quotaHit;
+
+const monthCache = new Map<string, { at: number; tokens: number }>();
+const MONTH_CACHE_MS = 60_000;
+
+/** Tokens do usuário no mês corrente (cache de 1 min para não consultar o banco a cada chamada). */
+async function monthTokens(userId: string, at = new Date()): Promise<number> {
+  const hit = monthCache.get(userId);
+  if (hit && Date.now() - hit.at < MONTH_CACHE_MS) return hit.tokens;
+  const first = `${dayStamp(at, TZ).slice(0, 7)}-01`;
+  const agg = await prisma.aiUsage.aggregate({ where: { userId, day: { gte: first } }, _sum: { inputTokens: true, outputTokens: true } });
+  const tokens = (agg._sum.inputTokens ?? 0) + (agg._sum.outputTokens ?? 0);
+  monthCache.set(userId, { at: Date.now(), tokens });
+  return tokens;
+}
+
+/**
+ * Chamar antes de gastar IA: barra o usuário que passou do limite do mês. Sem limite configurado, sem usuário (rotinas
+ * automáticas) ou isento (root/admin), não faz nada. Se o banco falhar, deixa passar: contar nunca derruba o assistente.
+ */
+export async function assertQuota(): Promise<void> {
+  const limit = monthlyLimit();
+  const ctx = als.getStore();
+  if (!limit || !ctx?.userId || ctx.exempt) return;
+  let used = 0;
+  try {
+    used = await monthTokens(ctx.userId);
+  } catch {
+    return;
+  }
+  if (used >= limit) {
+    ctx.quotaHit = true;
+    throw new QuotaExceededError(limit);
+  }
+}
+
+/** Soma ao cache o que acabou de ser gasto, para a cota valer sem esperar o minuto do cache. */
+export function bumpMonth(userId: string, tokens: number): void {
+  const hit = monthCache.get(userId);
+  if (hit) hit.tokens += tokens;
+}
+
+export const resetQuotaCache = () => monthCache.clear();

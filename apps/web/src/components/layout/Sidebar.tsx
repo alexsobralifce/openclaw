@@ -2,12 +2,25 @@
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { clearToken } from "@/lib/auth";
+import { endSession } from "@/lib/auth";
+import { hasService, isAdmin, useMe } from "@/hooks/useMe";
+import { Logo } from "@/components/brand/Logo";
 
-const nav = [
+// service: serviço que precisa estar liberado para o item aparecer; admin: só ROOT/ADMIN
+export const nav: { href: string; label: string; icon: React.ReactNode; service?: string; admin?: boolean; root?: boolean }[] = [
+  {
+    href: "/dashboard/resumo",
+    label: "Resumo",
+    icon: (
+      <svg width="20" height="20" fill="none" viewBox="0 0 24 24">
+        <path d="M4 4h7v9H4zM13 4h7v5h-7zM13 11h7v9h-7zM4 15h7v5H4z" stroke="currentColor" strokeWidth="1.6" strokeLinejoin="round"/>
+      </svg>
+    ),
+  },
   {
     href: "/dashboard/inbox",
     label: "Inbox",
+    service: "inbox",
     icon: (
       <svg width="20" height="20" fill="none" viewBox="0 0 24 24">
         <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
@@ -17,6 +30,7 @@ const nav = [
   {
     href: "/dashboard/contacts",
     label: "Contatos",
+    service: "contacts",
     icon: (
       <svg width="20" height="20" fill="none" viewBox="0 0 24 24">
         <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
@@ -26,8 +40,20 @@ const nav = [
     ),
   },
   {
+    href: "/dashboard/documentos",
+    label: "Documentos",
+    service: "drive",
+    icon: (
+      <svg width="20" height="20" fill="none" viewBox="0 0 24 24">
+        <path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8l-5-5Z" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
+        <path d="M14 3v5h5M9 13h6M9 17h4" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
+      </svg>
+    ),
+  },
+  {
     href: "/dashboard/channels",
     label: "Canais",
+    service: "channels",
     icon: (
       <svg width="20" height="20" fill="none" viewBox="0 0 24 24">
         <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07A19.5 19.5 0 0 1 4.69 12 19.79 19.79 0 0 1 1.64 3.45 2 2 0 0 1 3.6 1.27h3a2 2 0 0 1 2 1.72c.127.96.361 1.903.7 2.81a2 2 0 0 1-.45 2.11L7.91 8.91a16 16 0 0 0 6.07 6.07l.95-.95a2 2 0 0 1 2.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0 1 22 16.92z" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
@@ -37,6 +63,7 @@ const nav = [
   {
     href: "/dashboard/automations",
     label: "Automações",
+    service: "automations",
     icon: (
       <svg width="20" height="20" fill="none" viewBox="0 0 24 24">
         <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
@@ -44,11 +71,54 @@ const nav = [
     ),
   },
   {
+    href: "/dashboard/chat",
+    label: "Assistente",
+    service: "assistant",
+    icon: (
+      <svg width="20" height="20" fill="none" viewBox="0 0 24 24">
+        <path d="M12 3l1.9 4.6L18.5 9l-4.6 1.4L12 15l-1.9-4.6L5.5 9l4.6-1.4L12 3zM18 15l.9 2.1L21 18l-2.1.9L18 21l-.9-2.1L15 18l2.1-.9L18 15z" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/>
+      </svg>
+    ),
+  },
+  {
+    href: "/dashboard/vault",
+    label: "Cofre",
+    service: "vault",
+    icon: (
+      <svg width="20" height="20" fill="none" viewBox="0 0 24 24">
+        <rect x="3" y="11" width="18" height="11" rx="2" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
+        <path d="M7 11V7a5 5 0 0 1 10 0v4" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
+      </svg>
+    ),
+  },
+  {
     href: "/dashboard/api",
     label: "API",
+    service: "api",
     icon: (
       <svg width="20" height="20" fill="none" viewBox="0 0 24 24">
         <path d="M16 18l6-6-6-6M8 6l-6 6 6 6" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
+      </svg>
+    ),
+  },
+  {
+    href: "/dashboard/users",
+    label: "Usuários",
+    admin: true,
+    icon: (
+      <svg width="20" height="20" fill="none" viewBox="0 0 24 24">
+        <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
+        <path d="M9 12l2 2 4-4" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
+      </svg>
+    ),
+  },
+  {
+    href: "/dashboard/usage",
+    label: "Consumo",
+    root: true,
+    icon: (
+      <svg width="20" height="20" fill="none" viewBox="0 0 24 24">
+        <path d="M18 20V10M12 20V4M6 20v-6" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
       </svg>
     ),
   },
@@ -62,40 +132,57 @@ const nav = [
       </svg>
     ),
   },
+  {
+    href: "/dashboard/ajuda",
+    label: "Ajuda",
+    icon: (
+      <svg width="20" height="20" fill="none" viewBox="0 0 24 24">
+        <circle cx="12" cy="12" r="9" stroke="currentColor" strokeWidth="1.8"/>
+        <path d="M9.5 9.5a2.5 2.5 0 1 1 3.5 2.3c-.7.3-1 .9-1 1.7M12 17h.01" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
+      </svg>
+    ),
+  },
 ];
+
+/** Itens que o usuário pode ver (serviço liberado; "admin" só para ROOT/ADMIN). */
+export function visibleNav(me: ReturnType<typeof useMe>) {
+  return nav.filter((i) => (i.root ? me?.platformRole === "ROOT" : i.admin ? isAdmin(me) : !i.service || !me || hasService(me, i.service)));
+}
 
 export function Sidebar() {
   const pathname = usePathname();
   const router = useRouter();
+  const me = useMe();
+  const visible = visibleNav(me);
 
   function logout() {
-    clearToken();
-    router.push("/auth/login");
+    endSession();
+    router.push("/");
   }
 
   return (
-    <aside className="w-[220px] flex-shrink-0 flex flex-col border-r border-gray-800 bg-gray-900">
+    <aside className="hidden md:flex w-[220px] flex-shrink-0 flex-col border-r border-gray-800 bg-gray-900">
       {/* Logo */}
       <div className="h-14 flex items-center px-5 border-b border-gray-800">
-        <span className="font-bold text-lg text-teal-400 tracking-tight">openclaw</span>
+        <Logo size={30} textClassName="font-bold text-lg tracking-tight text-gray-50" />
       </div>
 
       {/* Workspace badge */}
       <div className="px-3 pt-3 pb-1">
         <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-gray-800 cursor-pointer hover:bg-gray-700 transition-colors">
-          <div className="w-6 h-6 rounded-md bg-teal-500 flex items-center justify-center text-xs font-bold text-white flex-shrink-0">
-            W
+          <div className="w-6 h-6 rounded-md bg-violet-500 flex items-center justify-center text-xs font-bold text-white flex-shrink-0">
+            {(me?.workspaceName ?? "W").charAt(0).toUpperCase()}
           </div>
           <div className="min-w-0">
-            <p className="text-xs font-semibold text-gray-200 truncate">Meu Workspace</p>
-            <p className="text-[10px] text-gray-500">Plano Free</p>
+            <p className="text-xs font-semibold text-gray-200 truncate">{me?.workspaceName ?? "Meu Workspace"}</p>
+            <p className="text-[10px] text-gray-500 truncate">{me ? `${me.name}${me.platformRole === "ROOT" ? " · root" : me.platformRole === "ADMIN" ? " · admin" : ""}` : ""}</p>
           </div>
         </div>
       </div>
 
       {/* Nav */}
       <nav className="flex-1 px-3 py-2 space-y-0.5 overflow-y-auto">
-        {nav.map((item) => {
+        {visible.map((item) => {
           const active = pathname.startsWith(item.href);
           return (
             <Link
@@ -103,11 +190,11 @@ export function Sidebar() {
               href={item.href}
               className={`flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
                 active
-                  ? "bg-teal-500/15 text-teal-400"
+                  ? "bg-violet-500/15 text-violet-400"
                   : "text-gray-400 hover:text-gray-200 hover:bg-gray-800"
               }`}
             >
-              <span className={active ? "text-teal-400" : "text-gray-500"}>{item.icon}</span>
+              <span className={active ? "text-violet-400" : "text-gray-500"}>{item.icon}</span>
               {item.label}
             </Link>
           );
@@ -117,21 +204,10 @@ export function Sidebar() {
       {/* Logout */}
       <div className="p-3 border-t border-gray-800 space-y-0.5">
         <a
-          href="/comandos.html"
-          target="_blank"
-          rel="noopener"
-          className="w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm text-gray-500 hover:text-teal-400 hover:bg-gray-800 transition-colors"
-        >
-          <svg width="16" height="16" fill="none" viewBox="0 0 24 24">
-            <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20V3H6.5A2.5 2.5 0 0 0 4 5.5v14ZM4 19.5A2.5 2.5 0 0 0 6.5 22H20v-5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
-          </svg>
-          Guia de comandos
-        </a>
-        <a
           href="/api-publica.html"
           target="_blank"
           rel="noopener"
-          className="w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm text-gray-500 hover:text-teal-400 hover:bg-gray-800 transition-colors"
+          className="w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm text-gray-500 hover:text-violet-400 hover:bg-gray-800 transition-colors"
         >
           <svg width="16" height="16" fill="none" viewBox="0 0 24 24">
             <path d="M16 18l6-6-6-6M8 6l-6 6 6 6" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>

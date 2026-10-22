@@ -1,26 +1,28 @@
 <!doctype html>
 <html lang="pt-BR">
 <head>
+<script defer src="https://umami-production-8dd4.up.railway.app/script.js" data-website-id="2421af49-5ed3-4181-ab4f-377177f99129"></script>
+<script defer src="https://umami-production-8dd4.up.railway.app/recorder.js" data-website-id="2421af49-5ed3-4181-ab4f-377177f99129"></script>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="color-scheme" content="light dark">
 <meta name="robots" content="noindex">
-<title>Comandos do openclaw</title>
+<title>Comandos do MagoBox</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:wght@600;700;800&family=DM+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
 <style>
   :root {
-    --bg: #f2f7f5;
+    --bg: #f4f2f7;
     --surface: #ffffff;
     --surface-2: #eaf2ef;
-    --ink: #0e1f1b;
-    --muted: #52686a;
-    --line: #d3e2dc;
-    --accent: #0a8a7c;
+    --ink: #150f1e;
+    --muted: #5b5468;
+    --line: #d9d4e1;
+    --accent: #7C3AED;
     --accent-ink: #ffffff;
-    --chip: #dff3ee;
-    --chip-ink: #06564c;
+    --chip: #e7e0f2;
+    --chip-ink: #4C1D95;
     --warn: #a4530a;
     --warn-bg: #fdf0dc;
     --bubble-me: #d9fdd3;
@@ -32,15 +34,15 @@
   @media (prefers-color-scheme: dark) {
     :root:not([data-theme="light"]) {
       color-scheme: dark;
-      --bg: #08100e; --surface: #0e1a17; --surface-2: #132320; --ink: #e7f0ed; --muted: #92a9a3;
-      --line: #1f342f; --accent: #2dd4bf; --accent-ink: #03211c; --chip: #113029; --chip-ink: #7ce9d8;
+      --bg: #0b090f; --surface: #130f19; --surface-2: #191422; --ink: #eae8ef; --muted: #9b94a7;
+      --line: #272132; --accent: #A78BFA; --accent-ink: #1E1B4B; --chip: #1d132e; --chip-ink: #DDD6FE;
       --warn: #f5a524; --warn-bg: #2b2110; --bubble-me: #005c4b; --bubble-bot: #202c33;
     }
   }
   :root[data-theme="dark"] {
     color-scheme: dark;
-    --bg: #08100e; --surface: #0e1a17; --surface-2: #132320; --ink: #e7f0ed; --muted: #92a9a3;
-    --line: #1f342f; --accent: #2dd4bf; --accent-ink: #03211c; --chip: #113029; --chip-ink: #7ce9d8;
+    --bg: #0b090f; --surface: #130f19; --surface-2: #191422; --ink: #eae8ef; --muted: #9b94a7;
+    --line: #272132; --accent: #A78BFA; --accent-ink: #1E1B4B; --chip: #1d132e; --chip-ink: #DDD6FE;
     --warn: #f5a524; --warn-bg: #2b2110; --bubble-me: #005c4b; --bubble-bot: #202c33;
   }
 
@@ -141,7 +143,7 @@
 <div class="wrap">
   <header class="top">
     <p class="eyebrow">Guia de bolso do assistente</p>
-    <h1>Comandos do openclaw</h1>
+    <h1>Comandos do MagoBox</h1>
     <p class="lead">Tudo o que você controla pelo WhatsApp: e-mails, agenda, clientes e a IA. Responda com um <strong>número</strong>, uma <strong>palavra</strong> ou um <strong>áudio</strong>.</p>
     <div class="lines">
       <span>Você escreve do <b>número cadastrado como dono</b></span>
@@ -158,8 +160,6 @@
         <li><a href="#comeco">Começar</a></li>
         <li><a href="#trilhas">Trilhas</a></li>
         <li><a href="#voz">Por voz</a></li>
-        <li><a href="#direcao">Modo direção</a></li>
-        <li><a href="#carro">Modo carro</a></li>
         <li><a href="#avisos">Avisos</a></li>
         <li><a href="#seguranca">Segurança</a></li>
         <li><a href="#painel">Painel web</a></li>
@@ -189,7 +189,6 @@
             <tr data-s><td><span class="say">4</span></td><td>Conversas de clientes</td><td>Conversas abertas e pendentes</td></tr>
             <tr data-s><td><span class="say">5</span></td><td>Perguntar à IA</td><td>Modo livre: escreva ou fale o que precisa</td></tr>
             <tr data-s><td><span class="say">6</span></td><td>Minha memória</td><td>O que o assistente guardou sobre você</td></tr>
-            <tr data-s><td><span class="say">7</span></td><td>Modo direção</td><td>Liga ou desliga o assistente por áudio</td></tr>
           </tbody>
         </table></div>
         <p class="sub" style="color:var(--muted)">A numeração acompanha as contas Google conectadas: cada conta ganha a sua linha de e-mails e o restante desce. Confira sempre o número ao lado do nome.</p>
@@ -286,7 +285,7 @@
             <tr data-s><td>Abrir o menu</td><td><span class="say">oi</span> <span class="say">olá</span> <span class="say">menu</span> <span class="say">ajuda</span> <span class="say">bom dia</span></td></tr>
             <tr data-s><td>Escolher uma opção</td><td><span class="say">um</span> <span class="say">dois</span> <span class="say">três</span> <span class="say">quatro</span> <span class="say">cinco</span> <span class="say">seis</span> <span class="say">sete</span> <span class="say">zero</span> · <span class="say">voltar</span></td></tr>
             <tr data-s><td>Aviso de e-mail novo</td><td><span class="say">ler</span> <span class="say">apagar</span> <span class="say">responder</span> <span class="say">spam</span></td></tr>
-            <tr data-s><td>Dentro de um e-mail</td><td><span class="say">responder</span> <span class="say">apagar</span> <span class="say">marcar como lido</span> <span class="say">spam</span></td></tr>
+            <tr data-s><td>Dentro de um e-mail</td><td><span class="say">responder</span> <span class="say">apagar</span> <span class="say">marcar como lido</span> <span class="say">spam</span> <span class="say">próximo</span> (pula sem apagar)</td></tr>
             <tr data-s><td>Rascunho de e-mail ou mensagem</td><td><span class="say">enviar</span> <span class="say">pode enviar</span> <span class="say">refazer</span> <span class="say">cancelar</span></td></tr>
             <tr data-s><td>Confirmar evento</td><td><span class="say">confirmar</span> <span class="say">sim</span> <span class="say">refazer</span> <span class="say">cancelar</span></td></tr>
             <tr data-s><td>Confirmar uma ação da IA</td><td><span class="say">confirmar</span> <span class="say">sim</span> <span class="say">pode enviar</span> · <span class="say">cancelar</span> <span class="say">não</span></td></tr>
@@ -296,55 +295,7 @@
         </table></div>
       </section>
 
-      <!-- MODO DIREÇÃO -->
-      <section class="sec" id="direcao">
-        <h2>Modo direção</h2>
-        <p class="sub">Mãos no volante: o assistente avisa e responde por <strong>áudio</strong>, e você comanda falando. Fica ligado até você desligar.</p>
-        <div class="two">
-          <div class="tw"><table>
-            <thead><tr><th>Ligar</th></tr></thead>
-            <tbody>
-              <tr data-s><td style="width:auto"><span class="say">vou dirigir</span> <span class="say">modo direção</span> <span class="say">estou dirigindo</span> <span class="say">tô dirigindo</span> ou menu › <span class="say">7</span></td></tr>
-            </tbody>
-          </table></div>
-          <div class="tw"><table>
-            <thead><tr><th>Desligar</th></tr></thead>
-            <tbody>
-              <tr data-s><td style="width:auto"><span class="say">cheguei</span> <span class="say">parei de dirigir</span> <span class="say">sair do modo direção</span> <span class="say">desligar modo direção</span></td></tr>
-            </tbody>
-          </table></div>
-        </div>
-        <div class="chat" data-s>
-          <div class="b bot"><small>Assistente · áudio</small>Novo e-mail. De: Prefeitura Municipal. Assunto: Convite para reunião. Diga: ler, apagar, responder ou spam.</div>
-          <div class="b me"><small>Você · áudio</small>Responder.</div>
-          <div class="b bot"><small>Assistente · áudio</small>Me diga o que responder.</div>
-          <div class="b me"><small>Você · áudio</small>Confirmo presença, obrigado pelo convite.</div>
-          <div class="b bot"><small>Assistente · áudio</small>Rascunho pronto. Diga: enviar, refazer ou cancelar.</div>
-          <div class="b me"><small>Você · áudio</small>Enviar.</div>
-        </div>
-        <div class="note"><b>Se a voz demorar ou falhar</b>, o assistente responde por texto para você não ficar sem retorno.</div>
-      </section>
-
       <!-- MODO CARRO -->
-      <section class="sec" id="carro">
-        <h2>Modo carro (Android Auto)</h2>
-        <p class="sub">O Android Auto lê <strong>texto</strong> em voz alta, mas não toca áudios. Neste modo o assistente responde em texto curto e falável. Você comanda pelo Google Assistente.</p>
-        <div class="two">
-          <div class="tw"><table>
-            <thead><tr><th>Ligar / desligar</th></tr></thead>
-            <tbody>
-              <tr data-s><td style="width:auto"><span class="say">modo carro</span> <span class="say">android auto</span> · desligar: <span class="say">sair do modo carro</span> <span class="say">cheguei</span></td></tr>
-            </tbody>
-          </table></div>
-          <div class="tw"><table>
-            <thead><tr><th>Comandar com o Google Assistente</th></tr></thead>
-            <tbody>
-              <tr data-s><td style="width:auto"><span class="say">Ok Google, enviar mensagem no WhatsApp para Assistente: ler e-mails</span></td></tr>
-            </tbody>
-          </table></div>
-        </div>
-        <div class="note"><b>Dica:</b> salve o número do assistente como contato "Assistente". Diga palavras (ler, spam, apagar) em vez de números.</div>
-      </section>
 
       <!-- AVISOS -->
       <section class="sec" id="avisos">
@@ -353,7 +304,10 @@
           <thead><tr><th>Quando</th><th>O que você recebe</th></tr></thead>
           <tbody>
             <tr data-s><td>Chega um e-mail novo</td><td>Aviso com remetente e assunto, e as opções <span class="say">1</span> ler · <span class="say">2</span> apagar · <span class="say">3</span> responder · <span class="say">4</span> spam. A checagem acontece a cada minuto, em todas as contas.</td></tr>
-            <tr data-s><td>Chegam vários juntos</td><td>Uma lista numerada. Diga o número do e-mail que quer abrir.</td></tr>
+            <tr data-s><td>Chegam vários juntos</td><td>Uma lista numerada <strong>do mais antigo ao mais novo</strong>, com a hora de cada um. Diga o número, ou <span class="say">próximo</span> para ir um a um.</td></tr>
+            <tr data-s><td>Chega e-mail enquanto você usa o assistente</td><td>A tela não muda (os números continuam valendo). Você recebe só um aviso e o e-mail espera na <strong>fila</strong>.</td></tr>
+            <tr data-s><td><span class="say">próximo</span></td><td>Abre o e-mail mais antigo da fila. Ao apagar, marcar como lido, marcar spam ou enviar a resposta, o seguinte abre sozinho, até a fila acabar.</td></tr>
+            <tr data-s><td><span class="say">fila</span></td><td>Mostra os e-mails novos que ainda esperam por você.</td></tr>
             <tr data-s><td>Você está no meio de outra tarefa</td><td>Um aviso curto, sem opções, para não atrapalhar. Quando terminar, diga <span class="say">menu</span>.</td></tr>
             <tr data-s><td>E-mails antigos</td><td>Só chegam avisos dos e-mails novos, depois da conexão da conta.</td></tr>
           </tbody>

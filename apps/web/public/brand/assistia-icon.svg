@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024" role="img" aria-label="Assist.IA">
+  <!-- Ícone quadrado, sem cantos arredondados: serve de base para PNGs, ícone "maskable" e capa do app -->
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#2dd4bf"/>
+      <stop offset="1" stop-color="#0f766e"/>
+    </linearGradient>
+  </defs>
+  <rect width="1024" height="1024" fill="url(#bg)"/>
+  <!-- balão de conversa (o WhatsApp é a casa do assistente) -->
+  <path fill="#ffffff" d="M320 210H704A120 120 0 0 1 824 330V550A120 120 0 0 1 704 670H480L330 800V670H320A120 120 0 0 1 200 550V330A120 120 0 0 1 320 210Z"/>
+  <!-- "A" de Assist -->
+  <path d="M398 596 512 300 626 596" fill="none" stroke="#0f766e" stroke-width="58" stroke-linecap="round" stroke-linejoin="round"/>
+  <!-- faísca de IA no lugar da barra do "A" -->
+  <path fill="#14b8a6" d="M512 446C512 490 526 506 570 506 526 506 512 522 512 566 512 522 498 506 454 506 498 506 512 490 512 446Z"/>
+</svg>

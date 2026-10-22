@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState, useRef, useCallback } from "react";
+import { useRouter } from "next/navigation";
 import { api } from "@/lib/api";
 import { useInboxSocket } from "@/hooks/useInboxSocket";
 
@@ -18,6 +19,12 @@ export function ConversationPanel({ conversationId }: Props) {
   const [messages, setMessages] = useState<any[]>([]);
   const [text, setText] = useState("");
   const [sending, setSending] = useState(false);
+  const [sendError, setSendError] = useState("");
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  const [alsoContact, setAlsoContact] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState("");
+  const router = useRouter();
   const [status, setStatus] = useState<string>("OPEN");
   const bottomRef = useRef<HTMLDivElement>(null);
 
@@ -48,12 +55,30 @@ export function ConversationPanel({ conversationId }: Props) {
     setStatus(payload.status);
   }, [conversationId]);
 
-  useInboxSocket({ onNewMessage: handleNewMessage, onConversationUpdated: handleConversationUpdated, conversationId });
+  // Outra pessoa da equipe apagou esta conversa: sai da tela dela
+  const handleConversationDeleted = useCallback((payload: { conversationId: string }) => {
+    if (payload.conversationId === conversationId) router.push("/dashboard/inbox");
+  }, [conversationId, router]);
+
+  useInboxSocket({ onNewMessage: handleNewMessage, onConversationUpdated: handleConversationUpdated, onConversationDeleted: handleConversationDeleted, conversationId });
+
+  async function deleteConversation() {
+    setDeleting(true);
+    setDeleteError("");
+    try {
+      await api.inbox.remove(conversationId, alsoContact);
+      router.push("/dashboard/inbox");
+    } catch (e: any) {
+      setDeleteError(e?.message ?? "Não foi possível excluir a conversa");
+      setDeleting(false);
+    }
+  }
 
   async function send() {
     const body = text.trim();
     if (!body || !data) return;
     setSending(true);
+    setSendError("");
     const optimisticId = `opt_${Date.now()}`;
     const optimistic = {
       id: optimisticId, body, direction: "OUTBOUND",
@@ -62,13 +87,13 @@ export function ConversationPanel({ conversationId }: Props) {
     setMessages((prev) => [...prev, optimistic]);
     setText("");
     try {
-      await api.channels.sendWhatsapp(
-        data.channel.id,
-        data.contact.phone,
-        body,
-        conversationId,
-      );
-    } catch {
+      if (data.channel.type === "INSTAGRAM") {
+        await api.channels.sendInstagram(data.channel.id, body, conversationId);
+      } else {
+        await api.channels.sendWhatsapp(data.channel.id, data.contact.phone, body, conversationId);
+      }
+    } catch (e: any) {
+      setSendError(e?.message ?? "Não foi possível enviar a mensagem");
       setMessages((prev) => prev.filter((m) => m.id !== optimisticId));
       setText(body);
     } finally {
@@ -87,7 +112,7 @@ export function ConversationPanel({ conversationId }: Props) {
 
   if (!data) return (
     <div className="flex-1 flex items-center justify-center bg-gray-950">
-      <div className="w-5 h-5 border-2 border-teal-500 border-t-transparent rounded-full animate-spin" />
+      <div className="w-5 h-5 border-2 border-violet-500 border-t-transparent rounded-full animate-spin" />
     </div>
   );
 
@@ -99,10 +124,44 @@ export function ConversationPanel({ conversationId }: Props) {
   return (
     <div className="flex flex-1 overflow-hidden">
       {/* Chat */}
-      <div className="flex flex-col flex-1 overflow-hidden">
+      <div className="flex flex-col flex-1 min-w-0 overflow-hidden">
+        {confirmDelete && (
+          <div className="flex-shrink-0 px-5 py-3 border-b border-red-500/30 bg-red-500/5 text-xs text-gray-300 space-y-2">
+            <p>Excluir esta conversa e todas as mensagens? Isso não pode ser desfeito.</p>
+            <label className="flex items-center gap-2 text-gray-400">
+              <input type="checkbox" checked={alsoContact} onChange={(e) => setAlsoContact(e.target.checked)} />
+              Apagar também o contato (se não tiver outras conversas)
+            </label>
+            {deleteError && <p className="text-red-400">{deleteError}</p>}
+            <div className="flex gap-2">
+              <button
+                onClick={deleteConversation}
+                disabled={deleting}
+                className="px-3 py-1.5 rounded-lg font-medium bg-red-500 text-white hover:bg-red-400 disabled:opacity-50 transition-colors"
+              >
+                {deleting ? "Excluindo..." : "Excluir definitivamente"}
+              </button>
+              <button
+                onClick={() => setConfirmDelete(false)}
+                disabled={deleting}
+                className="px-3 py-1.5 rounded-lg font-medium bg-gray-700 text-gray-300 hover:bg-gray-600 disabled:opacity-50 transition-colors"
+              >
+                Cancelar
+              </button>
+            </div>
+          </div>
+        )}
+
         {/* Header */}
-        <div className="h-14 flex items-center justify-between px-5 border-b border-gray-800 bg-gray-900 flex-shrink-0">
-          <div className="flex items-center gap-3">
+        <div className="min-h-14 flex flex-wrap items-center justify-between gap-y-2 px-3 md:px-5 py-2 md:py-0 border-b border-gray-800 bg-gray-900 flex-shrink-0">
+          <div className="flex items-center gap-3 min-w-0">
+            <button
+              onClick={() => router.push("/dashboard/inbox")}
+              aria-label="Voltar para as conversas"
+              className="md:hidden -ml-1 p-2 rounded-lg text-gray-400 active:bg-gray-800"
+            >
+              <svg width="20" height="20" fill="none" viewBox="0 0 24 24"><path d="m15 18-6-6 6-6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" /></svg>
+            </button>
             <div className="w-8 h-8 rounded-full bg-indigo-600 flex items-center justify-center text-sm font-bold text-white">
               {contact.name?.[0] ?? "?"}
             </div>
@@ -114,7 +173,13 @@ export function ConversationPanel({ conversationId }: Props) {
               </p>
             </div>
           </div>
-          <div className="flex items-center gap-1">
+          <div className="flex flex-wrap items-center gap-1">
+            <button
+              onClick={() => { setConfirmDelete(true); setDeleteError(""); }}
+              className="px-3 py-1.5 rounded-lg text-xs font-medium bg-red-500/10 text-red-400 hover:bg-red-500/20 transition-colors"
+            >
+              Excluir
+            </button>
             {status !== "PENDING" && (
               <button
                 onClick={() => updateStatus("PENDING")}
@@ -126,7 +191,7 @@ export function ConversationPanel({ conversationId }: Props) {
             {status !== "RESOLVED" && (
               <button
                 onClick={() => updateStatus("RESOLVED")}
-                className="px-3 py-1.5 rounded-lg text-xs font-medium bg-teal-500/10 text-teal-400 hover:bg-teal-500/20 transition-colors"
+                className="px-3 py-1.5 rounded-lg text-xs font-medium bg-violet-500/10 text-violet-400 hover:bg-violet-500/20 transition-colors"
               >
                 Resolver
               </button>
@@ -146,7 +211,7 @@ export function ConversationPanel({ conversationId }: Props) {
         </div>
 
         {/* Messages */}
-        <div className="flex-1 overflow-y-auto px-5 py-4 space-y-3 bg-gray-950">
+        <div className="flex-1 overflow-y-auto px-3 md:px-5 py-4 space-y-3 bg-gray-950">
           {messages.map((msg) => {
             const out = msg.direction === "OUTBOUND";
             const optimistic = msg.id?.startsWith("opt_");
@@ -154,9 +219,9 @@ export function ConversationPanel({ conversationId }: Props) {
               <div key={msg.id} className={`flex ${out ? "justify-end" : "justify-start"}`}>
                 <div>
                   <div
-                    className={`max-w-[70%] px-4 py-2.5 rounded-2xl text-sm leading-relaxed ${
+                    className={`max-w-[85%] md:max-w-[70%] px-4 py-2.5 rounded-2xl text-sm leading-relaxed ${
                       out
-                        ? `bg-teal-600 text-white rounded-br-sm ${optimistic ? "opacity-70" : ""}`
+                        ? `bg-violet-600 text-white rounded-br-sm ${optimistic ? "opacity-70" : ""}`
                         : "bg-gray-800 text-gray-200 rounded-bl-sm"
                     }`}
                   >
@@ -174,8 +239,9 @@ export function ConversationPanel({ conversationId }: Props) {
 
         {/* Input */}
         <div className="flex-shrink-0 border-t border-gray-800 bg-gray-900 p-3">
+          {sendError && <p className="mb-2 text-xs text-red-400">{sendError}</p>}
           <div className="flex items-end gap-2">
-            <div className="flex-1 bg-gray-800 rounded-xl border border-gray-700 focus-within:border-teal-500/50 transition-colors">
+            <div className="flex-1 bg-gray-800 rounded-xl border border-gray-700 focus-within:border-violet-500/50 transition-colors">
               <textarea
                 value={text}
                 onChange={(e) => setText(e.target.value)}
@@ -194,7 +260,7 @@ export function ConversationPanel({ conversationId }: Props) {
             <button
               onClick={send}
               disabled={!text.trim() || sending || status === "RESOLVED"}
-              className="w-10 h-10 rounded-xl bg-teal-500 flex items-center justify-center text-white disabled:opacity-40 disabled:cursor-not-allowed hover:bg-teal-400 transition-colors flex-shrink-0"
+              className="w-10 h-10 rounded-xl bg-violet-500 flex items-center justify-center text-white disabled:opacity-40 disabled:cursor-not-allowed hover:bg-violet-400 transition-colors flex-shrink-0"
             >
               {sending ? (
                 <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
@@ -208,14 +274,14 @@ export function ConversationPanel({ conversationId }: Props) {
           </div>
           {status === "RESOLVED" && (
             <p className="text-xs text-gray-600 mt-2 text-center">
-              Conversa resolvida. <button onClick={() => updateStatus("OPEN")} className="text-teal-400 hover:underline">Reabrir</button> para continuar.
+              Conversa resolvida. <button onClick={() => updateStatus("OPEN")} className="text-violet-400 hover:underline">Reabrir</button> para continuar.
             </p>
           )}
         </div>
       </div>
 
       {/* Contact panel */}
-      <div className="w-[240px] flex-shrink-0 border-l border-gray-800 bg-gray-900 overflow-y-auto">
+      <div className="hidden lg:block w-[240px] flex-shrink-0 border-l border-gray-800 bg-gray-900 overflow-y-auto">
         <div className="p-4 border-b border-gray-800">
           <div className="flex flex-col items-center text-center">
             <div className="w-14 h-14 rounded-full bg-indigo-600 flex items-center justify-center text-xl font-bold text-white mb-3">
@@ -243,7 +309,7 @@ export function ConversationPanel({ conversationId }: Props) {
             <textarea
               placeholder="Adicionar nota..."
               rows={3}
-              className="w-full bg-gray-800 rounded-lg px-3 py-2 text-xs text-gray-300 placeholder-gray-600 resize-none outline-none border border-gray-700 focus:border-teal-500/50 transition-colors"
+              className="w-full bg-gray-800 rounded-lg px-3 py-2 text-xs text-gray-300 placeholder-gray-600 resize-none outline-none border border-gray-700 focus:border-violet-500/50 transition-colors"
             />
           </Section>
         </div>

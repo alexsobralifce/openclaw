@@ -1,6 +1,8 @@
-import { Injectable, UnauthorizedException } from "@nestjs/common";
+import { jwtSecret } from "../../config/jwt-secret";
+import { ForbiddenException, Injectable, UnauthorizedException } from "@nestjs/common";
 import { PassportStrategy } from "@nestjs/passport";
 import { ExtractJwt, Strategy } from "passport-jwt";
+import { tokenFromCookie } from "./session-cookie";
 import { prisma } from "@openclaw/database";
 
 interface JwtPayload {
@@ -12,8 +14,8 @@ interface JwtPayload {
 export class JwtStrategy extends PassportStrategy(Strategy) {
   constructor() {
     super({
-      jwtFromRequest: ExtractJwt.fromAuthHeaderAsBearerToken(),
-      secretOrKey: process.env.JWT_SECRET || "change-me-in-production",
+      jwtFromRequest: ExtractJwt.fromExtractors([ExtractJwt.fromAuthHeaderAsBearerToken(), tokenFromCookie]),
+      secretOrKey: jwtSecret(),
     });
   }
 
@@ -23,6 +25,14 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
       include: { workspaces: true },
     });
     if (!user) throw new UnauthorizedException();
+    // Consultado a cada requisição: desativar um usuário corta o acesso na hora, mesmo com token válido
+    if (user.status !== "ACTIVE") throw new ForbiddenException({ statusCode: 403, code: "ACCOUNT_INACTIVE", message: statusMessage(user.status) });
     return user;
   }
+}
+
+export function statusMessage(status: string) {
+  return status === "PENDING"
+    ? "Seu cadastro está aguardando aprovação do administrador."
+    : "Sua conta está desativada. Fale com o administrador.";
 }

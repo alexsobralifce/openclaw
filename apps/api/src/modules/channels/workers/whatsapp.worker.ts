@@ -1,13 +1,16 @@
 import { Injectable, Logger } from "@nestjs/common";
 import { InboxService } from "../../inbox/inbox.service";
 import type { IncomingMessage } from "@openclaw/types";
+import { parseWhatsappMessage } from "../whatsapp/parse";
+import { senderPhone } from "../whatsapp/phone";
 
 // Normaliza o payload do Evolution API para IncomingMessage
 interface EvolutionPayload {
   instance: string;
   data: {
-    key: { remoteJid: string; id: string };
-    message: { conversation?: string; imageMessage?: { caption?: string }; audioMessage?: object };
+    key: { remoteJid: string; remoteJidAlt?: string; senderPn?: string; id: string };
+    pushName?: string;
+    message: any;
     messageTimestamp: number;
   };
 }
@@ -18,24 +21,29 @@ export class WhatsappWorker {
 
   constructor(private inbox: InboxService) {}
 
-  async process(workspaceId: string, channelId: string, raw: EvolutionPayload): Promise<void> {
+  /** Grava a mensagem do cliente. Devolve null se não for conteúdo (reação, mensagem apagada...) ou se já foi gravada. */
+  async process(workspaceId: string, channelId: string, raw: EvolutionPayload) {
     const { data } = raw;
-    const from = data.key.remoteJid.replace("@s.whatsapp.net", "");
-    const body = data.message.conversation || data.message.imageMessage?.caption || "";
-    const type = data.message.conversation ? "TEXT" : data.message.imageMessage ? "IMAGE" : "AUDIO";
+    const parsed = parseWhatsappMessage(data.message);
+    if (!parsed) return null;
+    const from = senderPhone(data.key) ?? data.key.remoteJid.split("@")[0];
 
     const msg: IncomingMessage = {
       channelId,
       workspaceId,
       externalId: data.key.id,
       from,
-      body,
-      type,
-      timestamp: new Date(data.messageTimestamp * 1000),
+      name: data.pushName || undefined,
+      body: parsed.body,
+      type: parsed.type,
+      // A chave permite baixar a mídia depois pelo Evolution (getBase64FromMediaMessage)
+      metadata: { ...(parsed.metadata ?? {}), ...(parsed.type !== "TEXT" ? { waKey: data.key } : {}) },
+      timestamp: new Date(Number(data.messageTimestamp) * 1000),
       raw,
     };
 
-    await this.inbox.processIncoming(msg);
-    this.logger.log(`WhatsApp message processed from ${from}`);
+    const res = await this.inbox.processIncoming(msg);
+    if (res) this.logger.log(`WhatsApp ${parsed.type} recebido de ${from}`);
+    return res;
   }
 }

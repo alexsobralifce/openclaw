@@ -6,14 +6,17 @@ import { api } from "@/lib/api";
 import { useInboxSocket } from "@/hooks/useInboxSocket";
 
 const CHANNEL_ICON: Record<string, string> = { WHATSAPP: "🟢", INSTAGRAM: "🟣", FACEBOOK: "🔵", EMAIL: "📧", WEBCHAT: "💬" };
-const STATUS_COLOR: Record<string, string> = { OPEN: "bg-teal-500", PENDING: "bg-amber-500", RESOLVED: "bg-gray-600" };
+const STATUS_COLOR: Record<string, string> = { OPEN: "bg-violet-500", PENDING: "bg-amber-500", RESOLVED: "bg-gray-600" };
 const STATUS_LABEL: Record<string, string> = { OPEN: "Aberto", PENDING: "Pendente", RESOLVED: "Resolvido" };
 
 type Filter = "TODOS" | "OPEN" | "PENDING";
 
-interface Props { activeId?: string; }
+interface Props { activeId?: string;
+  /** No celular a lista e o chat são telas separadas: no chat, a lista some. */
+  hideOnMobile?: boolean;
+}
 
-export function ConversationList({ activeId }: Props) {
+export function ConversationList({ activeId, hideOnMobile = false }: Props) {
   const [conversations, setConversations] = useState<any[]>([]);
   const [filter, setFilter] = useState<Filter>("TODOS");
 
@@ -53,14 +56,18 @@ export function ConversationList({ activeId }: Props) {
     );
   }, []);
 
-  useInboxSocket({ onNewMessage: handleNewMessage, onConversationUpdated: handleConversationUpdated });
+  const handleConversationDeleted = useCallback((payload: { conversationId: string }) => {
+    setConversations((prev) => prev.filter((c) => c.id !== payload.conversationId));
+  }, []);
+
+  useInboxSocket({ onNewMessage: handleNewMessage, onConversationUpdated: handleConversationUpdated, onConversationDeleted: handleConversationDeleted });
 
   const filtered = filter === "TODOS"
     ? conversations
     : conversations.filter((c) => c.status === filter);
 
   return (
-    <div className="w-[300px] flex-shrink-0 flex flex-col border-r border-gray-800 bg-gray-900">
+    <div className={`${hideOnMobile ? "hidden md:flex" : "flex"} w-full md:w-[300px] md:flex-shrink-0 flex-col border-r border-gray-800 bg-gray-900`}>
       <div className="h-14 flex items-center justify-between px-4 border-b border-gray-800">
         <h2 className="text-sm font-semibold text-gray-200">Conversas</h2>
         <button className="text-gray-500 hover:text-gray-300 transition-colors p-1 rounded">
@@ -76,7 +83,7 @@ export function ConversationList({ activeId }: Props) {
           <button
             key={val}
             onClick={() => setFilter(val)}
-            className={`px-3 py-1 rounded-full text-xs font-medium transition-colors ${filter === val ? "bg-teal-500/15 text-teal-400" : "text-gray-500 hover:text-gray-300 hover:bg-gray-800"}`}
+            className={`px-3 py-1 rounded-full text-xs font-medium transition-colors ${filter === val ? "bg-violet-500/15 text-violet-400" : "text-gray-500 hover:text-gray-300 hover:bg-gray-800"}`}
           >
             {label}
           </button>
@@ -102,7 +109,7 @@ export function ConversationList({ activeId }: Props) {
             <Link
               key={conv.id}
               href={`/dashboard/inbox/${conv.id}`}
-              className={`flex items-start gap-3 px-4 py-3 border-b border-gray-800/50 transition-colors ${active ? "bg-teal-500/10" : "hover:bg-gray-800/60"}`}
+              className={`flex items-start gap-3 px-4 py-3 border-b border-gray-800/50 transition-colors ${active ? "bg-violet-500/10" : "hover:bg-gray-800/60"}`}
             >
               <div className="relative flex-shrink-0">
                 <div className="w-9 h-9 rounded-full bg-indigo-600 flex items-center justify-center text-sm font-bold text-white">
@@ -120,7 +127,7 @@ export function ConversationList({ activeId }: Props) {
                 <div className="flex items-center justify-between gap-2 mt-0.5">
                   <p className="text-xs text-gray-500 truncate">{lastMsg}</p>
                   {unread > 0 && (
-                    <span className="flex-shrink-0 min-w-[18px] h-[18px] rounded-full bg-teal-500 text-white text-[10px] font-bold flex items-center justify-center px-1">
+                    <span className="flex-shrink-0 min-w-[18px] h-[18px] rounded-full bg-violet-500 text-white text-[10px] font-bold flex items-center justify-center px-1">
                       {unread}
                     </span>
                   )}

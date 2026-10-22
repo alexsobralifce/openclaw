@@ -30,7 +30,7 @@ export function openApiSpec() {
   return {
     openapi: "3.0.3",
     info: {
-      title: "API pública do openclaw",
+      title: "API pública do MagoBox",
       version: "1.0.0",
       description:
         "Integre CRM, site, BI, e-mail, agenda e WhatsApp ao openclaw. Autentique com `Authorization: Bearer oc_live_…` (crie a chave no painel, com os escopos mínimos necessários). Listas usam paginação por cursor (`nextCursor`) e ordenam por atualização crescente. Erros: `{ error: { code, message } }`.\n\n**Webhooks:** cada entrega leva `X-OpenClaw-Signature: t=<unix>,v1=<HMAC-SHA256 hex de \"t.corpo\" com o segredo whsec_…>`. Rejeite entregas com `t` muito antigo (recomendado: 5 minutos).",
@@ -93,6 +93,18 @@ export function openApiSpec() {
             parameters: [idemHeader],
             requestBody: { required: true, ...json(obj({ title: str(), start: str({ format: "date-time" }), end: str({ format: "date-time" }), description: str(), attendees: { type: "array", maxItems: 20, items: str({ format: "email" }) }, account: str({ format: "email" }) }, ["title", "start", "end"])) },
             responses: { "200": ok(obj({ id: str(), link: str() })) },
+          }),
+        },
+      },
+
+      "/assistant/command": {
+        post: {
+          tags: ["Assistente"],
+          ...op("Comando ao assistente, com a resposta pronta para ser falada (modo carro)", "assistant:command", {
+            description: "Escopo necessário: `assistant:command`. Roda o mesmo menu do WhatsApp (e-mails, agenda, Drive, clima) e liga o modo carro. Não há IA livre nem cofre por aqui. Como o menu guarda a tela atual, respostas como \"dois\" ou \"sim\" continuam a conversa anterior.",
+            parameters: [{ name: "formato", in: "query", description: "`texto` devolve só a fala, em texto puro (sem JSON)", schema: str({ enum: ["texto"] }) }],
+            requestBody: { required: true, ...json(obj({ text: str({ maxLength: 500, description: "O que o usuário diria ao assistente, ex.: agenda de hoje. Vários comandos seguidos separados por ponto e vírgula (máx. 4), ex.: ler e-mails; Pessoal" }) }, ["text"])) },
+            responses: { "200": ok(obj({ fala: str({ description: "Texto limpo, sem emoji nem markdown, para ler em voz alta" }) })) },
           }),
         },
       },

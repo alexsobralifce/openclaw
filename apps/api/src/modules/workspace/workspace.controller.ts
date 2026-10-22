@@ -1,8 +1,8 @@
-import { Body, Controller, Get, Patch, Request, UseGuards } from "@nestjs/common";
-import { AuthGuard } from "@nestjs/passport";
+import { Body, Controller, Get, Patch, Request } from "@nestjs/common";
+import { Access } from "../auth/access";
 import { WorkspaceService } from "./workspace.service";
 
-@UseGuards(AuthGuard("jwt"))
+@Access()
 @Controller("workspace")
 export class WorkspaceController {
   constructor(private ws: WorkspaceService) {}

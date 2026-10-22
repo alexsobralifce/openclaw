@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="880" height="240" viewBox="0 0 880 240" role="img" aria-label="Assist.IA">
+  <!-- Logomarca horizontal para fundo CLARO -->
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#2dd4bf"/>
+      <stop offset="1" stop-color="#0f766e"/>
+    </linearGradient>
+  </defs>
+  <g transform="scale(0.2266)">
+    <rect width="1024" height="1024" rx="232" fill="url(#bg)"/>
+    <path fill="#ffffff" d="M320 210H704A120 120 0 0 1 824 330V550A120 120 0 0 1 704 670H480L330 800V670H320A120 120 0 0 1 200 550V330A120 120 0 0 1 320 210Z"/>
+    <path d="M392 606 512 290 632 606" fill="none" stroke="#0f766e" stroke-width="72" stroke-linecap="round" stroke-linejoin="round"/>
+    <path fill="#14b8a6" d="M512 432C512 484 528 504 580 504 528 504 512 524 512 576 512 524 496 504 444 504 496 504 512 484 512 432Z"/>
+  </g>
+  <text x="270" y="158" font-family="'Bricolage Grotesque','DM Sans','Helvetica Neue',Arial,sans-serif" font-size="140" font-weight="800" letter-spacing="-4" fill="#0f172a">Assist<tspan fill="#0f766e">.IA</tspan></text>
+</svg>

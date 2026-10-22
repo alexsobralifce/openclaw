@@ -1,5 +1,5 @@
-import { Controller, Get, Query, Request, Res, UseGuards, BadRequestException } from "@nestjs/common";
-import { AuthGuard } from "@nestjs/passport";
+import { Controller, Get, Query, Request, Res, BadRequestException, ServiceUnavailableException } from "@nestjs/common";
+import { Access } from "../../auth/access";
 import { JwtService } from "@nestjs/jwt";
 import { GoogleService } from "./google.service";
 
@@ -7,7 +7,7 @@ import { GoogleService } from "./google.service";
 export class GoogleController {
   constructor(private google: GoogleService, private jwt: JwtService) {}
 
-  @UseGuards(AuthGuard("jwt"))
+  @Access("channels")
   @Get("auth-url")
   async authUrl(@Request() req: any) {
     if (!this.google.isConfigured()) {
@@ -18,7 +18,7 @@ export class GoogleController {
     return { url: this.google.authUrl(state), connected: await this.google.isConnected(workspaceId) };
   }
 
-  @UseGuards(AuthGuard("jwt"))
+  @Access()
   @Get("status")
   async status(@Request() req: any) {
     const workspaceId: string = req.user.workspaces[0]?.workspaceId;
@@ -34,8 +34,10 @@ export class GoogleController {
       if (payload.purpose !== "google-oauth") throw new Error("state inválido");
       await this.google.connect(payload.workspaceId, code);
       return res.redirect(`${web}/dashboard/channels?google=ok`);
-    } catch {
-      return res.redirect(`${web}/dashboard/channels?google=error`);
+    } catch (e: any) {
+      // Só o aviso de limite do plano é mostrado ao usuário; qualquer outro erro continua genérico
+      const motivo = /^O plano /.test(String(e?.message)) ? `&motivo=${encodeURIComponent(e.message)}` : "";
+      return res.redirect(`${web}/dashboard/channels?google=error${motivo}`);
     }
   }
 }

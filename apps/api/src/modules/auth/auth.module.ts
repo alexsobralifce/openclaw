@@ -5,20 +5,23 @@ import { PassportModule } from "@nestjs/passport";
 import { AuthController } from "./auth.controller";
 import { AuthService } from "./auth.service";
 import { JwtStrategy } from "./jwt.strategy";
+import { APP_INTERCEPTOR } from "@nestjs/core";
+import { SESSION_DAYS } from "./session-cookie";
+import { SessionRenewInterceptor } from "./session-renew.interceptor";
 
 @Module({
   imports: [
     PassportModule,
     JwtModule.registerAsync({
       useFactory: (config: ConfigService) => ({
-        secret: config.get("JWT_SECRET") || "change-me-in-production",
-        signOptions: { expiresIn: "7d" },
+        secret: jwtSecret(config.get("JWT_SECRET")),
+        signOptions: { expiresIn: `${SESSION_DAYS}d` },
       }),
       inject: [ConfigService],
     }),
   ],
   controllers: [AuthController],
-  providers: [AuthService, JwtStrategy],
-  exports: [AuthService],
+  providers: [AuthService, JwtStrategy, { provide: APP_INTERCEPTOR, useClass: SessionRenewInterceptor }],
+  exports: [AuthService, MailService],
 })
 export class AuthModule {}

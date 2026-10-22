@@ -11,6 +11,7 @@ export const SCOPES = [
   "email:send",
   "calendar:read",
   "calendar:write",
+  "assistant:command",
   "webhooks:manage",
 ] as const;
 export type Scope = (typeof SCOPES)[number];

@@ -1,3 +1,65 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+/* ── Tema ─────────────────────────────────────────────────────────────────
+   Noite (padrão) e dia, escolhidos pelo claro/escuro do aparelho, trocam só os canais da paleta de cinzas, que o painel inteiro usa. No dia a escala é invertida
+   (o gray-950 de fundo vira o claro, o gray-200 de texto vira o escuro); o gray-500, no meio, serve nos dois.
+   A classe `light` vai no <html> só dentro do painel (ver ThemeSync); landing e login ficam sempre escuros. */
+:root {
+  color-scheme: dark;
+  --gray-50: 247 245 252; --gray-100: 238 235 247; --gray-200: 221 217 236; --gray-300: 196 191 220; --gray-400: 156 150 188; --gray-500: 110 103 148;
+  --gray-600: 77 67 128; --gray-700: 53 44 99; --gray-800: 35 27 73; --gray-900: 21 16 51; --gray-950: 11 7 32;
+}
+:root.light {
+  color-scheme: light;
+  --gray-50: 11 7 32; --gray-100: 21 16 51; --gray-200: 35 27 73; --gray-300: 53 44 99; --gray-400: 77 67 128; --gray-500: 110 103 148;
+  --gray-600: 156 150 188; --gray-700: 196 191 220; --gray-800: 221 217 236; --gray-900: 238 235 247; --gray-950: 247 245 252;
+}
+/* Cores de destaque claras demais para fundo claro */
+.light .text-violet-300, .light .text-violet-400 { color: #6d28d9; }
+.light .text-red-200, .light .text-red-300, .light .text-red-400 { color: #b91c1c; }
+.light .text-amber-200, .light .text-amber-300, .light .text-amber-400 { color: #92400e; }
+.light .text-green-300, .light .text-green-400, .light .text-emerald-400 { color: #15803d; }
+
+/* ── Celular ─────────────────────────────────────────────────────────────── */
+html {
+  -webkit-text-size-adjust: 100%;
+  -webkit-tap-highlight-color: transparent;
+}
+button, a, input, select, textarea, label {
+  touch-action: manipulation; /* sem espera de 300 ms nem zoom ao tocar duas vezes */
+}
+
+@media (max-width: 767px) {
+  /* iOS dá zoom ao focar campos com fonte menor que 16 px */
+  input, select, textarea {
+    font-size: 16px !important;
+  }
+}
+
+/* Dedo, não mouse: alvos de toque de pelo menos 44 px (botões pequenos ficam mais fáceis de acertar) */
+@media (pointer: coarse) and (max-width: 767px) {
+  button:not([role="tab"]), select, input:not([type="checkbox"]):not([type="radio"]), a[role="button"] {
+    min-height: 44px;
+  }
+  input[type="checkbox"], input[type="radio"] {
+    width: 20px;
+    height: 20px;
+  }
+}
+
+/* ── Landing: noite (padrão) e dia, trocados por horário (ver TemaPorHorario) ── */
+.landing {
+  color-scheme: dark;
+  --l-bg: #09070b; --l-bg-glass: rgb(9 7 11 / 0.85); --l-card: #0d0b10; --l-card-hl: #1a1233;
+  --l-text: #e6eeea; --l-strong: #ffffff; --l-muted: #a49eaf; --l-faint: #868090; --l-accent: #a78bfa; --l-hl: #e4dcfb;
+  --l-line: rgb(255 255 255 / 0.1); --l-line-soft: rgb(255 255 255 / 0.05); --l-hover: rgb(255 255 255 / 0.05);
+}
+.landing[data-tema="dia"] {
+  color-scheme: light;
+  --l-bg: #faf8ff; --l-bg-glass: rgb(250 248 255 / 0.88); --l-card: #ffffff; --l-card-hl: #f1ebff;
+  --l-text: #1e1633; --l-strong: #150f2b; --l-muted: #5b5472; --l-faint: #6b6482; --l-accent: #6d28d9; --l-hl: #3b1d82;
+  --l-line: rgb(46 16 101 / 0.16); --l-line-soft: rgb(46 16 101 / 0.09); --l-hover: rgb(46 16 101 / 0.06);
+}
+.landing { transition: background-color 0.4s, color 0.4s; }

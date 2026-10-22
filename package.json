@@ -4,11 +4,14 @@
   "scripts": {
     "dev": "turbo run dev",
     "build": "turbo run build",
-    "lint": "turbo run lint",
     "typecheck": "turbo run typecheck",
     "db:generate": "turbo run db:generate",
     "db:push": "turbo run db:push",
-    "db:migrate": "turbo run db:migrate"
+    "db:migrate": "turbo run db:migrate",
+    "test": "cd apps/api && pnpm test:layers",
+    "smoke": "node scripts/smoke.mjs",
+    "boot-check": "node scripts/boot-check.mjs",
+    "prints:onboarding": "node scripts/onboarding-prints/capture.mjs"
   },
   "devDependencies": {
     "turbo": "^2.3.3",

@@ -38,8 +38,8 @@ export function WhatsappSetup({ onClose, onCreated }: Props) {
           <button onClick={onClose} className="text-gray-600 hover:text-gray-400 text-xl transition-colors">×</button>
         </div>
 
-        <div className="bg-teal-500/10 border border-teal-500/20 rounded-lg p-3 mb-4">
-          <p className="text-xs text-teal-400 font-medium mb-1">Requisitos</p>
+        <div className="bg-violet-500/10 border border-violet-500/20 rounded-lg p-3 mb-4">
+          <p className="text-xs text-violet-400 font-medium mb-1">Requisitos</p>
           <ul className="text-xs text-gray-500 space-y-1">
             <li>• Evolution API rodando (docker ou self-hosted)</li>
             <li>• <code className="font-mono bg-gray-800 px-1 rounded">EVOLUTION_API_URL</code> configurado no .env</li>
@@ -60,13 +60,13 @@ export function WhatsappSetup({ onClose, onCreated }: Props) {
               value={name}
               onChange={(e) => setName(e.target.value)}
               required
-              className="w-full bg-gray-800 border border-gray-700 rounded-lg px-4 py-2.5 text-sm text-gray-200 outline-none focus:border-teal-500/60 transition-colors"
+              className="w-full bg-gray-800 border border-gray-700 rounded-lg px-4 py-2.5 text-sm text-gray-200 outline-none focus:border-violet-500/60 transition-colors"
             />
           </div>
           <button
             type="submit"
             disabled={loading}
-            className="w-full bg-teal-500 hover:bg-teal-400 disabled:opacity-50 text-white font-semibold py-2.5 rounded-lg text-sm transition-colors"
+            className="w-full bg-violet-500 hover:bg-violet-400 disabled:opacity-50 text-white font-semibold py-2.5 rounded-lg text-sm transition-colors"
           >
             {loading ? "Criando instância..." : "Criar e gerar QR Code"}
           </button>

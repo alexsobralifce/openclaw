@@ -1,0 +1,503 @@
+[
+ {
+  "text": "quais emails não lidos eu tenho?",
+  "expect": [
+   "gmail_search"
+  ],
+  "area": "email"
+ },
+ {
+  "text": "tem algum email do banco hoje?",
+  "expect": [
+   "gmail_search"
+  ],
+  "area": "email"
+ },
+ {
+  "text": "lê o último email do Marcos",
+  "expect": [
+   "gmail_search",
+   "gmail_read"
+  ],
+  "area": "email"
+ },
+ {
+  "text": "responde pro Marcos que eu chego às 15h",
+  "expect": [
+   "contact_search",
+   "gmail_send",
+   "gmail_search"
+  ],
+  "area": "email"
+ },
+ {
+  "text": "manda um email pra ana@teste.com dizendo que a reunião foi remarcada",
+  "expect": [
+   "gmail_send"
+  ],
+  "area": "email"
+ },
+ {
+  "text": "marca esse remetente como sem interesse",
+  "expect": [
+   "email_no_interest",
+   "gmail_search"
+  ],
+  "area": "email"
+ },
+ {
+  "text": "quais contas google estão conectadas?",
+  "expect": [
+   "google_list_accounts"
+  ],
+  "area": "email"
+ },
+ {
+  "text": "ei mago me vê aí o que tem de e-mail novo",
+  "expect": [
+   "gmail_search"
+  ],
+  "area": "email"
+ },
+ {
+  "text": "algo urgente na minha caixa?",
+  "expect": [
+   "gmail_search"
+  ],
+  "area": "email"
+ },
+ {
+  "text": "o que tenho na agenda amanhã?",
+  "expect": [
+   "calendar_list_events"
+  ],
+  "area": "agenda"
+ },
+ {
+  "text": "marca reunião com o João sexta às 10h",
+  "expect": [
+   "calendar_create_event"
+  ],
+  "area": "agenda"
+ },
+ {
+  "text": "tenho algum compromisso na semana que vem?",
+  "expect": [
+   "calendar_list_events"
+  ],
+  "area": "agenda"
+ },
+ {
+  "text": "cria um evento dentista dia 20 às 14h",
+  "expect": [
+   "calendar_create_event"
+  ],
+  "area": "agenda"
+ },
+ {
+  "text": "estou livre quinta de tarde?",
+  "expect": [
+   "calendar_list_events"
+  ],
+  "area": "agenda"
+ },
+ {
+  "text": "bota na agenda dentista terça às duas",
+  "expect": [
+   "calendar_create_event"
+  ],
+  "area": "agenda"
+ },
+ {
+  "text": "o que eu preciso fazer hoje?",
+  "expect": [
+   "calendar_list_events",
+   "routine_set",
+   "list_memories"
+  ],
+  "area": "agenda"
+ },
+ {
+  "text": "tenho que levar o carro na oficina quinta",
+  "expect": [
+   "calendar_create_event",
+   "note_add"
+  ],
+  "area": "agenda"
+ },
+ {
+  "text": "anota que preciso ligar pro contador",
+  "expect": [
+   "note_add"
+  ],
+  "area": "notas"
+ },
+ {
+  "text": "o que anotei sobre o contrato do aluguel?",
+  "expect": [
+   "note_search"
+  ],
+  "area": "notas"
+ },
+ {
+  "text": "salva no obsidian a ideia de tela nova",
+  "expect": [
+   "note_add"
+  ],
+  "area": "notas"
+ },
+ {
+  "text": "anota a reunião de amanhã às 9h no meu caderno",
+  "expect": [
+   "note_add",
+   "calendar_create_event"
+  ],
+  "area": "notas"
+ },
+ {
+  "text": "me lembra de comprar pão",
+  "expect": [
+   "note_add",
+   "remember",
+   "calendar_create_event"
+  ],
+  "area": "notas"
+ },
+ {
+  "text": "me manda o contrato de aluguel",
+  "expect": [
+   "drive_search"
+  ],
+  "area": "drive"
+ },
+ {
+  "text": "procura a planilha de gastos de setembro",
+  "expect": [
+   "drive_search"
+  ],
+  "area": "drive"
+ },
+ {
+  "text": "manda o pdf da apresentação pro meu whatsapp",
+  "expect": [
+   "drive_search"
+  ],
+  "area": "drive"
+ },
+ {
+  "text": "o contrato do aluguel cadê",
+  "expect": [
+   "drive_search",
+   "note_search"
+  ],
+  "area": "drive"
+ },
+ {
+  "text": "manda o contrato pro Marcos por email",
+  "expect": [
+   "drive_search",
+   "contact_search"
+  ],
+  "area": "drive"
+ },
+ {
+  "text": "qual o telefone da Maria?",
+  "expect": [
+   "contact_search"
+  ],
+  "area": "contatos"
+ },
+ {
+  "text": "me passa o email do Dr. Paulo",
+  "expect": [
+   "contact_search"
+  ],
+  "area": "contatos"
+ },
+ {
+  "text": "qual o número do meu dentista",
+  "expect": [
+   "contact_search"
+  ],
+  "area": "contatos"
+ },
+ {
+  "text": "toda terça e quinta tenho academia às 18h",
+  "expect": [
+   "routine_set"
+  ],
+  "area": "rotina"
+ },
+ {
+  "text": "tira a academia da minha rotina",
+  "expect": [
+   "routine_remove"
+  ],
+  "area": "rotina"
+ },
+ {
+  "text": "às segundas eu tenho aula das 8h às 10h",
+  "expect": [
+   "routine_set"
+  ],
+  "area": "rotina"
+ },
+ {
+  "text": "vai chover hoje?",
+  "expect": [
+   "get_weather"
+  ],
+  "area": "clima"
+ },
+ {
+  "text": "estou em Recife agora",
+  "expect": [
+   "set_location"
+  ],
+  "area": "clima"
+ },
+ {
+  "text": "preciso de guarda-chuva amanhã?",
+  "expect": [
+   "get_weather"
+  ],
+  "area": "clima"
+ },
+ {
+  "text": "qual a temperatura agora",
+  "expect": [
+   "get_weather"
+  ],
+  "area": "clima"
+ },
+ {
+  "text": "lembra que eu prefiro respostas curtas",
+  "expect": [
+   "remember"
+  ],
+  "area": "memoria"
+ },
+ {
+  "text": "o que você sabe sobre mim?",
+  "expect": [
+   "list_memories"
+  ],
+  "area": "memoria"
+ },
+ {
+  "text": "esquece aquela preferência de respostas curtas",
+  "expect": [
+   "list_memories",
+   "forget"
+  ],
+  "area": "memoria"
+ },
+ {
+  "text": "quais conversas de clientes estão abertas?",
+  "expect": [
+   "list_conversations"
+  ],
+  "area": "clientes"
+ },
+ {
+  "text": "responde ao cliente da conversa 3 que o pedido sai amanhã",
+  "expect": [
+   "reply_to_conversation",
+   "list_conversations"
+  ],
+  "area": "clientes"
+ },
+ {
+  "text": "marca a conversa do João como resolvida",
+  "expect": [
+   "set_conversation_status",
+   "list_conversations"
+  ],
+  "area": "clientes"
+ },
+ {
+  "text": "vê meus emails e minha agenda de hoje",
+  "expect": [
+   "gmail_search",
+   "calendar_list_events"
+  ],
+  "area": "multi"
+ },
+ {
+  "text": "resume meu dia: agenda, emails e o clima",
+  "expect": [
+   "calendar_list_events",
+   "gmail_search",
+   "get_weather"
+  ],
+  "area": "multi"
+ },
+ {
+  "text": "oi, tudo bem?",
+  "expect": [],
+  "area": "geral"
+ },
+ {
+  "text": "me explica o que é inflação",
+  "expect": [],
+  "area": "geral"
+ },
+ {
+  "text": "quanto é 15% de 240?",
+  "expect": [],
+  "area": "geral"
+ },
+ {
+  "text": "escreve um poema curto sobre o mar",
+  "expect": [],
+  "area": "geral"
+ },
+ {
+  "text": "me explica como funciona a fotossíntese",
+  "expect": [],
+  "area": "geral"
+ },
+ {
+  "text": "quanto tempo leva de carro até o aeroporto?",
+  "expect": [],
+  "area": "geral"
+ },
+ {
+  "text": "qual a capital da Austrália?",
+  "expect": [],
+  "area": "geral"
+ },
+ {
+  "text": "liga pro Marcos e avisa que atrasei",
+  "expect": [
+   "contact_search"
+  ],
+  "area": "armadilha"
+ },
+ {
+  "text": "manda um abraço pra Marcela por email",
+  "expect": [
+   "gmail_send",
+   "contact_search"
+  ],
+  "area": "armadilha"
+ },
+ {
+  "text": "o Marcos me mandou algo?",
+  "expect": [
+   "gmail_search"
+  ],
+  "area": "armadilha"
+ },
+ {
+  "text": "cadê o email da Antônia?",
+  "expect": [
+   "gmail_search",
+   "contact_search"
+  ],
+  "area": "armadilha"
+ },
+ {
+  "text": "lembra de tomar remédio às 8h todo dia",
+  "expect": [
+   "routine_set",
+   "remember",
+   "calendar_create_event"
+  ],
+  "area": "armadilha"
+ },
+ {
+  "text": "qual meu próximo compromisso?",
+  "expect": [
+   "calendar_list_events"
+  ],
+  "area": "armadilha"
+ },
+ {
+  "text": "preciso remarcar a consulta de sexta",
+  "expect": [
+   "calendar_list_events",
+   "calendar_create_event"
+  ],
+  "area": "armadilha"
+ },
+ {
+  "text": "cancela a reunião de hoje",
+  "expect": [
+   "calendar_list_events"
+  ],
+  "area": "armadilha"
+ },
+ {
+  "text": "tô chegando em casa, anota aí: comprar leite",
+  "expect": [
+   "note_add"
+  ],
+  "area": "armadilha"
+ },
+ {
+  "text": "responde esse cliente: sim, temos estoque",
+  "expect": [
+   "reply_to_conversation",
+   "list_conversations"
+  ],
+  "area": "armadilha"
+ },
+ {
+  "text": "me manda a foto da viagem",
+  "expect": [
+   "drive_search"
+  ],
+  "area": "armadilha"
+ },
+ {
+  "text": "procura o email da prefeitura sobre o IPTU",
+  "expect": [
+   "gmail_search"
+  ],
+  "area": "armadilha"
+ },
+ {
+  "text": "preciso do comprovante de residência",
+  "expect": [
+   "drive_search",
+   "gmail_search"
+  ],
+  "area": "armadilha"
+ },
+ {
+  "text": "que dia é hoje?",
+  "expect": [],
+  "area": "geral"
+ },
+ {
+  "text": "quanto gastei com o cartão esse mês?",
+  "expect": [],
+  "area": "geral"
+ },
+ {
+  "text": "escreve um email formal pedindo desconto ao fornecedor Carlos",
+  "expect": [
+   "gmail_send",
+   "contact_search"
+  ],
+  "area": "armadilha"
+ },
+ {
+  "text": "avisa o Carlos que a entrega atrasou",
+  "expect": [
+   "gmail_send",
+   "contact_search",
+   "reply_to_conversation"
+  ],
+  "area": "armadilha"
+ },
+ {
+  "text": "o que a Joana respondeu?",
+  "expect": [
+   "gmail_search",
+   "list_conversations"
+  ],
+  "area": "armadilha"
+ }
+]

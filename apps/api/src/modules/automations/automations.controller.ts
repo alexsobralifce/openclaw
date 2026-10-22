@@ -1,8 +1,8 @@
-import { Body, Controller, Get, Param, Patch, Post, Request, UseGuards } from "@nestjs/common";
-import { AuthGuard } from "@nestjs/passport";
+import { Body, Controller, Get, Param, Patch, Post, Request } from "@nestjs/common";
+import { Access } from "../auth/access";
 import { AutomationsService } from "./automations.service";
 
-@UseGuards(AuthGuard("jwt"))
+@Access("automations")
 @Controller("automations")
 export class AutomationsController {
   constructor(private automations: AutomationsService) {}

@@ -63,6 +63,10 @@ export class SendEmailDto {
   @IsOptional() @IsEmail() account?: string;
 }
 
+export class VoiceCommandDto {
+  @IsString() @Length(1, 500) text!: string;
+}
+
 export class CalendarListQuery {
   @IsISO8601() from!: string;
   @IsISO8601() to!: string;

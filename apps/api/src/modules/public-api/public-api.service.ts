@@ -1,8 +1,10 @@
 import { BadRequestException, ConflictException, Injectable, NotFoundException } from "@nestjs/common";
 import { prisma } from "@openclaw/database";
-import { EvolutionService } from "../channels/evolution/evolution.service";
+import { EvolutionService, evolutionMessage } from "../channels/evolution/evolution.service";
 import { InboxGateway } from "../inbox/inbox.gateway";
 import { WebhooksService } from "../webhooks/webhooks.service";
+import { sealField } from "../webhooks/crypto";
+import { openBodies } from "../inbox/inbox.service";
 import { ListQuery } from "./dto";
 
 const digits = (v?: string) => (v ?? "").replace(/\D/g, "");
@@ -140,7 +142,7 @@ export class PublicApiService {
       ...(q.cursor ? { cursor: { id: q.cursor }, skip: 1 } : {}),
       select: { id: true, body: true, type: true, direction: true, createdAt: true, conversationId: true },
     });
-    return page(rows, limit);
+    return page(openBodies(rows, workspaceId), limit);
   }
 
   /** Envia uma mensagem de WhatsApp e registra na conversa aberta do contato. */
@@ -158,7 +160,7 @@ export class PublicApiService {
     try {
       res = await this.evolution.sendText(instanceName, phone, data.text);
     } catch (e: any) {
-      throw new BadRequestException(`Falha ao enviar pelo WhatsApp: ${String(e.message).slice(0, 200)}`);
+      throw new BadRequestException(`Falha ao enviar pelo WhatsApp: ${evolutionMessage(e)}`);
     }
 
     const known = await prisma.contact.findUnique({ where: { workspaceId_phone: { workspaceId, phone } }, select: { id: true } });
@@ -174,9 +176,12 @@ export class PublicApiService {
       this.webhooks.emit(workspaceId, "conversation.created", { conversation });
     }
 
-    const message = await prisma.message.create({
-      data: { conversationId: conversation.id, body: data.text, direction: "OUTBOUND", type: "TEXT", externalId: res?.key?.id },
-    });
+    const message = {
+      ...(await prisma.message.create({
+        data: { conversationId: conversation.id, body: sealField(data.text, workspaceId), direction: "OUTBOUND", type: "TEXT", externalId: res?.key?.id },
+      })),
+      body: data.text,
+    };
     this.gateway.emitNewMessage(workspaceId, {
       conversationId: conversation.id,
       message: { id: message.id, body: message.body, type: message.type, direction: message.direction, createdAt: message.createdAt.toISOString(), authorId: null },

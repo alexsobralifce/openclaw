@@ -9,7 +9,7 @@ import { GoogleService } from "./google.service";
   imports: [
     PassportModule,
     JwtModule.registerAsync({
-      useFactory: (config: ConfigService) => ({ secret: config.get("JWT_SECRET") || "change-me-in-production" }),
+      useFactory: (config: ConfigService) => ({ secret: jwtSecret(config.get("JWT_SECRET")) }),
       inject: [ConfigService],
     }),
   ],

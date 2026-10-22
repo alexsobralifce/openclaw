@@ -19,19 +19,19 @@ const SCOPE_LABEL: Record<string, string> = {
 const SENSITIVE = new Set(["email:read", "email:send", "calendar:read", "calendar:write", "messages:send"]);
 
 const card = "bg-gray-900 border border-gray-800 rounded-xl p-4";
-const input = "w-full bg-gray-950 border border-gray-700 rounded-lg px-3 py-2 text-sm text-gray-200 focus:outline-none focus:border-teal-500";
+const input = "w-full bg-gray-950 border border-gray-700 rounded-lg px-3 py-2 text-sm text-gray-200 focus:outline-none focus:border-violet-500";
 const btn = "px-3 py-1.5 rounded-lg text-xs font-medium transition-colors";
 const fmt = (d?: string) => (d ? new Date(d).toLocaleString("pt-BR") : "nunca");
 
 export default function ApiPage() {
   return (
-    <div className="p-6 max-w-3xl space-y-10">
+    <div className="p-4 md:p-6 max-w-3xl space-y-10 h-full overflow-y-auto">
       <div>
         <h1 className="text-xl font-semibold text-gray-200">API</h1>
         <p className="text-sm text-gray-500 mt-0.5">
           Chaves e webhooks para integrar CRM, site, BI, e-mail, agenda e WhatsApp.{" "}
-          <a href="/api-publica.html" target="_blank" rel="noopener" className="text-teal-400 hover:underline">Ver projeto</a>{" · "}
-          <a href={`${process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001"}/api/public/v1/openapi.json`} target="_blank" rel="noopener" className="text-teal-400 hover:underline">OpenAPI</a>
+          <a href="/api-publica.html" target="_blank" rel="noopener" className="text-violet-400 hover:underline">Ver projeto</a>{" · "}
+          <a href={`${process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001"}/api/public/v1/openapi.json`} target="_blank" rel="noopener" className="text-violet-400 hover:underline">OpenAPI</a>
         </p>
       </div>
       <Keys />
@@ -84,7 +84,7 @@ function Keys() {
           <p className="text-sm text-amber-300 font-medium">Copie a chave agora. Ela não será mostrada de novo.</p>
           <code className="block mt-2 break-all text-xs text-gray-200 bg-gray-950 rounded p-2 select-all">{created}</code>
           <div className="mt-2 flex gap-2">
-            <button className={`${btn} bg-teal-500 text-white hover:bg-teal-400`} onClick={() => navigator.clipboard?.writeText(created)}>Copiar</button>
+            <button className={`${btn} bg-violet-500 text-white hover:bg-violet-400`} onClick={() => navigator.clipboard?.writeText(created)}>Copiar</button>
             <button className={`${btn} border border-gray-700 text-gray-300 hover:bg-gray-800`} onClick={() => setCreated(null)}>Já guardei</button>
           </div>
         </div>
@@ -95,13 +95,13 @@ function Keys() {
         <div className="grid grid-cols-2 gap-x-4 gap-y-1.5">
           {scopes.map((s) => (
             <label key={s} className="flex items-center gap-2 text-xs text-gray-300 cursor-pointer">
-              <input type="checkbox" checked={picked.includes(s)} onChange={() => toggle(s)} className="accent-teal-500" />
+              <input type="checkbox" checked={picked.includes(s)} onChange={() => toggle(s)} className="accent-violet-500" />
               {SCOPE_LABEL[s] ?? s}
               {SENSITIVE.has(s) && <span className="text-[9px] text-amber-400 uppercase">sensível</span>}
             </label>
           ))}
         </div>
-        <button disabled={!name.trim() || !picked.length} onClick={create} className={`${btn} bg-teal-500 text-white hover:bg-teal-400 disabled:opacity-40`}>
+        <button disabled={!name.trim() || !picked.length} onClick={create} className={`${btn} bg-violet-500 text-white hover:bg-violet-400 disabled:opacity-40`}>
           Criar chave
         </button>
       </div>
@@ -170,7 +170,7 @@ function Webhooks() {
     try { await fn(); after?.(); load(); } catch (e: any) { setErr(e.message); }
   };
   const toggle = (s: string) => setPicked((p) => (p.includes(s) ? p.filter((x) => x !== s) : [...p, s]));
-  const color = (s: string) => (s === "SUCCESS" ? "text-teal-400" : s === "FAILED" ? "text-red-400" : "text-amber-400");
+  const color = (s: string) => (s === "SUCCESS" ? "text-violet-400" : s === "FAILED" ? "text-red-400" : "text-amber-400");
 
   return (
     <section>
@@ -190,13 +190,13 @@ function Webhooks() {
         <div className="grid grid-cols-2 gap-x-4 gap-y-1.5">
           {events.map((ev) => (
             <label key={ev} className="flex items-center gap-2 text-xs text-gray-300 cursor-pointer">
-              <input type="checkbox" checked={picked.includes(ev)} onChange={() => toggle(ev)} className="accent-teal-500" />
+              <input type="checkbox" checked={picked.includes(ev)} onChange={() => toggle(ev)} className="accent-violet-500" />
               <code>{ev}</code>
             </label>
           ))}
         </div>
         <p className="text-[11px] text-gray-600">Sem seleção, recebe todos os eventos.</p>
-        <button disabled={!url.trim()} onClick={create} className={`${btn} bg-teal-500 text-white hover:bg-teal-400 disabled:opacity-40`}>
+        <button disabled={!url.trim()} onClick={create} className={`${btn} bg-violet-500 text-white hover:bg-violet-400 disabled:opacity-40`}>
           Criar webhook
         </button>
       </div>
@@ -210,7 +210,7 @@ function Webhooks() {
                 <p className="text-sm font-semibold text-gray-200 break-all">{h.url}</p>
                 <p className="text-[11px] text-gray-500 mt-0.5">
                   {h.events.join(", ")} ·{" "}
-                  <span className={h.isActive ? "text-teal-400" : "text-red-400"}>{h.isActive ? "ativo" : "desativado por falhas"}</span>
+                  <span className={h.isActive ? "text-violet-400" : "text-red-400"}>{h.isActive ? "ativo" : "desativado por falhas"}</span>
                   {h.failureCount > 0 && ` · ${h.failureCount} falha(s)`}
                 </p>
               </div>
@@ -234,7 +234,7 @@ function Webhooks() {
                     <span className={`${color(d.status)} w-16`}>{d.status}</span>
                     <span className="text-gray-500 flex-1 truncate">{d.lastError ?? (d.responseCode ? `HTTP ${d.responseCode}` : "")} · {d.attempts} tent.</span>
                     {d.status === "FAILED" && (
-                      <button onClick={() => act(() => api.webhooks.retry(h.id, d.id), () => showDeliveries(h.id).then(() => showDeliveries(h.id)))} className="text-teal-400 hover:underline">
+                      <button onClick={() => act(() => api.webhooks.retry(h.id, d.id), () => showDeliveries(h.id).then(() => showDeliveries(h.id)))} className="text-violet-400 hover:underline">
                         Reenviar
                       </button>
                     )}

@@ -13,3 +13,6 @@ switch-claude-account.sh
 *.tsbuildinfo
 .agents
 skills-lock.json
+.next-prints
+.dist-prints
+scripts/onboarding-prints/.tmp

@@ -1,37 +1,41 @@
 import {
-  Body, Controller, Delete, Get, HttpCode, Param,
-  Post, Request, Headers, UseGuards, Logger, ForbiddenException,
+  BadRequestException, Body, Controller, Delete, Get, HttpCode, Param, Query,
+  Post, RawBodyRequest, Req, Request, Res, Headers, Logger, ForbiddenException, UseFilters,
 } from "@nestjs/common";
-import { AuthGuard } from "@nestjs/passport";
+import { JwtService } from "@nestjs/jwt";
+import { Access } from "../auth/access";
 import { timingSafeEqual } from "crypto";
 import { ChannelsService } from "./channels.service";
 import { EvolutionService } from "./evolution/evolution.service";
-import { WhatsappWorker } from "./workers/whatsapp.worker";
-import { AssistantService } from "./assistant/assistant.service";
-import { WebhooksService } from "../webhooks/webhooks.service";
+import { EvolutionExceptionFilter } from "./evolution/evolution.filter";
+import { InboundService } from "./inbound/inbound.service";
+import { InboxService } from "../inbox/inbox.service";
+import { InstagramApiError, InstagramService, REPLY_WINDOW_MS } from "./instagram/instagram.service";
 import { prisma } from "@openclaw/database";
 
 @Controller("channels")
+@UseFilters(EvolutionExceptionFilter)
 export class ChannelsController {
   private readonly logger = new Logger(ChannelsController.name);
 
   constructor(
     private channels: ChannelsService,
     private evolution: EvolutionService,
-    private whatsapp: WhatsappWorker,
-    private assistant: AssistantService,
-    private webhooks: WebhooksService,
+    private inbound: InboundService,
+    private inbox: InboxService,
+    private instagram: InstagramService,
+    private jwt: JwtService,
   ) {}
 
   // ─── Autenticado ──────────────────────────────────────────────
 
-  @UseGuards(AuthGuard("jwt"))
+  @Access()
   @Get()
   list(@Request() req: any) {
     return this.channels.listChannels(req.user.workspaces[0]?.workspaceId);
   }
 
-  @UseGuards(AuthGuard("jwt"))
+  @Access("channels")
   @Post("whatsapp")
   async createWhatsapp(@Request() req: any, @Body() body: { name: string }) {
     const workspaceId: string = req.user.workspaces[0]?.workspaceId;
@@ -51,37 +55,54 @@ export class ChannelsController {
     return { channel, instance: instanceName };
   }
 
-  @UseGuards(AuthGuard("jwt"))
+  @Access("channels")
   @Get("whatsapp/:channelId/qrcode")
   async getQrCode(@Request() req: any, @Param("channelId") channelId: string) {
     const workspaceId: string = req.user.workspaces[0]?.workspaceId;
     const channel = await prisma.channel.findFirstOrThrow({ where: { id: channelId, workspaceId } });
     const cfg = channel.config as any;
-    return this.evolution.getQrCode(cfg.instanceName);
+    try {
+      return await this.evolution.getQrCode(cfg.instanceName);
+    } catch (e: any) {
+      if (!this.evolution.isMissingInstance(e)) throw e;
+      // A instância sumiu do Evolution: recria com o mesmo nome e webhook e devolve o QR novo
+      this.logger.warn(`Instância ${cfg.instanceName} não existe no Evolution; recriando`);
+      await this.evolution.createInstance(cfg.instanceName, cfg.webhookUrl);
+      return this.evolution.getQrCode(cfg.instanceName);
+    }
   }
 
-  @UseGuards(AuthGuard("jwt"))
+  @Access("channels")
   @Get("whatsapp/:channelId/status")
   async getStatus(@Request() req: any, @Param("channelId") channelId: string) {
     const workspaceId: string = req.user.workspaces[0]?.workspaceId;
     const channel = await prisma.channel.findFirstOrThrow({ where: { id: channelId, workspaceId } });
     const cfg = channel.config as any;
-    return this.evolution.getConnectionState(cfg.instanceName);
+    try {
+      return await this.evolution.getConnectionState(cfg.instanceName);
+    } catch (e: any) {
+      // Instância que não existe mais no Evolution conta como desconectada (o painel oferece o QR Code para reconectar)
+      if (this.evolution.isMissingInstance(e)) return { state: "close" };
+      throw e;
+    }
   }
 
-  @UseGuards(AuthGuard("jwt"))
+  @Access("channels")
   @Delete("whatsapp/:channelId")
   async deleteWhatsapp(@Request() req: any, @Param("channelId") channelId: string) {
     const workspaceId: string = req.user.workspaces[0]?.workspaceId;
     const channel = await prisma.channel.findFirstOrThrow({ where: { id: channelId, workspaceId } });
     const cfg = channel.config as any;
     await this.evolution.deleteInstance(cfg.instanceName).catch(() => {});
-    await prisma.channel.delete({ where: { id: channelId } });
+    // Com conversas, o canal não pode ser apagado (o histórico depende dele): fica desativado e some da lista
+    const conversations = await prisma.conversation.count({ where: { channelId } });
+    if (conversations) await prisma.channel.update({ where: { id: channelId }, data: { isActive: false } });
+    else await prisma.channel.delete({ where: { id: channelId } });
     return { ok: true };
   }
 
   // Enviar mensagem de saída via WhatsApp
-  @UseGuards(AuthGuard("jwt"))
+  @Access("inbox")
   @Post("whatsapp/:channelId/send")
   async sendMessage(
     @Request() req: any,
@@ -91,32 +112,114 @@ export class ChannelsController {
     const workspaceId: string = req.user.workspaces[0]?.workspaceId;
     const channel = await prisma.channel.findFirstOrThrow({ where: { id: channelId, workspaceId } });
     const cfg = channel.config as any;
+    // A conversa precisa ser deste workspace (antes, qualquer id era aceito)
+    if (body.conversationId) await prisma.conversation.findFirstOrThrow({ where: { id: body.conversationId, workspaceId } });
 
     const result = await this.evolution.sendText(cfg.instanceName, body.to, body.text);
-
-    // Salva a mensagem enviada no banco
-    if (body.conversationId) {
-      const saved = await prisma.message.create({
-        data: {
-          conversationId: body.conversationId,
-          body: body.text,
-          direction: "OUTBOUND",
-          type: "TEXT",
-          externalId: result?.key?.id,
-          authorId: req.user.id,
-        },
-      });
-      this.webhooks.emit(workspaceId, "message.sent", {
-        conversationId: body.conversationId,
-        message: { id: saved.id, body: saved.body, type: saved.type, direction: saved.direction, createdAt: saved.createdAt },
-      });
-    }
+    if (body.conversationId) await this.inbox.recordOutbound(workspaceId, body.conversationId, body.text, result?.key?.id, req.user.id);
 
     return result;
   }
 
+  // ─── Instagram ────────────────────────────────────────────────
+
+  /** Endereço de login do Instagram: o cliente só clica em "Conectar" e autoriza, sem colar chave nenhuma. */
+  @Access("channels")
+  @Get("instagram/auth-url")
+  instagramAuthUrl(@Request() req: any) {
+    if (!this.instagram.isConfigured()) {
+      throw new BadRequestException("INSTAGRAM_APP_ID/INSTAGRAM_APP_SECRET não configurados no .env");
+    }
+    const workspaceId: string = req.user.workspaces[0]?.workspaceId;
+    const state = this.jwt.sign({ workspaceId, purpose: "instagram-oauth" }, { expiresIn: "10m" });
+    return { url: this.instagram.authUrl(state) };
+  }
+
+  @Get("instagram/callback")
+  async instagramCallback(@Query("code") code: string, @Query("state") state: string, @Query("error") error: string, @Res() res: any) {
+    const web = process.env.WEB_URL || "http://localhost:3000";
+    if (error || !code || !state) return res.redirect(`${web}/dashboard/channels?instagram=error`);
+    try {
+      const payload: any = this.jwt.verify(state);
+      if (payload.purpose !== "instagram-oauth") throw new Error("state inválido");
+      await this.instagram.connect(payload.workspaceId, code);
+      return res.redirect(`${web}/dashboard/channels?instagram=ok`);
+    } catch (e: any) {
+      this.logger.error(`Conexão do Instagram falhou: ${e.message}`);
+      return res.redirect(`${web}/dashboard/channels?instagram=error`);
+    }
+  }
+
+  @Access("channels")
+  @Delete("instagram/:channelId")
+  async disconnectInstagram(@Request() req: any, @Param("channelId") channelId: string) {
+    await this.instagram.disconnect(req.user.workspaces[0]?.workspaceId, channelId);
+    return { ok: true };
+  }
+
+  @Access("inbox")
+  @Post("instagram/:channelId/send")
+  async sendInstagram(
+    @Request() req: any,
+    @Param("channelId") channelId: string,
+    @Body() body: { text: string; conversationId: string },
+  ) {
+    const workspaceId: string = req.user.workspaces[0]?.workspaceId;
+    const text = body?.text?.trim();
+    if (!text || !body.conversationId) throw new BadRequestException("text e conversationId são obrigatórios");
+    const channel = await prisma.channel.findFirstOrThrow({ where: { id: channelId, workspaceId, type: "INSTAGRAM" } });
+    const conversation = await prisma.conversation.findFirstOrThrow({
+      where: { id: body.conversationId, workspaceId, channelId: channel.id },
+      include: { contact: true },
+    });
+    if (!conversation.contact.externalId) throw new BadRequestException("Contato sem id do Instagram");
+
+    // A Meta só deixa responder até 24 h depois da última mensagem do cliente
+    const last = await prisma.message.findFirst({
+      where: { conversationId: conversation.id, direction: "INBOUND" },
+      orderBy: { createdAt: "desc" },
+      select: { createdAt: true },
+    });
+    if (!last || Date.now() - last.createdAt.getTime() > REPLY_WINDOW_MS) {
+      throw new BadRequestException("Passaram mais de 24 h desde a última mensagem do cliente: o Instagram não permite mais responder.");
+    }
+
+    let mid: string | undefined;
+    try {
+      mid = await this.instagram.sendText(channel, conversation.contact.externalId, text);
+    } catch (e: any) {
+      if (e instanceof InstagramApiError) throw new BadRequestException(`Instagram recusou o envio: ${e.message}`);
+      throw e;
+    }
+    await this.inbox.recordOutbound(workspaceId, conversation.id, text, mid, req.user.id);
+    return { ok: true, id: mid };
+  }
+
+  // ─── Webhook público do Instagram (Meta → openclaw) ────────────
+
+  /** Verificação inicial: a Meta manda hub.challenge e espera receber o mesmo valor de volta. */
+  @Get("webhooks/instagram")
+  instagramVerify(@Query("hub.mode") mode: string, @Query("hub.verify_token") token: string, @Query("hub.challenge") challenge: string) {
+    const expected = this.instagram.verifyToken;
+    const a = Buffer.from(token ?? "");
+    const b = Buffer.from(expected);
+    if (mode !== "subscribe" || !expected || a.length !== b.length || !timingSafeEqual(a, b)) throw new ForbiddenException("verify token inválido");
+    return challenge;
+  }
+
+  /** Confere a assinatura, grava na fila e responde: o processamento acontece no InboundService. */
+  @Post("webhooks/instagram")
+  @HttpCode(200)
+  async instagramWebhook(@Req() req: RawBodyRequest<any>, @Body() body: any, @Headers("x-hub-signature-256") signature?: string) {
+    if (!this.instagram.verifySignature(req.rawBody, signature)) throw new ForbiddenException("assinatura inválida");
+    const queued = await this.inbound.enqueueInstagram(body);
+    if (queued) this.logger.log(`Webhook do Instagram enfileirado: ${queued} mensagem(ns)`);
+    return { ok: true };
+  }
+
   // ─── Webhook público (Evolution API → openclaw) ────────────────
 
+  /** Só grava na fila e responde: o processamento (IA, transcrição, banco) acontece no InboundService. */
   @Post("webhooks/whatsapp/:instanceName")
   @HttpCode(200)
   async whatsappWebhook(
@@ -131,58 +234,9 @@ export class ChannelsController {
       if (a.length !== b.length || !timingSafeEqual(a, b)) throw new ForbiddenException("segredo do webhook inválido");
     }
 
-    this.logger.log(`Webhook recebido: ${instanceName} event=${body?.event}`);
-
-    // Ignora eventos que não são mensagens
-    if (body?.event !== "messages.upsert") return { ok: true };
-
-    const data = body?.data;
-    if (!data) return { ok: true };
-
-    try {
-      const channel = await prisma.channel.findFirst({
-        where: { config: { path: ["instanceName"], equals: instanceName } },
-      });
-
-      if (!channel) {
-        this.logger.warn(`Canal não encontrado para instance: ${instanceName}`);
-        return { ok: true };
-      }
-
-      const jid: string = data.key?.remoteJid ?? "";
-      if (jid.endsWith("@g.us") || jid === "status@broadcast") return { ok: true };
-
-      // Mensagens do dono (texto ou áudio) viram comandos do assistente
-      if (this.assistant.isOwnerJid(data.key?.remoteJid) || this.assistant.isOwnerJid(data.key?.remoteJidAlt) || this.assistant.isOwnerJid(data.key?.senderPn)) {
-        if (this.assistant.isOwnEcho(data.key?.id)) return { ok: true };
-        // Mensagens enviadas pelo número conectado para o dono (respostas do assistente, áudios) não são comandos,
-        // a não ser que o dono use o próprio número conectado ("mensagem para si mesmo").
-        if (data.key?.fromMe && !this.assistant.isOwnerJid(body?.sender)) return { ok: true };
-        let text: string = data.message?.conversation || data.message?.extendedTextMessage?.text || "";
-        let heard = false;
-        if (!text && data.message?.audioMessage) {
-          try {
-            text = await this.assistant.transcribe(instanceName, data.key);
-            heard = true;
-          } catch (err: any) {
-            this.logger.error(`Transcrição falhou: ${err.message}`);
-          }
-          if (!text) {
-            await this.assistant.sendToOwner(channel.workspaceId, instanceName, "Não consegui entender o áudio. Pode tentar de novo ou escrever?");
-            return { ok: true };
-          }
-        }
-        if (text) await this.assistant.handle(channel.workspaceId, instanceName, text, { heard });
-        return { ok: true };
-      }
-
-      if (data.key?.fromMe) return { ok: true };
-
-      await this.whatsapp.process(channel.workspaceId, channel.id, body);
-    } catch (err: any) {
-      this.logger.error(`Erro no webhook: ${err.message}`);
-    }
-
+    // Se a gravação falhar, a exceção vira 500 e o Evolution pode reenviar; duplicatas são descartadas na fila
+    const queued = await this.inbound.enqueue(instanceName, body);
+    if (queued) this.logger.log(`Webhook enfileirado: ${instanceName} ${body?.data?.key?.id}`);
     return { ok: true };
   }
 }

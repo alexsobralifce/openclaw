@@ -1,5 +1,26 @@
 import { Injectable, Logger } from "@nestjs/common";
 
+/** Falha ao falar com o Evolution. `status` é null quando nem chegou a ele (fora do ar, rede). */
+export class EvolutionError extends Error {
+  constructor(message: string, readonly status: number | null) {
+    super(message);
+  }
+  get unreachable() { return this.status === null; }
+  /** O Evolution não conhece a instância: ela se perdeu (ex.: ele reiniciou sem volume). */
+  get missingInstance() { return this.status === 404; }
+}
+
+/** Texto para o usuário final, sem detalhes técnicos. */
+export function evolutionMessage(e: unknown): string {
+  if (!(e instanceof EvolutionError)) return "Não foi possível falar com o serviço de WhatsApp.";
+  if (e.unreachable) return "O serviço de WhatsApp está fora do ar. Tente de novo em instantes.";
+  if (e.missingInstance || /connection closed|not connected/i.test(e.message)) {
+    return "O WhatsApp está desconectado. Reconecte o canal em Canais (Ver QR Code).";
+  }
+  if (e.status === 401 || e.status === 403) return "O serviço de WhatsApp recusou o acesso. Avise o administrador.";
+  return "O serviço de WhatsApp recusou a operação. Tente de novo; se persistir, reconecte o canal.";
+}
+
 @Injectable()
 export class EvolutionService {
   private readonly logger = new Logger(EvolutionService.name);
@@ -7,19 +28,31 @@ export class EvolutionService {
   private readonly apiKey = process.env.EVOLUTION_API_KEY || "";
 
   private async req<T>(path: string, init?: RequestInit): Promise<T> {
-    const res = await fetch(`${this.base}${path}`, {
-      ...init,
-      headers: {
-        "Content-Type": "application/json",
-        apikey: this.apiKey,
-        ...(init?.headers ?? {}),
-      },
-    });
+    let res: Response;
+    try {
+      res = await fetch(`${this.base}${path}`, {
+        ...init,
+        // Sem prazo, um Evolution travado seguraria a requisição (e a fila de entrada) para sempre
+        signal: init?.signal ?? AbortSignal.timeout(30_000),
+        headers: {
+          "Content-Type": "application/json",
+          apikey: this.apiKey,
+          ...(init?.headers ?? {}),
+        },
+      });
+    } catch (e: any) {
+      throw new EvolutionError(`Evolution API inacessível: ${e?.cause?.code ?? e?.name ?? e?.message}`, null);
+    }
     if (!res.ok) {
       const body = await res.text();
-      throw new Error(`Evolution API ${res.status}: ${body}`);
+      throw new EvolutionError(`Evolution API ${res.status}: ${body}`, res.status);
     }
     return res.json() as Promise<T>;
+  }
+
+  /** O Evolution respondeu 404: a instância não existe mais nele (ex.: ele foi reiniciado sem volume). */
+  isMissingInstance(e: unknown) {
+    return e instanceof EvolutionError && e.missingInstance;
   }
 
   async createInstance(instanceName: string, webhookUrl: string) {
@@ -83,6 +116,19 @@ export class EvolutionService {
     return this.req<any>(`/message/sendWhatsAppAudio/${instanceName}`, {
       method: "POST",
       body: JSON.stringify({ number: to, audio: base64Audio, encoding: true }),
+    });
+  }
+
+  /** Apaga "para todos" uma mensagem enviada por este número (o WhatsApp só permite nas mais recentes). */
+  async deleteMessage(instanceName: string, key: { id: string; remoteJid: string; fromMe: boolean }) {
+    return this.req<any>(`/chat/deleteMessageForEveryone/${instanceName}`, { method: "DELETE", body: JSON.stringify(key) });
+  }
+
+  /** Envia um arquivo (base64) como documento; o nome e o tipo aparecem no WhatsApp. */
+  async sendDocument(instanceName: string, to: string, base64: string, fileName: string, mimetype: string, caption?: string) {
+    return this.req<any>(`/message/sendMedia/${instanceName}`, {
+      method: "POST",
+      body: JSON.stringify({ number: to, mediatype: "document", media: base64, fileName, mimetype, caption }),
     });
   }
 

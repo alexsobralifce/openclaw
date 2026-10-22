@@ -1,4 +1,5 @@
 import { Injectable } from "@nestjs/common";
+import { assertQuota, geminiTokens, recordUsage } from "./usage";
 
 const BASE = "https://generativelanguage.googleapis.com/v1beta/models";
 
@@ -21,6 +22,14 @@ function pcmToWav(pcm: Buffer, sampleRate = 24000): Buffer {
   return Buffer.concat([header, pcm]);
 }
 
+/**
+ * Só o modelo principal recebe o nível de pensamento: medido no contrato de teste, o 3.8 Flash cai de 632 para 0 tokens de
+ * pensamento com "low", mas o 3.1 Flash-Lite (o reserva) não pensa por padrão e passaria a pensar se recebesse "low".
+ */
+export function withThinking<T extends object>(body: T, isPrimary: boolean): T & { generationConfig?: object } {
+  return isPrimary ? { ...body, generationConfig: thinkingConfig() } : body;
+}
+
 @Injectable()
 export class GeminiService {
   enabled() {
@@ -28,6 +37,7 @@ export class GeminiService {
   }
 
   private async call(model: string, body: object, timeoutMs = 30_000, retries = 2): Promise<any> {
+    await assertQuota();
     let lastErr = "";
     for (let attempt = 0; attempt <= retries; attempt++) {
       // Esta chave só é aceita na URL; nunca registrar a URL em logs.
@@ -37,7 +47,11 @@ export class GeminiService {
         body: JSON.stringify(body),
         signal: AbortSignal.timeout(timeoutMs),
       });
-      if (res.ok) return res.json();
+      if (res.ok) {
+        const data = await res.json();
+        recordUsage("gemini", model, geminiTokens(data));
+        return data;
+      }
       lastErr = `Gemini ${res.status}: ${(await res.text()).slice(0, 200)}`;
       // 503/429: alta demanda, tenta de novo
       if (res.status !== 503 && res.status !== 429) break;
@@ -64,7 +78,31 @@ export class GeminiService {
     let lastErr: any;
     for (const model of models) {
       try {
-        const data = await this.call(model, body, 15_000, 0);
+        const data = await this.call(model, withThinking(body, model === models[0]), 15_000, 0);
+        const text = (data.candidates?.[0]?.content?.parts ?? []).map((p: any) => p.text ?? "").join("").trim();
+        if (text) return text;
+      } catch (e) {
+        lastErr = e;
+      }
+    }
+    throw lastErr ?? new Error("Gemini não devolveu texto");
+  }
+
+  /**
+   * Lê imagens/PDFs e/ou links junto com o texto e devolve a resposta do modelo (usado para extrair compromissos).
+   * Os links são abertos pelo próprio Gemini (ferramenta url_context), não por este servidor.
+   */
+  async extract(prompt: string, input: { text?: string; urls?: string[]; media?: { mime: string; base64: string }[] }): Promise<string> {
+    const parts: any[] = [{ text: prompt }];
+    if (input.text) parts.push({ text: `Texto enviado:\n${input.text}` });
+    if (input.urls?.length) parts.push({ text: `Links para ler:\n${input.urls.join("\n")}` });
+    for (const m of input.media ?? []) parts.push({ inline_data: { mime_type: m.mime.split(";")[0].trim(), data: m.base64 } });
+    const body: any = { contents: [{ parts }], ...(input.urls?.length ? { tools: [{ url_context: {} }] } : {}) };
+    const models = [process.env.GEMINI_MODEL || "gemini-3.8-flash", ...(process.env.GEMINI_FALLBACK_MODEL ? [process.env.GEMINI_FALLBACK_MODEL] : [])];
+    let lastErr: any;
+    for (const model of models) {
+      try {
+        const data = await this.call(model, withThinking(body, model === models[0]), 45_000, 1);
         const text = (data.candidates?.[0]?.content?.parts ?? []).map((p: any) => p.text ?? "").join("").trim();
         if (text) return text;
       } catch (e) {

@@ -9,29 +9,28 @@ const API = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001";
 interface Options {
   onNewMessage?: (payload: { conversationId: string; message: any }) => void;
   onConversationUpdated?: (payload: { conversationId: string; status: string }) => void;
+  onConversationDeleted?: (payload: { conversationId: string }) => void;
   conversationId?: string;
 }
 
-export function useInboxSocket({ onNewMessage, onConversationUpdated, conversationId }: Options): void {
+export function useInboxSocket({ onNewMessage, onConversationUpdated, onConversationDeleted, conversationId }: Options): void {
   const socketRef = useRef<Socket | null>(null);
-  const callbacksRef = useRef({ onNewMessage, onConversationUpdated });
-  callbacksRef.current = { onNewMessage, onConversationUpdated };
+  const callbacksRef = useRef({ onNewMessage, onConversationUpdated, onConversationDeleted });
+  callbacksRef.current = { onNewMessage, onConversationUpdated, onConversationDeleted };
 
   useEffect(() => {
     const user = getUser();
     if (!user?.workspaceId) return;
 
-    const token = localStorage.getItem("oc_token");
-    if (!token) return;
-
     const socket = io(`${API}/inbox`, {
-      auth: { token },
+      withCredentials: true,
       transports: ["websocket"],
     });
     socketRef.current = socket;
 
     socket.on("message:new", (payload) => callbacksRef.current.onNewMessage?.(payload));
     socket.on("conversation:updated", (payload) => callbacksRef.current.onConversationUpdated?.(payload));
+    socket.on("conversation:deleted", (payload) => callbacksRef.current.onConversationDeleted?.(payload));
 
     return () => { socket.disconnect(); socketRef.current = null; };
   }, []);

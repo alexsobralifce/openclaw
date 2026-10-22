@@ -1,14 +1,16 @@
 <!doctype html>
 <html lang="pt-BR">
 <head>
+<script defer src="https://umami-production-8dd4.up.railway.app/script.js" data-website-id="2421af49-5ed3-4181-ab4f-377177f99129"></script>
+<script defer src="https://umami-production-8dd4.up.railway.app/recorder.js" data-website-id="2421af49-5ed3-4181-ab4f-377177f99129"></script>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="color-scheme" content="light dark">
 <meta name="robots" content="noindex">
-<title>API pública do openclaw</title>
+<title>API pública do MagoBox</title>
 <style>
-  :root { --bg:#f2f7f5; --surface:#fff; --ink:#0e1f1b; --muted:#52686a; --line:#d3e2dc; --accent:#0a8a7c; --chip:#dff3ee; --chip-ink:#06564c; --warn:#a4530a; --warn-bg:#fdf0dc; }
-  @media (prefers-color-scheme: dark) { :root { --bg:#08100e; --surface:#0e1a17; --ink:#e7f0ed; --muted:#92a9a3; --line:#1f342f; --accent:#2dd4bf; --chip:#113029; --chip-ink:#7ce9d8; --warn:#f5a524; --warn-bg:#2b2110; } }
+  :root { --bg:#f4f2f7; --surface:#fff; --ink:#150f1e; --muted:#5b5468; --line:#d9d4e1; --accent:#7C3AED; --chip:#e7e0f2; --chip-ink:#4C1D95; --warn:#a4530a; --warn-bg:#fdf0dc; }
+  @media (prefers-color-scheme: dark) { :root { --bg:#0b090f; --surface:#130f19; --ink:#eae8ef; --muted:#9b94a7; --line:#272132; --accent:#A78BFA; --chip:#1d132e; --chip-ink:#DDD6FE; --warn:#f5a524; --warn-bg:#2b2110; } }
   * { box-sizing: border-box; }
   body { margin:0; background:var(--bg); color:var(--ink); font:15px/1.55 system-ui,-apple-system,"Segoe UI",sans-serif; }
   .wrap { max-width:960px; margin:0 auto; padding:28px clamp(16px,4vw,32px) 72px; }
@@ -33,19 +35,19 @@
 <body>
 <div class="wrap">
   <span class="badge">Implementada · v1 (fases 1 a 4)</span>
-  <h1>API pública do openclaw</h1>
-  <p>Projeto para clientes integrarem CRM, site, BI, e-mails, agenda e WhatsApp ao openclaw. Fonte: <code>docs/api-publica.md</code>.</p>
+  <h1>API pública do MagoBox</h1>
+  <p>Projeto para clientes integrarem CRM, site, BI, e-mails, agenda e WhatsApp ao MagoBox. Fonte: <code>docs/api-publica.md</code>.</p>
 
   <h2>Decisões tomadas</h2>
   <div class="card"><ul>
-    <li><b>Público:</b> clientes do openclaw (multi-tenant). Cada workspace gerencia as próprias chaves.</li>
+    <li><b>Público:</b> clientes do MagoBox (multi-tenant). Cada workspace gerencia as próprias chaves.</li>
     <li><b>Integrações:</b> CRM, site, BI, e-mails (Gmail), agenda (Google Agenda) e WhatsApp.</li>
     <li><b>Base existente:</b> API NestJS <code>/api/v1</code>; o modelo <code>ApiKey</code> já existe no Prisma, sem uso; Google já é integrado por workspace.</li>
   </ul></div>
 
   <h2>Arquitetura</h2>
   <pre>Sistema externo ─► /api/public/v1/* ─► ApiKeyGuard ─► Escopo ─► Rate limit ─► Serviço de domínio
-openclaw ─► fila (Bull) ─► entregador de webhooks ─► URL do cliente (HMAC)</pre>
+MagoBox ─► fila (Bull) ─► entregador de webhooks ─► URL do cliente (HMAC)</pre>
   <p>Módulo novo <code>public-api</code> no mesmo app, reaproveitando os serviços de domínio.</p>
 
   <h2>Segurança</h2>
