@@ -13,7 +13,9 @@ export default function DashboardPage() {
 
   useEffect(() => {
     const who = me ?? getUser();
-    const first = visibleNav(who).find((i) => !i.desktopOnly || window.matchMedia("(min-width: 768px)").matches);
+    const visible = visibleNav(who);
+    const assistant = visible.find((i) => i.href === "/dashboard/chat");
+    const first = assistant ?? visible.find((i) => !i.desktopOnly || window.matchMedia("(min-width: 768px)").matches);
     router.replace(first?.href ?? "/dashboard/settings");
   }, [me, router]);
 
