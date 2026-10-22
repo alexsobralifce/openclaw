@@ -5,6 +5,7 @@ import { InboxController } from "./inbox.controller";
 import { InboxService } from "./inbox.service";
 import { InboxGateway } from "./inbox.gateway";
 import { EncryptionBackfillService } from "./encryption-backfill.service";
+import { jwtSecret } from "../../config/jwt-secret";
 
 @Module({
   imports: [

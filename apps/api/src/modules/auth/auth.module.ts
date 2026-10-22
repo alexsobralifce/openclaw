@@ -8,6 +8,8 @@ import { JwtStrategy } from "./jwt.strategy";
 import { APP_INTERCEPTOR } from "@nestjs/core";
 import { SESSION_DAYS } from "./session-cookie";
 import { SessionRenewInterceptor } from "./session-renew.interceptor";
+import { jwtSecret } from "../../config/jwt-secret";
+import { MailService } from "./mail.service";
 
 @Module({
   imports: [
@@ -21,7 +23,7 @@ import { SessionRenewInterceptor } from "./session-renew.interceptor";
     }),
   ],
   controllers: [AuthController],
-  providers: [AuthService, JwtStrategy, { provide: APP_INTERCEPTOR, useClass: SessionRenewInterceptor }],
+  providers: [AuthService, MailService, JwtStrategy, { provide: APP_INTERCEPTOR, useClass: SessionRenewInterceptor }],
   exports: [AuthService, MailService],
 })
 export class AuthModule {}

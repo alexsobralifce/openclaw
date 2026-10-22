@@ -4,6 +4,7 @@ import { JwtModule } from "@nestjs/jwt";
 import { PassportModule } from "@nestjs/passport";
 import { GoogleController } from "./google.controller";
 import { GoogleService } from "./google.service";
+import { jwtSecret } from "../../../config/jwt-secret";
 
 @Module({
   imports: [

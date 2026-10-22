@@ -29,6 +29,7 @@ import { AppChatService } from "./app-chat/app-chat.service";
 import { AppChatGateway } from "./app-chat/app-chat.gateway";
 import { PushService } from "./app-chat/push.service";
 import { InstagramWorker } from "./workers/instagram.worker";
+import { jwtSecret } from "../../config/jwt-secret";
 
 @Module({
   imports: [

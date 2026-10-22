@@ -3,13 +3,23 @@ import { prisma } from "@openclaw/database";
 import { isSealed, openToken, sealToken } from "../../webhooks/crypto";
 import { nextDay } from "../../channels/assistant/agenda-events";
 import { DriveKind, KIND_Q, STRICT_KINDS, extQuery, isBook, nameHasExt, needsNameCheck, wordVariants } from "../../channels/assistant/drive";
+import { planOf } from "../../auth/plans";
+import { NOTES_FOLDER, TOPICS_FOLDER, appendEntry, dailyFileName, dayStamp, formatEntry, noteFileName, renderNote, snippets, storageAccount } from "../../channels/assistant/notes";
+import { DOCS_FOLDER } from "../../channels/assistant/documents";
+import { buildBook, parseAddresses } from "../../channels/assistant/email-book";
+import { CONTACTS_FOLDER, EMAIL_BOOK_FOLDER, fileOfLetter, findContacts, fromPerson, fuzzyCandidates, groupByLetter, parseLetterFile, renderLetterFile } from "../../channels/assistant/contacts";
 
 const SCOPES = [
   "https://www.googleapis.com/auth/gmail.modify",
   // Só eventos da agenda principal (listar, criar e apagar); não mexe nas agendas em si
   "https://www.googleapis.com/auth/calendar.events",
-  // Só leitura: o assistente busca e baixa arquivos, nunca altera nem apaga nada no Drive
+  // Só para listar quais agendas existem (nomes), sem ler o conteúdo delas
+  "https://www.googleapis.com/auth/calendar.calendarlist.readonly",
+  // Leitura de todo o Drive: o assistente busca e baixa arquivos
   "https://www.googleapis.com/auth/drive.readonly",
+  // Escrita apenas nos arquivos que o próprio assistente cria (notas e documentos)
+  "https://www.googleapis.com/auth/drive.file",
+  "https://www.googleapis.com/auth/contacts.readonly",
   "openid",
   "email",
 ];
@@ -24,12 +34,27 @@ export interface DriveFileResult {
   base64?: string;
   motivo?: string;
 }
+
+const NOTE_MAX_BYTES = 1024 * 1024;
+const FOLDER_MIME = "application/vnd.google-apps.folder";
+const CONTACTS_TZ = process.env.ASSISTANT_TZ || "America/Fortaleza";
+const CONTACTS_CACHE_MS = 5 * 60_000;
 const DRIVE_EXPORTS: Record<string, { mime: string; ext: string }> = {
   "application/vnd.google-apps.document": { mime: "application/pdf", ext: ".pdf" },
   "application/vnd.google-apps.presentation": { mime: "application/pdf", ext: ".pdf" },
   "application/vnd.google-apps.drawing": { mime: "application/pdf", ext: ".pdf" },
   "application/vnd.google-apps.spreadsheet": { mime: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", ext: ".xlsx" },
 };
+const QUOTA_ERROR = /Quota exceeded|rateLimitExceeded|userRateLimitExceeded|RESOURCE_EXHAUSTED/i;
+const HEADERS_PARALLEL = 4;
+
+/** O Google barrou por cota de minuto; quem chamou deve esperar e tentar de novo. */
+export class GoogleQuotaError extends Error {
+  constructor() {
+    super("O Google limitou as consultas por alguns instantes (cota por minuto). Aguarde cerca de 1 minuto e tente de novo.");
+    this.name = "GoogleQuotaError";
+  }
+}
 
 const SIGNAL_HEADERS = new Set(["list-unsubscribe", "precedence", "auto-submitted", "x-spam-flag", "x-spam-status", "authentication-results"]);
 const GMAIL_HEADERS = ["From", "Subject", "Date", "List-Unsubscribe", "Precedence", "Auto-Submitted", "X-Spam-Flag", "X-Spam-Status", "Authentication-Results"];
@@ -55,6 +80,16 @@ export class GoogleService implements OnModuleInit {
     }
   }
   private tokenCache = new Map<string, { token: string; expiresAt: number }>();
+  /** Pasta de notas por workspace+conta, para não procurar no Drive a cada nota. */
+  private noteFolders = new Map<string, string>();
+  /** Uma escrita de nota por vez, por workspace+conta (evita duas notas com o mesmo nome). */
+  private noteLocks = new Map<string, Promise<unknown>>();
+  private contactCache = new Map<string, { at: number; contacts: any[] | null }>();
+  private calendarsCache = new Map<string, { at: number; ids: string[] }>();
+  /** Quem desempata quando a busca de contato acha mais de uma pessoa (ligado pelo assistente). */
+  private personPicker?: (query: string, candidates: any[], workspaceId: string) => Promise<any>;
+  private sleepMs = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
 
   private get clientId() { return process.env.GOOGLE_CLIENT_ID || ""; }
   private get clientSecret() { return process.env.GOOGLE_CLIENT_SECRET || ""; }
@@ -411,4 +446,558 @@ export class GoogleService implements OnModuleInit {
     });
     return { id: e.id, link: e.htmlLink };
   }
+
+  // ─── Portado do JavaScript compilado do deploy de 13/10 (tipos a revisar) ───
+
+  loginUrl(state: string) {
+      const p = new URLSearchParams({
+          client_id: this.clientId,
+          redirect_uri: this.redirectUri,
+          response_type: "code",
+          scope: "openid email profile",
+          prompt: "select_account",
+          state,
+      });
+      return `https://accounts.google.com/o/oauth2/v2/auth?${p}`;
+  }
+
+  async loginIdentity(code: string) {
+      const t = await this.tokenRequest({ code, grant_type: "authorization_code", redirect_uri: this.redirectUri });
+      const claims = JSON.parse(Buffer.from(String(t.id_token ?? "").split(".")[1] ?? "", "base64url").toString() || "{}");
+      if (claims.aud !== this.clientId || !/^(https:\/\/)?accounts\.google\.com$/.test(claims.iss ?? "") || !claims.email)
+          throw new Error("id_token do Google inválido");
+      return { email: String(claims.email).toLowerCase(), verified: claims.email_verified === true || claims.email_verified === "true", name: String(claims.name ?? "") };
+  }
+
+  async assertAccountLimit(workspaceId: string) {
+      const owner = await prisma.workspaceMember.findFirst({ where: { workspaceId, role: "OWNER" }, include: { user: true } });
+      const plan = owner && owner.user.role === "USER" ? planOf(owner.user.plan) : null;
+      if (!plan)
+          return;
+      const connected = (await this.listAccounts(workspaceId)).length;
+      if (connected >= plan.googleAccounts) {
+          throw new Error(`O plano ${plan.name} permite ${plan.googleAccounts} ${plan.googleAccounts === 1 ? "conta Google" : "contas Google"}. Remova uma em Canais ou troque de plano para conectar outra.`);
+      }
+  }
+
+  serial(key: string, fn: () => any) {
+      const run = (this.noteLocks.get(key) ?? Promise.resolve()).catch(() => { }).then(fn);
+      this.noteLocks.set(key, run);
+      run.then(() => this.noteLocks.get(key) === run && this.noteLocks.delete(key), () => this.noteLocks.get(key) === run && this.noteLocks.delete(key));
+      return run;
+  }
+
+  noteError(e: any) {
+      const m = String(e?.message ?? e);
+      if (/ACCESS_TOKEN_SCOPE_INSUFFICIENT|insufficientPermissions|insufficient authentication scopes/i.test(m)) {
+          return new Error("Esta conta ainda não liberou gravar notas no Drive. Reconecte o Google em Canais → Conectar Google.");
+      }
+      return this.driveError(e);
+  }
+
+  async driveFirst(workspaceId: string, account: string | undefined, q: any) {
+      const p = new URLSearchParams({ q, pageSize: "1", fields: "files(id)", spaces: "drive" });
+      const r = await this.g(workspaceId, account, `https://www.googleapis.com/drive/v3/files?${p}`);
+      return r.files?.[0]?.id;
+  }
+
+  async noteFolder(workspaceId: string, account: string | undefined) {
+      const key = `${workspaceId}:${account ?? ""}`;
+      const cached = this.noteFolders.get(key);
+      if (cached)
+          return cached;
+      let id = await this.driveFirst(workspaceId, account, `name='${NOTES_FOLDER}' and mimeType='${FOLDER_MIME}' and trashed=false`);
+      if (!id) {
+          const created = await this.g(workspaceId, account, "https://www.googleapis.com/drive/v3/files?fields=id", {
+              method: "POST",
+              body: JSON.stringify({ name: NOTES_FOLDER, mimeType: FOLDER_MIME }),
+          });
+          id = created.id;
+      }
+      this.noteFolders.set(key, id);
+      return id;
+  }
+
+  async driveUpload(workspaceId: string, account: string | undefined, method: any, url: any, content: any, meta: any) {
+      const token = await this.accessToken(workspaceId, account);
+      const boundary = `oc${Date.now().toString(36)}${Math.random().toString(36).slice(2)}`;
+      const body = meta
+          ? `--${boundary}\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n${JSON.stringify(meta)}\r\n--${boundary}\r\nContent-Type: text/markdown; charset=UTF-8\r\n\r\n${content}\r\n--${boundary}--`
+          : content;
+      const res = await fetch(url, {
+          method,
+          headers: { Authorization: `Bearer ${token}`, "Content-Type": meta ? `multipart/related; boundary=${boundary}` : "text/markdown; charset=UTF-8" },
+          body,
+          signal: AbortSignal.timeout(30_000),
+      });
+      if (!res.ok)
+          throw new Error(`Google API ${res.status}: ${(await res.text()).slice(0, 300)}`);
+  }
+
+  noteAppend(workspaceId: string, text: string, timeZone: string, account: string | undefined, at: Date = new Date()) {
+      return this.serial(`${workspaceId}:${account ?? ""}`, async () => {
+          try {
+              const folder = await this.noteFolder(workspaceId, account);
+              const dia = dayStamp(at, timeZone);
+              const nome = dailyFileName(at, timeZone);
+              const entry = formatEntry(at, text, timeZone);
+              const esc = nome.replace(/'/g, "\\'");
+              const id = await this.driveFirst(workspaceId, account, `name='${esc}' and '${folder}' in parents and trashed=false`);
+              if (!id) {
+                  await this.driveUpload(workspaceId, account, "POST", "https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id", appendEntry("", entry, dia), {
+                      name: nome,
+                      parents: [folder],
+                      mimeType: "text/markdown",
+                  });
+                  return { nome, dia };
+              }
+              const current = await this.gBytes(workspaceId, account, `https://www.googleapis.com/drive/v3/files/${id}?alt=media`);
+              if (current.length > NOTE_MAX_BYTES)
+                  throw new Error("a nota de hoje ficou grande demais; abra o arquivo no Drive");
+              await this.driveUpload(workspaceId, account, "PATCH", `https://www.googleapis.com/upload/drive/v3/files/${id}?uploadType=media`, appendEntry(current.toString("utf8"), entry, dia));
+              return { nome, dia };
+          }
+          catch (e: any) {
+              this.noteFolders.delete(`${workspaceId}:${account ?? ""}`);
+              throw this.noteError(e);
+          }
+      });
+  }
+
+  async noteSearch(workspaceId: string, terms: any, account: string | undefined, max: number = 5) {
+      const esc = (w) => w.replace(/\\/g, "\\\\").replace(/'/g, "\\'");
+      const words = [...new Set(terms)].slice(0, 6);
+      if (!words.length)
+          return [];
+      try {
+          const q = [`(${words.map((w) => `fullText contains '${esc(w)}'`).join(" or ")})`, "(mimeType='text/markdown' or mimeType='text/plain')", "trashed=false"].join(" and ");
+          const p = new URLSearchParams({
+              q,
+              pageSize: String(max),
+              orderBy: "modifiedTime desc",
+              fields: "files(id,name,size,modifiedTime,webViewLink)",
+              corpora: "allDrives",
+              includeItemsFromAllDrives: "true",
+              supportsAllDrives: "true",
+          });
+          const r = await this.g(workspaceId, account, `https://www.googleapis.com/drive/v3/files?${p}`);
+          const hits = await Promise.all((r.files ?? []).map(async (f) => {
+              if (Number(f.size ?? 0) > NOTE_MAX_BYTES)
+                  return null;
+              const bytes = await this.gBytes(workspaceId, account, `https://www.googleapis.com/drive/v3/files/${f.id}?alt=media&supportsAllDrives=true`).catch(() => null);
+              if (!bytes)
+                  return null;
+              const trechos = snippets(bytes.toString("utf8"), words.map((w) => w.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase()));
+              return trechos.length ? { id: f.id, nome: String(f.name), modificado: f.modifiedTime, link: f.webViewLink, trechos } : null;
+          }));
+          return hits.filter((h) => !!h);
+      }
+      catch (e: any) {
+          throw this.driveError(e);
+      }
+  }
+
+  async topicsRoot(workspaceId: string, account: string | undefined, create: boolean) {
+      if (create)
+          return this.driveEnsureFolder(workspaceId, account, TOPICS_FOLDER, await this.noteFolder(workspaceId, account));
+      const root = await this.driveFirst(workspaceId, account, `name='${NOTES_FOLDER}' and mimeType='${FOLDER_MIME}' and trashed=false`);
+      return root && (await this.driveFirst(workspaceId, account, `name='${TOPICS_FOLDER}' and mimeType='${FOLDER_MIME}' and '${root}' in parents and trashed=false`));
+  }
+
+  noteCreate(workspaceId: string, draft: any, timeZone: string, account: string | undefined, origin: string = "whatsapp", at: Date = new Date()) {
+      return this.serial(`${workspaceId}:${account ?? ""}`, async () => {
+          try {
+              const root = await this.topicsRoot(workspaceId, account, true);
+              const folder = await this.driveEnsureFolder(workspaceId, account, draft.topic, root);
+              const existing = await this.driveFilesIn(workspaceId, account, folder);
+              const day = dayStamp(at, timeZone);
+              let nome = noteFileName(day, draft.title);
+              for (let i = 2; existing.has(nome); i++)
+                  nome = noteFileName(day, `${draft.title} (${i})`);
+              await this.driveWrite(workspaceId, account, folder, nome, renderNote(draft, day, origin));
+              return { assunto: draft.topic, nome };
+          }
+          catch (e: any) {
+              this.noteFolders.delete(`${workspaceId}:${account ?? ""}`);
+              throw this.noteError(e);
+          }
+      });
+  }
+
+  async noteTopics(workspaceId: string, account: string | undefined) {
+      try {
+          const root = await this.topicsRoot(workspaceId, account, false);
+          if (!root)
+              return [];
+          const p = new URLSearchParams({ q: `'${root}' in parents and mimeType='${FOLDER_MIME}' and trashed=false`, pageSize: "100", orderBy: "name", fields: "files(id,name)", spaces: "drive" });
+          const r = await this.g(workspaceId, account, `https://www.googleapis.com/drive/v3/files?${p}`);
+          return (r.files ?? []).map((f) => ({ id: String(f.id), name: String(f.name) }));
+      }
+      catch (e: any) {
+          throw this.noteError(e);
+      }
+  }
+
+  async notesIn(workspaceId: string, topicId: string, account: string | undefined) {
+      if (!/^[\w-]{8,100}$/.test(topicId))
+          throw new Error("Assunto inválido.");
+      try {
+          const root = await this.topicsRoot(workspaceId, account, false);
+          const meta = await this.g(workspaceId, account, `https://www.googleapis.com/drive/v3/files/${encodeURIComponent(topicId)}?fields=parents,mimeType,trashed`);
+          if (!root || meta.trashed || meta.mimeType !== FOLDER_MIME || !(meta.parents ?? []).includes(root))
+              throw new Error("Esse assunto não está nas suas notas.");
+          const p = new URLSearchParams({ q: `'${topicId}' in parents and mimeType!='${FOLDER_MIME}' and trashed=false`, pageSize: "100", orderBy: "name desc", fields: "files(id,name,modifiedTime,webViewLink)", spaces: "drive" });
+          const r = await this.g(workspaceId, account, `https://www.googleapis.com/drive/v3/files?${p}`);
+          return (r.files ?? []).map((f) => ({ id: String(f.id), name: String(f.name).replace(/\.md$/, ""), modified: f.modifiedTime, link: f.webViewLink }));
+      }
+      catch (e: any) {
+          throw this.noteError(e);
+      }
+  }
+
+  async noteRead(workspaceId: string, fileId: string, account: string | undefined) {
+      if (!/^[\w-]{8,100}$/.test(fileId))
+          throw new Error("Nota inválida.");
+      try {
+          const root = await this.topicsRoot(workspaceId, account, false);
+          const f = await this.g(workspaceId, account, `https://www.googleapis.com/drive/v3/files/${encodeURIComponent(fileId)}?fields=name,size,parents,trashed,webViewLink,mimeType`);
+          const parent = f.parents?.[0];
+          const up = parent ? await this.g(workspaceId, account, `https://www.googleapis.com/drive/v3/files/${encodeURIComponent(parent)}?fields=name,parents`) : null;
+          if (!root || f.trashed || f.mimeType === FOLDER_MIME || !up?.parents?.includes(root))
+              throw new Error("Essa nota não está nas suas notas.");
+          if (Number(f.size ?? 0) > NOTE_MAX_BYTES)
+              throw new Error("A nota é grande demais para abrir aqui; abra o arquivo no Drive.");
+          const bytes = await this.gBytes(workspaceId, account, `https://www.googleapis.com/drive/v3/files/${encodeURIComponent(fileId)}?alt=media`);
+          return { name: String(f.name).replace(/\.md$/, ""), topic: String(up.name), content: bytes.toString("utf8"), link: f.webViewLink };
+      }
+      catch (e: any) {
+          throw this.noteError(e);
+      }
+  }
+
+  async noteTrash(workspaceId: string, fileId: string, account: string | undefined) {
+      if (!/^[\w-]{8,100}$/.test(fileId))
+          throw new Error("Nota inválida.");
+      try {
+          const root = await this.topicsRoot(workspaceId, account, false);
+          const f = await this.g(workspaceId, account, `https://www.googleapis.com/drive/v3/files/${encodeURIComponent(fileId)}?fields=name,parents,trashed,mimeType`);
+          const parent = f.parents?.[0];
+          const up = parent ? await this.g(workspaceId, account, `https://www.googleapis.com/drive/v3/files/${encodeURIComponent(parent)}?fields=name,parents`) : null;
+          if (!root || f.trashed || f.mimeType === FOLDER_MIME || !up?.parents?.includes(root))
+              throw new Error("Essa nota não está nas suas notas.");
+          await this.g(workspaceId, account, `https://www.googleapis.com/drive/v3/files/${encodeURIComponent(fileId)}`, { method: "PATCH", body: JSON.stringify({ trashed: true }) });
+          return { name: String(f.name).replace(/\.md$/, "") };
+      }
+      catch (e: any) {
+          if (/Google API 40[34]\b/.test(String(e?.message))) {
+              throw new Error("Não tenho permissão para apagar essa nota (só apago as que eu mesmo criei). Apague pelo Google Drive.");
+          }
+          throw this.noteError(e);
+      }
+  }
+
+  documentStore(workspaceId: string, bytes: Buffer, name: string, mime: string, account: string | undefined) {
+      return this.serial(`${workspaceId}:${account ?? ""}`, async () => {
+          try {
+              const folder = await this.driveEnsureFolder(workspaceId, account, DOCS_FOLDER, await this.noteFolder(workspaceId, account));
+              const token = await this.accessToken(workspaceId, account);
+              const boundary = `oc${Date.now().toString(36)}${Math.random().toString(36).slice(2)}`;
+              const head = Buffer.from(`--${boundary}\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n${JSON.stringify({ name, parents: [folder] })}\r\n--${boundary}\r\nContent-Type: ${mime}\r\n\r\n`);
+              const res = await fetch("https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id,webViewLink", {
+                  method: "POST",
+                  headers: { Authorization: `Bearer ${token}`, "Content-Type": `multipart/related; boundary=${boundary}` },
+                  body: Buffer.concat([head, bytes, Buffer.from(`\r\n--${boundary}--`)]),
+                  signal: AbortSignal.timeout(60_000),
+              });
+              if (!res.ok)
+                  throw new Error(`Google API ${res.status}: ${(await res.text()).slice(0, 300)}`);
+              const f = await res.json();
+              return { id: String(f.id), link: f.webViewLink };
+          }
+          catch (e: any) {
+              throw this.noteError(e);
+          }
+      });
+  }
+
+  async documentTrash(workspaceId: string, fileId: string, account: string | undefined) {
+      if (!/^[\w-]{8,100}$/.test(fileId))
+          throw new Error("Documento inválido.");
+      try {
+          const root = await this.driveFirst(workspaceId, account, `name='${NOTES_FOLDER}' and mimeType='${FOLDER_MIME}' and trashed=false`);
+          const docs = root && (await this.driveFirst(workspaceId, account, `name='${DOCS_FOLDER}' and mimeType='${FOLDER_MIME}' and '${root}' in parents and trashed=false`));
+          const f = await this.g(workspaceId, account, `https://www.googleapis.com/drive/v3/files/${encodeURIComponent(fileId)}?fields=parents,trashed,mimeType`);
+          if (!docs || f.trashed || f.mimeType === FOLDER_MIME || !(f.parents ?? []).includes(docs))
+              throw new Error("Esse documento não está na sua pasta de documentos.");
+          await this.g(workspaceId, account, `https://www.googleapis.com/drive/v3/files/${encodeURIComponent(fileId)}`, { method: "PATCH", body: JSON.stringify({ trashed: true }) });
+      }
+      catch (e: any) {
+          if (/Google API 40[34]\b/.test(String(e?.message)))
+              throw new Error("Não tenho permissão para apagar esse arquivo (só apago os que eu mesmo guardei). Apague pelo Google Drive.");
+          throw this.noteError(e);
+      }
+  }
+
+  peopleError(e: any, account: string | undefined) {
+      const m = String(e?.message ?? e);
+      if (/SERVICE_DISABLED|accessNotConfigured|has not been used in project|API has not been used/i.test(m)) {
+          const url = m.match(/https:\/\/console\.(?:developers|cloud)\.google\.com\/[^\s"'\\)]+/)?.[0] ?? "https://console.cloud.google.com/apis/library/people.googleapis.com";
+          return new Error(`A API de Contatos (People API) está desativada no projeto do Google Cloud. Ative em: ${url}`);
+      }
+      if (/ACCESS_TOKEN_SCOPE_INSUFFICIENT|insufficientPermissions|insufficient authentication scopes/i.test(m)) {
+          return new Error(`${account ? `A conta ${account}` : "Esta conta"} ainda não liberou os contatos. Reconecte o Google em Canais → Conectar Google.`);
+      }
+      return this.noteError(e);
+  }
+
+  async contactsFetch(workspaceId: string, account: string | undefined) {
+      const out = [];
+      let pageToken = "";
+      for (let page = 0; page < 25; page++) {
+          const p = new URLSearchParams({ personFields: "names,emailAddresses,phoneNumbers,organizations", pageSize: "1000", sortOrder: "LAST_MODIFIED_DESCENDING" });
+          if (pageToken)
+              p.set("pageToken", pageToken);
+          const r = await this.g(workspaceId, account, `https://people.googleapis.com/v1/people/me/connections?${p}`);
+          for (const person of r.connections ?? []) {
+              const c = fromPerson(person);
+              if (c)
+                  out.push(c);
+          }
+          pageToken = r.nextPageToken ?? "";
+          if (!pageToken)
+              break;
+      }
+      return out;
+  }
+
+  async driveEnsureFolder(workspaceId: string, account: string | undefined, name: string, parent: any) {
+      const esc = name.replace(/'/g, "\\'");
+      const found = await this.driveFirst(workspaceId, account, `name='${esc}' and mimeType='${FOLDER_MIME}' and '${parent}' in parents and trashed=false`);
+      if (found)
+          return found;
+      const created = await this.g(workspaceId, account, "https://www.googleapis.com/drive/v3/files?fields=id", {
+          method: "POST",
+          body: JSON.stringify({ name, mimeType: FOLDER_MIME, parents: [parent] }),
+      });
+      return created.id;
+  }
+
+  async driveFilesIn(workspaceId: string, account: string | undefined, folder: any) {
+      const out = new Map();
+      const p = new URLSearchParams({ q: `'${folder}' in parents and mimeType!='${FOLDER_MIME}' and trashed=false`, pageSize: "100", fields: "files(id,name)", spaces: "drive" });
+      const r = await this.g(workspaceId, account, `https://www.googleapis.com/drive/v3/files?${p}`);
+      for (const f of r.files ?? [])
+          out.set(String(f.name), String(f.id));
+      return out;
+  }
+
+  async driveWrite(workspaceId: string, account: string | undefined, folder: any, name: string, content: any, id: string) {
+      if (id)
+          return this.driveUpload(workspaceId, account, "PATCH", `https://www.googleapis.com/upload/drive/v3/files/${id}?uploadType=media`, content);
+      await this.driveUpload(workspaceId, account, "POST", "https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id", content, { name, parents: [folder], mimeType: "text/markdown" });
+  }
+
+  contactsImport(workspaceId: string, at: Date = new Date()) {
+      return this.serial(`contacts:${workspaceId}`, async () => {
+          try {
+              const accounts = await this.listAccounts(workspaceId);
+              const target = storageAccount(accounts);
+              if (!target)
+                  throw new Error("Google não conectado");
+              const lists = await Promise.all(accounts.map((a) => this.contactsFetch(workspaceId, a).catch((e) => { throw this.peopleError(e, a); })));
+              const { grouped } = await this.writeBook(workspaceId, target, CONTACTS_FOLDER, lists.flat(), at, "Contatos");
+              for (const a of accounts)
+                  await this.markContactsSynced(workspaceId, a, at);
+              return { total: [...grouped.values()].reduce((n, cs) => n + cs.length, 0), arquivos: grouped.size, contas: accounts.length, destino: target };
+          }
+          catch (e: any) {
+              throw this.peopleError(e);
+          }
+      });
+  }
+
+  async writeBook(workspaceId: string, target: string, folderName: string, contacts: any, at: Date, title: string) {
+      const grouped = groupByLetter(contacts);
+      const root = await this.noteFolder(workspaceId, target);
+      const folder = await this.driveEnsureFolder(workspaceId, target, folderName, root);
+      const existing = await this.driveFilesIn(workspaceId, target, folder);
+      const day = dayStamp(at, CONTACTS_TZ);
+      const jobs = [...grouped].map(([letter, cs]) => ({ name: fileOfLetter(letter), content: renderLetterFile(letter, cs, day, title) }));
+      const written = new Set(jobs.map((j) => j.name));
+      for (const name of existing.keys()) {
+          const letter = name === fileOfLetter("#") ? "#" : name.match(/^([A-Z])\.md$/)?.[1];
+          if (letter && !written.has(name))
+              jobs.push({ name, content: renderLetterFile(letter, [], day, title) });
+      }
+      for (let i = 0; i < jobs.length; i += 4) {
+          await Promise.all(jobs.slice(i, i + 4).map((j) => this.driveWrite(workspaceId, target, folder, j.name, j.content, existing.get(j.name))));
+      }
+      this.contactCache.delete(`${workspaceId}:${target}:${folderName}`);
+      return { grouped };
+  }
+
+  async loadBook(workspaceId: string, account: string | undefined, folderName: string) {
+      const key = `${workspaceId}:${account}:${folderName}`;
+      const hit = this.contactCache.get(key);
+      if (hit && Date.now() - hit.at < CONTACTS_CACHE_MS)
+          return hit.contacts;
+      const root = await this.driveFirst(workspaceId, account, `name='${NOTES_FOLDER}' and mimeType='${FOLDER_MIME}' and trashed=false`);
+      const folder = root && (await this.driveFirst(workspaceId, account, `name='${folderName}' and mimeType='${FOLDER_MIME}' and '${root}' in parents and trashed=false`));
+      if (!folder) {
+          this.contactCache.set(key, { at: Date.now(), contacts: null });
+          return null;
+      }
+      const files = [...(await this.driveFilesIn(workspaceId, account, folder))].filter(([n]) => /^([A-Z]|Outros)\.md$/.test(n));
+      const contacts = [];
+      for (let i = 0; i < files.length; i += 6) {
+          const parts = await Promise.all(files.slice(i, i + 6).map(async ([, id]) => parseLetterFile((await this.gBytes(workspaceId, account, `https://www.googleapis.com/drive/v3/files/${id}?alt=media`)).toString("utf8"))));
+          parts.forEach((p) => contacts.push(...p));
+      }
+      this.contactCache.set(key, { at: Date.now(), contacts });
+      return contacts;
+  }
+
+  async withQuotaRetry(fn: () => any, tries: any = 3) {
+      for (let i = 1;; i++) {
+          try {
+              return await fn();
+          }
+          catch (e: any) {
+              if (!(e instanceof GoogleQuotaError) || i >= tries)
+                  throw e;
+              await this.sleepMs(20_000 * i);
+          }
+      }
+  }
+
+  async gmailHeaders(workspaceId: string, account: string | undefined, query: string, max: number) {
+      const list = await this.withQuotaRetry(() => this.g(workspaceId, account, `https://gmail.googleapis.com/gmail/v1/users/me/messages?maxResults=${Math.min(max, 500)}&q=${encodeURIComponent(query)}`));
+      const ids = (list.messages ?? []).map((m) => m.id);
+      const out = [];
+      for (let i = 0; i < ids.length; i += HEADERS_PARALLEL) {
+          const batch = await Promise.all(ids.slice(i, i + HEADERS_PARALLEL).map(async (id) => {
+              const m = await this.withQuotaRetry(() => this.g(workspaceId, account, `https://gmail.googleapis.com/gmail/v1/users/me/messages/${id}?format=metadata&metadataHeaders=From&metadataHeaders=To&metadataHeaders=Cc`)).catch(() => null);
+              const h = (n) => m?.payload?.headers?.find((x) => x.name === n)?.value;
+              return m ? { from: h("From"), to: h("To"), cc: h("Cc") } : null;
+          }));
+          out.push(...batch.filter((x) => !!x));
+      }
+      return out;
+  }
+
+  emailBookImport(workspaceId: string, at: Date = new Date(), perBox: any = 300) {
+      return this.serial(`emailbook:${workspaceId}`, async () => {
+          try {
+              const accounts = await this.listAccounts(workspaceId);
+              const target = storageAccount(accounts);
+              if (!target)
+                  throw new Error("Google não conectado");
+              const seen = [];
+              for (const a of accounts) {
+                  const inbox = await this.gmailHeaders(workspaceId, a, "in:inbox", perBox);
+                  const sent = await this.gmailHeaders(workspaceId, a, "in:sent", perBox);
+                  for (const m of inbox)
+                      for (const x of parseAddresses(m.from))
+                          seen.push({ ...x, sent: false });
+                  for (const m of sent)
+                      for (const x of [...parseAddresses(m.to), ...parseAddresses(m.cc)])
+                          seen.push({ ...x, sent: true });
+              }
+              const known = new Set((await this.loadBook(workspaceId, target, CONTACTS_FOLDER).catch(() => null))?.flatMap((c) => c.emails) ?? []);
+              const book = buildBook(seen, { own: accounts, known });
+              const { grouped } = await this.writeBook(workspaceId, target, EMAIL_BOOK_FOLDER, book, at, "Endereços de e-mail");
+              return { total: book.length, arquivos: grouped.size, contas: accounts.length, destino: target };
+          }
+          catch (e: any) {
+              throw this.noteError(e);
+          }
+      });
+  }
+
+  async markContactsSynced(workspaceId: string, account: string | undefined, at: Date) {
+      const ch = await this.findChannel(workspaceId, account);
+      if (ch)
+          await prisma.channel.update({ where: { id: ch.id }, data: { config: { ...ch.config, contactsSyncedAt: at.toISOString() } } });
+  }
+
+  async importContactsOnce(workspaceId: string, account: string | undefined) {
+      try {
+          const ch = await this.findChannel(workspaceId, account);
+          if (!ch || ch.config?.contactsSyncedAt)
+              return;
+          const r = await this.contactsImport(workspaceId);
+          this.logger.log(`Contatos importados para o Drive: ${r.total} em ${r.arquivos} arquivo(s)`);
+      }
+      catch (e: any) {
+          this.logger.warn(`Importar contatos na conexão falhou: ${e.message}`);
+      }
+      try {
+          const b = await this.emailBookImport(workspaceId);
+          this.logger.log(`Catálogo de e-mails gravado no Drive: ${b.total} endereço(s) em ${b.arquivos} arquivo(s)`);
+      }
+      catch (e: any) {
+          this.logger.warn(`Montar o catálogo de e-mails na conexão falhou: ${e.message}`);
+      }
+  }
+
+  setPersonPicker(fn: () => any) {
+      this.personPicker = fn;
+  }
+
+  async contactsLookup(workspaceId: string, query: string, max: number = 5) {
+      const account = storageAccount(await this.listAccounts(workspaceId));
+      if (!account)
+          return null;
+      try {
+          const [people, book] = await Promise.all([this.loadBook(workspaceId, account, CONTACTS_FOLDER), this.loadBook(workspaceId, account, EMAIL_BOOK_FOLDER)]);
+          if (people === null && book === null)
+              return null;
+          const exact = [...findContacts(people ?? [], query, max), ...findContacts(book ?? [], query, max)].slice(0, max);
+          if (exact.length || !this.personPicker)
+              return exact;
+          const similar = fuzzyCandidates([...(people ?? []), ...(book ?? [])], query, 8);
+          const picked = similar.length ? await this.personPicker(query, similar) : null;
+          return picked !== null && similar[picked] ? [similar[picked]] : [];
+      }
+      catch (e: any) {
+          throw this.driveError(e);
+      }
+  }
+
+  async calendarIds(workspaceId: string, account: string | undefined) {
+      const only = [{ id: "primary", name: "", primary: true }];
+      const key = `${workspaceId}:${account ?? ""}`;
+      const hit = this.calendarsCache.get(key);
+      if (hit && Date.now() - hit.at < 5 * 60_000)
+          return hit.list;
+      let list = only;
+      try {
+          const r = await this.g(workspaceId, account, "https://www.googleapis.com/calendar/v3/users/me/calendarList?minAccessRole=reader&maxResults=50&fields=items(id,summary,summaryOverride,selected,primary)");
+          const found = (r.items ?? [])
+              .filter((c) => c.primary || c.selected)
+              .map((c) => ({ id: c.primary ? "primary" : String(c.id), name: c.primary ? "" : String(c.summaryOverride || c.summary || ""), primary: !!c.primary }))
+              .slice(0, 10);
+          if (found.some((c) => c.primary))
+              list = found;
+      }
+      catch (e: any) {
+          this.logger.warn(`Listar agendas falhou (${account ?? "conta"}): só a principal. ${String(e?.message).slice(0, 120)}`);
+      }
+      this.calendarsCache.set(key, { at: Date.now(), list });
+      return list;
+  }
+
+  async calendarDelete(workspaceId: string, eventId: any, account: string | undefined, calendarId: any = "primary") {
+      if (!/^[\w-]{5,1024}$/.test(eventId))
+          throw new Error("Evento inválido.");
+      try {
+          await this.g(workspaceId, account, `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(calendarId)}/events/${encodeURIComponent(eventId)}?sendUpdates=none`, { method: "DELETE" });
+      }
+      catch (e: any) {
+          if (/Google API (404|410)\b/.test(String(e?.message)))
+              return;
+          throw e;
+      }
+  }
+
 }

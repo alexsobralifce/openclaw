@@ -27,6 +27,7 @@ model Workspace {
   webhooks      WebhookEndpoint[]
   memories      Memory[]
   listNotes     ListNote[]
+  documents     Document[]
 }
 
 enum Plan {
@@ -496,6 +497,37 @@ model ListNote {
 
   @@index([workspaceId, updatedAt])
   @@index([remindAt])
+}
+
+// ─── CATÁLOGO DE DOCUMENTOS ──────────────────────────────────────
+
+// Ficha de um documento guardado no Drive (PDF, em geral), para busca e envio pelo assistente.
+// A unicidade de (workspaceId, driveFileId) é garantida no código (documents-store.ts): `@unique`
+// em coluna nova trava o `prisma db push` que roda no boot da API.
+model Document {
+  id    String @id @default(cuid())
+  // pdf = arquivo no Drive; nota = nota antiga reclassificada (sem PDF original)
+  kind  String @default("pdf")
+  title String
+  topic String
+  tags  String[] @default([])
+  summary   String   @default("")
+  driveFileId String
+  // conta do Google de onde veio o arquivo
+  account   String
+  mime      String   @default("application/pdf")
+  sizeBytes Int      @default(0)
+  pages     Int?
+  // canal pelo qual o documento entrou no catálogo
+  origin    String   @default("whatsapp")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  workspaceId String
+
+  @@index([workspaceId, createdAt])
+  @@index([workspaceId, driveFileId])
 }
 
 // ─── RELATOS DE PROBLEMAS ────────────────────────────────────────
