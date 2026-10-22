@@ -1707,12 +1707,12 @@ export class MenuService {
     return this.emRecuperacao("Agenda (criar por texto)");
   }
 
-  async agendaDayEntry(_ws: string, _offset: number): Promise<string> {
-    return this.emRecuperacao("Agenda do dia");
+  async agendaDayEntry(ws: string, offset: number): Promise<string> {
+    return this.agendaList(ws, offset, offset, offset === 0 ? "Hoje" : "Amanhã");
   }
 
-  async agendaWeek(_ws: string): Promise<string> {
-    return this.emRecuperacao("Agenda da semana");
+  async agendaWeek(ws: string): Promise<string> {
+    return this.agendaList(ws, 0, 6, "Próximos 7 dias");
   }
 
   async agendaDayView(_ws: string, _day: unknown, _data: { events: unknown; multi: unknown }, _back: string, _days: unknown): Promise<string> {
