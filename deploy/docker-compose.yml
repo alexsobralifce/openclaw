@@ -23,9 +23,7 @@ services:
           memory: 300M
 
   api:
-    build:
-      context: ..
-      dockerfile: Dockerfile.api
+    image: us-central1-docker.pkg.dev/valued-night-509616-b7/openclaw/api:latest
     restart: unless-stopped
     env_file: .env
     depends_on:
@@ -39,13 +37,7 @@ services:
           memory: 400M
 
   web:
-    build:
-      context: ..
-      dockerfile: Dockerfile.web
-      args:
-        # Mesma origem do front: o navegador chama /api/v1 no próprio endereço
-        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://34.133.1.75}
-        NEXT_PUBLIC_SITE_URL: ${NEXT_PUBLIC_SITE_URL:-http://34.133.1.75}
+    image: us-central1-docker.pkg.dev/valued-night-509616-b7/openclaw/web:latest
     restart: unless-stopped
     expose:
       - "3000"
