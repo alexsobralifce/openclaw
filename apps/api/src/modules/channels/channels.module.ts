@@ -17,6 +17,7 @@ import { GoogleModule } from "../integrations/google/google.module";
 import { InboxModule } from "../inbox/inbox.module";
 import { EvolutionModule } from "./evolution/evolution.module";
 import { AutomationsModule } from "../automations/automations.module";
+import { VaultModule } from "../vault/vault.module";
 import { InboundService } from "./inbound/inbound.service";
 import { InstagramService } from "./instagram/instagram.service";
 import { TelegramService } from "./telegram/telegram.service";
@@ -33,7 +34,7 @@ import { jwtSecret } from "../../config/jwt-secret";
 
 @Module({
   imports: [
-    InboxModule, GoogleModule, EvolutionModule, AutomationsModule,
+    InboxModule, GoogleModule, EvolutionModule, AutomationsModule, VaultModule,
     // Assina o `state` do OAuth do Instagram (mesmo esquema do Google)
     JwtModule.registerAsync({
       useFactory: (config: ConfigService) => ({ secret: jwtSecret(config.get("JWT_SECRET")) }),
