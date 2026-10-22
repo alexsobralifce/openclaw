@@ -2,8 +2,18 @@ FROM node:20-slim
 RUN apt-get update && apt-get install -y --no-install-recommends openssl ca-certificates && rm -rf /var/lib/apt/lists/*
 RUN npm i -g pnpm@12.6.0
 WORKDIR /app
-COPY . .
+
+# As dependências entram antes do código: mudar um .ts não invalida o `pnpm install`,
+# que leva mais de 10 minutos na e2-micro do Google Cloud.
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
+COPY apps/api/package.json apps/api/
+COPY apps/web/package.json apps/web/
+COPY apps/widget/package.json apps/widget/
+COPY packages/database/package.json packages/database/
+COPY packages/types/package.json packages/types/
 RUN pnpm install --frozen-lockfile
+
+COPY . .
 RUN pnpm --filter @openclaw/database db:generate \
  && pnpm --filter @openclaw/database build \
  && pnpm --filter @openclaw/types build \
