@@ -38,6 +38,24 @@ services:
         limits:
           memory: 400M
 
+  web:
+    build:
+      context: ..
+      dockerfile: Dockerfile.web
+      args:
+        # Mesma origem do front: o navegador chama /api/v1 no próprio endereço
+        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://34.133.1.75/api/v1}
+        NEXT_PUBLIC_SITE_URL: ${NEXT_PUBLIC_SITE_URL:-http://34.133.1.75}
+    restart: unless-stopped
+    expose:
+      - "3000"
+    depends_on:
+      - api
+    deploy:
+      resources:
+        limits:
+          memory: 300M
+
   # HTTPS automático (Let's Encrypt). Precisa das portas 80 e 443 abertas e do DNS apontado.
   caddy:
     image: caddy:2-alpine
@@ -51,6 +69,7 @@ services:
       - caddy_config:/config
     depends_on:
       - api
+      - web
     deploy:
       resources:
         limits:

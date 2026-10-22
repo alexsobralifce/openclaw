@@ -1,8 +1,17 @@
 FROM node:20-slim
 RUN npm i -g pnpm@12.6.0
 WORKDIR /app
-COPY . .
+
+# Dependências antes do código: na e2-micro o `pnpm install` leva mais de 10 minutos.
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
+COPY apps/api/package.json apps/api/
+COPY apps/web/package.json apps/web/
+COPY apps/widget/package.json apps/widget/
+COPY packages/database/package.json packages/database/
+COPY packages/types/package.json packages/types/
 RUN pnpm install --frozen-lockfile
+
+COPY . .
 ARG NEXT_PUBLIC_API_URL
 ENV NEXT_PUBLIC_API_URL=$NEXT_PUBLIC_API_URL
 # Endereço público do site: usado na imagem de compartilhamento (Open Graph)
