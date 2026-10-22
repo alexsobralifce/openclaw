@@ -11,6 +11,12 @@ import { StateService } from "../../state/state.service";
 import { Service } from "../../auth/permissions";
 import { openField, sealField } from "../../webhooks/crypto";
 import { Commander } from "./commander";
+import { can, workspaceCommander } from "./commander";
+import { QUOTA_NOTICE, assertQuota, quotaHit, trackUser } from "./usage";
+import { pickTools } from "./tool-select";
+import { loadLocation, validCoords } from "./location";
+import { chatCompletion } from "./openai-chat";
+import { ConversationMemory, renderHistory } from "./conversation-memory";
 
 const TZ = process.env.ASSISTANT_TZ || "America/Fortaleza";
 
@@ -181,6 +187,9 @@ export function toolAllowed(services: Service[], name: string) {
 // Quantos comandos separados por ";" uma chamada de voz aceita
 const MAX_VOICE_STEPS = 4;
 
+/** Limite de mídia aceita pelo assistente (áudio, imagem, PDF). */
+export const MAX_MEDIA_BYTES = 15 * 1024 * 1024;
+
 @Injectable()
 export class AssistantService {
   private readonly logger = new Logger(AssistantService.name);
@@ -198,7 +207,7 @@ export class AssistantService {
     this.conv = new ConversationMemory(this.state);
     this.menu.setExecutor((ws, a) => this.execute(ws, a.name, a.args));
     // `?.`: os dublês de teste do GoogleService são parciais
-    this.google.setPersonPicker?.(async (query, candidates) => (await this.intents?.pickPerson(query, candidates)) ?? null);
+    this.google.setPersonPicker?.(async (query: string, candidates: any[]) => (await this.intents?.pickPerson(query, candidates)) ?? null);
   }
 
   /** App: o GPS do navegador informou a cidade; só avisa no chat se ela mudou. */
@@ -299,7 +308,7 @@ export class AssistantService {
     return ((await res.json()) as any).text?.trim() ?? "";
   }
 
-  async handle(c: Commander, instanceName: string, text: string, opts: { heard?: boolean } = {}) {
+  async handle(c: Commander, instanceName: string, text: string, opts: { heard?: boolean; quoted?: string } = {}): Promise<{ redact?: boolean } | void> {
     const workspaceId = c.workspaceId;
     let answer: string;
     try {
@@ -337,7 +346,7 @@ export class AssistantService {
     let flagged = false;
 
     // Só as ferramentas do assunto do pedido (corta ~1/3 do custo); sem assunto reconhecido, vão todas
-    const picked = await pickTools(text, this.intents?.enabled() ? (t) => this.intents!.toolDomains(t) : undefined);
+    const picked = await pickTools(text, undefined); // intents desativado na recuperação
     for (let i = 0; i < MAX_ROUNDS; i++) {
       const tools = TOOLS.filter((t) => toolAllowed(c.services, t.function.name) && (!picked || picked.has(t.function.name)));
       const data: any = await chatCompletion({ messages, ...(tools.length ? { tools } : {}) }, { apiKey, ws: workspaceId });
@@ -461,4 +470,45 @@ export class AssistantService {
 
     return { error: `ferramenta desconhecida: ${name}` };
   }
+
+  // ─── DESATIVADO NA RECUPERAÇÃO ───────────────────────────────────────────────
+  // Perdidos: não estão no GitHub (parou em 24/09) nem no JS compilado de 13/10
+  // (que não inclui assistant.service). Avisam em vez de quebrar o assistente.
+  // Para reativar: recuperar dos patches das transcrições de 25/09 a 08/10.
+
+  /** Serviço de intenções (Jev/TypeSafe); indisponível enquanto a recuperação não terminar. */
+  private intents?: { enabled(): boolean; toolDomains(t: string): string[]; pickPerson(query: string, candidates: any[]): Promise<number | null> };
+
+  /** Transcrição de áudio enviado pelo app. */
+  async transcribeForApp(_c: Commander, _audio: Buffer, _mime: string, _seconds: number): Promise<{ text: string; notice?: string }> {
+    this.logger.warn("Recurso em recuperação acionado: transcribeForApp");
+    return { text: "", notice: "🛠️ A transcrição de áudio está fora do ar por causa de uma recuperação de código em andamento. Pode escrever a mensagem?" };
+  }
+
+  /** Imagem/PDF enviados no app. */
+  async handleMedia(_c: Commander, _instanceName: string, _kind: string, _bytes: Buffer, _meta: { mime: string; name?: string; caption?: string }): Promise<{ redact?: boolean } | null> {
+    this.logger.warn("Recurso em recuperação acionado: handleMedia");
+    return null;
+  }
+
+  /** Imagem/PDF com compromissos, recebidos pelo WhatsApp. */
+  async handleAgendaMedia(_c: Commander, _instanceName: string, _key: unknown, _media: unknown): Promise<void> {
+    this.logger.warn("Recurso em recuperação acionado: handleAgendaMedia");
+  }
+
+  /** Pin de localização recebido pelo WhatsApp. */
+  async handleLocation(_c: Commander, _instanceName: string, _loc: { lat: number; lng: number }): Promise<void> {
+    this.logger.warn("Recurso em recuperação acionado: handleLocation");
+  }
+
+  /** Contagem de mensagens por usuário (painel de uso). */
+  async trackMessage(_c: Commander): Promise<void> {
+    // sem efeito enquanto a recuperação não terminar
+  }
+
+  /** Limpeza periódica do chat (mensagens antigas e com segredo). */
+  async cleanChat(_workspaceId: string): Promise<void> {
+    this.logger.warn("Recurso em recuperação acionado: cleanChat");
+  }
+
 }

@@ -7,8 +7,9 @@
  * spam:   lixo ou golpe provável (oculto)
  */
 import { normalize } from "./voice";
+import { isMutedSender, MutePrefs } from "./email-mute";
 
-export type EmailKind = "person" | "auto" | "promo" | "spam";
+export type EmailKind = "person" | "auto" | "promo" | "spam" | "muted";
 
 export interface EmailSignals {
   de?: string;
@@ -46,7 +47,9 @@ const THREAD_REPLY = /^\s*(re|res|enc|fwd?)\s*:/i;
 
 const addrOf = (from = "") => (/<([^>]+)>/.exec(from)?.[1] ?? from).trim();
 
-export function classifyEmail(m: EmailSignals): EmailClass {
+export function classifyEmail(m: EmailSignals, muted?: MutePrefs): EmailClass {
+  // Remetente marcado como "sem interesse": sai da lista antes de qualquer outra regra
+  if (isMutedSender(muted, m.de)) return { kind: "muted", reasons: ["remetente marcado como sem interesse"], warn: [] };
   const labels = new Set(m.labels ?? []);
   const h = m.sinais ?? {};
   const subject = m.assunto ?? "";

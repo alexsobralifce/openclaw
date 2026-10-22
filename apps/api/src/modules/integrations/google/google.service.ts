@@ -940,7 +940,7 @@ export class GoogleService implements OnModuleInit {
       }
   }
 
-  setPersonPicker(fn: () => any) {
+  setPersonPicker(fn: (query: string, candidates: any[]) => Promise<number | null>) {
       this.personPicker = fn;
   }
 

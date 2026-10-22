@@ -89,7 +89,7 @@ export class AppChatController {
     const msg = await this.chat.store(c, "IN", "TEXT", `📎 ${name}${caption ? `\n${caption}` : ""}`);
     this.chat.typing(c.userId, true);
     void this.assistant
-      .handleMedia(c, APP_INSTANCE, async () => ({ base64: body.base64!, mimetype: mime }), { mime, caption })
+      .handleMedia(c, APP_INSTANCE, "FILE", Buffer.from(body.base64!, "base64"), { mime, name, caption })
       .catch(() => undefined)
       .finally(() => this.chat.typing(c.userId, false));
     return msg;

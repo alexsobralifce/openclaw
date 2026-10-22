@@ -1,4 +1,4 @@
-import { BadRequestException, Body, Controller, Get, Put, Request } from "@nestjs/common";
+import { BadRequestException, Body, Controller, Get, Param, Post, Put, Request } from "@nestjs/common";
 import { Access } from "../../auth/access";
 import { GoogleService } from "../../integrations/google/google.service";
 import { prisma } from "@openclaw/database";
@@ -50,7 +50,7 @@ export class AssistantSettingsController {
     const topics = await this.google.noteTopics(ws, account).catch((e) => this.fail(e));
     return {
       account,
-      topics: await Promise.all(topics.map(async (t) => ({ ...t, notes: await this.google.notesIn(ws, t.id, account).catch(() => []) }))),
+      topics: await Promise.all(topics.map(async (t: any) => ({ ...t, notes: await this.google.notesIn(ws, t.id, account).catch(() => []) }))),
     };
   }
 

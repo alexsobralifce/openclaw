@@ -3,7 +3,7 @@ import { prisma } from "@openclaw/database";
 import { Access, AllowExpired } from "../auth/access";
 import { planOf } from "../auth/plans";
 import { dayStamp } from "../channels/assistant/notes";
-import { loadPrices, monthlyLimit, rollup, SYSTEM_USER } from "../channels/assistant/usage";
+import { loadPrices, monthSpend, monthlyLimitUsd, rollup, SYSTEM_USER } from "../channels/assistant/usage";
 
 const TZ = process.env.ASSISTANT_TZ || "America/Fortaleza";
 
@@ -56,7 +56,7 @@ export class UsageController {
       since,
       total: { ...r.total, costUsd: r.users.reduce((s, u) => s + u.costUsd, 0), unpricedTokens: r.users.reduce((s, u) => s + u.unpricedTokens, 0) },
       avgMonthlyUsd,
-      monthlyLimit: monthlyLimit(),
+      monthlyLimitUsd: monthlyLimitUsd(),
       activeUsers: active.length,
       usdBrl: Number(process.env.AI_USD_BRL) > 0 ? Number(process.env.AI_USD_BRL) : null,
       pricedModels: Object.keys(prices),

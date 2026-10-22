@@ -45,8 +45,9 @@ class ProfileDto {
 }
 
 /** Grava o cookie da sessão quando a resposta traz um token (cadastro pendente de aprovação não traz). */
-function startSession<T extends { accessToken?: string }>(res: Response, result: T): T {
-  if (result.accessToken) setSessionCookie(res, result.accessToken);
+function startSession<T extends object>(res: Response, result: T): T {
+  const token = "accessToken" in result ? (result as { accessToken?: unknown }).accessToken : undefined;
+  if (typeof token === "string" && token) setSessionCookie(res, token);
   return result;
 }
 

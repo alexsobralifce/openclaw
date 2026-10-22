@@ -8,8 +8,22 @@ import { InstagramEvent, parseInstagramWebhook } from "../instagram/parse";
 import { AutomationRunner } from "../../automations/automation-runner.service";
 import { agendaMedia, audioSeconds, commandText, isVoiceOrAudio, locationOf, quotedText } from "../whatsapp/parse";
 import { isGroupOrBroadcast, phoneFromJid, samePhone, senderPhone } from "../whatsapp/phone";
+import { QUOTA_NOTICE, quotaHit } from "../assistant/usage";
 
 // Retentativas: 5 s, 30 s, 2 min, 10 min, 1 h (depois disso o evento fica FAILED para inspeção)
+/** Limite de duração de áudio aceito para transcrição (ASSISTANT_MAX_AUDIO_SECONDS, 300 s por padrão). */
+export const maxAudioSeconds = () => {
+  const n = Math.trunc(Number(process.env.ASSISTANT_MAX_AUDIO_SECONDS));
+  return Number.isFinite(n) && n > 0 ? n : 300;
+};
+
+/** 95 -> "1 min 35 s"; usado nos avisos de áudio longo. */
+export const fmtDuration = (secs: number) => {
+  const s = Math.max(0, Math.trunc(secs));
+  const m = Math.floor(s / 60);
+  return m ? `${m} min${s % 60 ? ` ${s % 60} s` : ""}` : `${s} s`;
+};
+
 export const BACKOFF_MS = [5_000, 30_000, 120_000, 600_000, 3_600_000];
 export const MAX_ATTEMPTS = BACKOFF_MS.length + 1;
 const TICK_MS = 2_000;
@@ -152,7 +166,7 @@ export class InboundService implements OnModuleInit, OnModuleDestroy {
       }
 
       // Modo "mensagem para si mesmo": as mensagens do dono também são do número conectado e podem ser apagadas na limpeza
-      if (data.key.fromMe) await this.assistant.trackMessage(commander.workspaceId, instance, data.key);
+      if (data.key.fromMe) await this.assistant.trackMessage(commander);
 
       let text = commandText(data.message);
       let heard = false;

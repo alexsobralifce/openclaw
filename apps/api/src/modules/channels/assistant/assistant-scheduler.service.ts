@@ -105,7 +105,7 @@ export class AssistantSchedulerService implements OnModuleInit, OnModuleDestroy 
         const owner = await workspaceCommander(n.workspaceId);
         const instance = owner ? await assistantInstance(n.workspaceId, owner) : null;
         if (owner && instance) {
-          await this.assistant.sendToUser(owner, instance, this.menu.reminderText(n));
+          await this.assistant.sendToUser(owner, instance, await this.menu.reminderText(n.workspaceId, n));
           sent = true;
         } else {
           this.logger.warn(`Lembrete da nota ${n.id}: sem canal para avisar o workspace ${n.workspaceId}.`);
@@ -132,7 +132,7 @@ export class AssistantSchedulerService implements OnModuleInit, OnModuleDestroy 
       // O dono está conversando agora (retorno ao menu ainda pendente): tenta na próxima volta
       if (await this.state.get(idleKey(ws))) continue;
       try {
-        await this.assistant.cleanChat(ws, CLEAN_MIN_AGE_MS);
+        await this.assistant.cleanChat(ws);
       } catch (e: any) {
         this.logger.warn(`Limpeza do chat falhou (${ws}): ${e.message}`);
       }

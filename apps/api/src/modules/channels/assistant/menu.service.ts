@@ -26,6 +26,11 @@ import { addMute, loadMute, MutePrefs, recordDismiss, removeMute, saveMute, send
 import { AgendaEvent, EventsPlan, extractJson, extractUrls, looksLikeAgendaIntent, parseEventsPlan } from "./agenda-events";
 import { openField, sealField } from "../../webhooks/crypto";
 import { classifyEmail, groupOrder, isHidden, looksLikeBatchReply, looksLikeBulkDelete, looksLikeBulkRead, parseBulkSelection, parseBatchPlan, parseBulkDelete } from "./email-filter";
+import { composeSeed } from "./email-compose";
+import { CAR_DISABLED_NOTICE, carOptionEnabled } from "./menu-items";
+import { SpotifyAssistant } from "../spotify/spotify-assistant";
+import { describeCode } from "./weather";
+import { SpotifyService } from "../spotify/spotify.service";
 
 const TZ = process.env.ASSISTANT_TZ || "America/Fortaleza";
 const TTL = 30 * 60_000;
@@ -1680,4 +1685,97 @@ export class MenuService {
     );
     return (data.choices[0].message.content ?? "").trim();
   }
+
+  // ─── DESATIVADO NA RECUPERAÇÃO ───────────────────────────────────────────────
+  // Estes métodos foram perdidos: não estão no GitHub (que parou em 24/09) nem no
+  // JavaScript compilado do deploy de 13/10 (que não inclui menu.service).
+  // Respondem avisando o usuário, em vez de quebrar o assistente.
+  // Para reativar: recuperar o conteúdo dos patches nas transcrições das sessões de
+  // 25/09 a 08/10 (ver scratchpad/replay-log3.json) e substituir cada stub.
+
+  /** Aviso padrão de recurso em recuperação. */
+  private emRecuperacao(recurso: string): string {
+    this.logger.warn(`Recurso em recuperação acionado: ${recurso}`);
+    return `🛠️ *${recurso}* está fora do ar no momento, por causa de uma recuperação de código em andamento. O resto do menu funciona normalmente.`;
+  }
+
+  async notifyMenu(_ws: string): Promise<string> {
+    return this.emRecuperacao("Avisos");
+  }
+
+  async agendaIngest(_ws: string, _input: { text: string }): Promise<string> {
+    return this.emRecuperacao("Agenda (criar por texto)");
+  }
+
+  async agendaDayEntry(_ws: string, _offset: number): Promise<string> {
+    return this.emRecuperacao("Agenda do dia");
+  }
+
+  async agendaWeek(_ws: string): Promise<string> {
+    return this.emRecuperacao("Agenda da semana");
+  }
+
+  async agendaDayView(_ws: string, _day: unknown, _data: { events: unknown; multi: unknown }, _back: string, _days: unknown): Promise<string> {
+    return this.emRecuperacao("Agenda do dia");
+  }
+
+  async agendaWeekView(_ws: string, _days: unknown, _events: unknown, _multi: unknown): Promise<string> {
+    return this.emRecuperacao("Agenda da semana");
+  }
+
+  async eventInputEntry(_ws: string): Promise<string> {
+    return this.emRecuperacao("Criar evento");
+  }
+
+  async eventDeletePick(_ws: string): Promise<string> {
+    return this.emRecuperacao("Apagar evento");
+  }
+
+  async eventRemindSave(_ws: string, _data: unknown, _choice: unknown): Promise<string> {
+    return this.emRecuperacao("Lembrete de evento");
+  }
+
+  async eventsCreate(_ws: string, _events: unknown, _account: unknown): Promise<string> {
+    return this.emRecuperacao("Criar evento");
+  }
+
+  async cityAsk(_ws: string): Promise<string> {
+    return this.emRecuperacao("Cidade para o clima");
+  }
+
+  async cityAskOrDefer(_ws: string): Promise<string> {
+    return this.emRecuperacao("Cidade para o clima");
+  }
+
+  async deviceLocation(_ws: string, _lat: number, _lng: number): Promise<string> {
+    return this.emRecuperacao("Localização pelo aparelho");
+  }
+
+  async composeStart(_ws: string, _seed: unknown): Promise<string> {
+    return this.emRecuperacao("Escrever e-mail");
+  }
+
+  async intro(_ws: string, _full?: boolean): Promise<string> {
+    return this.emRecuperacao("Instruções");
+  }
+
+  async reminderText(_ws: string, _note: unknown): Promise<string> {
+    return this.emRecuperacao("Texto de lembrete");
+  }
+
+  /** Itens do menu que o usuário pode esconder, para o painel. */
+  async menuItems(_ws: string): Promise<{ id: string; label: string; hidden: boolean }[]> {
+    this.logger.warn("Recurso em recuperação acionado: menuItems");
+    return [];
+  }
+
+  async setHiddenItems(_ws: string, _hidden: unknown): Promise<void> {
+    this.logger.warn("Recurso em recuperação acionado: setHiddenItems");
+  }
+
+  /** A última resposta tinha segredo e deve ser apagada do chat? */
+  async takeRedact(_ws: string): Promise<boolean> {
+    return false;
+  }
+
 }
