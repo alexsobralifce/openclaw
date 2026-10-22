@@ -9,7 +9,13 @@ COPY apps/web/package.json apps/web/
 COPY apps/widget/package.json apps/widget/
 COPY packages/database/package.json packages/database/
 COPY packages/types/package.json packages/types/
-RUN pnpm install --frozen-lockfile
+# Rede da e2-micro é fraca: menos conexões simultâneas, mais paciência e repetição.
+# O cache do BuildKit guarda os pacotes entre builds, então repetir sai barato.
+ENV npm_config_fetch_retries=6 \
+    npm_config_fetch_retry_maxtimeout=180000 \
+    npm_config_fetch_timeout=300000 \
+    npm_config_network_concurrency=3
+RUN --mount=type=cache,target=/pnpm-store pnpm install --frozen-lockfile --store-dir /pnpm-store
 
 COPY . .
 ARG NEXT_PUBLIC_API_URL
