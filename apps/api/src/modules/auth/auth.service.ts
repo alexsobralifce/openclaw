@@ -7,6 +7,8 @@ import { effectiveServices } from "./permissions";
 import { StateService } from "../state/state.service";
 import { consumeToken, issueToken } from "./account-tokens";
 import { MailService, mailHtml } from "./mail.service";
+import { loginTicketKey, LOGIN_TICKET_MS } from "./google-login";
+import { randomBytes } from "crypto";
 
 // Falhas de senha por e-mail: depois de tantas, a conta espera um tempo (vale mesmo com IPs diferentes)
 const MAX_FAILS = 8;
@@ -125,6 +127,74 @@ export class AuthService {
     if (user.status !== "ACTIVE") throw new ForbiddenException(statusMessage(user.status));
 
     return this.buildResponse(user);
+  }
+
+  /**
+   * NOVO NESTA RECUPERAÇÃO (não veio do GitHub nem do JS compilado — só os nomes de
+   * `google-login.ts` vieram de lá). Login/cadastro via Google: o e-mail já chega verificado
+   * pelo Google, então pula a senha e a confirmação por e-mail, mas mantém a mesma fila de
+   * aprovação do cadastro comum para quem não é o primeiro usuário.
+   */
+  async loginWithGoogle(email: string, name: string) {
+    const existing = await prisma.user.findFirst({
+      where: { email: { equals: email, mode: "insensitive" } },
+      include: { workspaces: { include: { workspace: true } } },
+    });
+    if (existing) {
+      if (existing.status !== "ACTIVE") throw new ForbiddenException(statusMessage(existing.status));
+      if (!existing.emailVerifiedAt) await prisma.user.update({ where: { id: existing.id }, data: { emailVerifiedAt: new Date() } });
+      return this.buildResponse(existing);
+    }
+
+    if ((await prisma.user.count()) > 0 && (await prisma.user.count({ where: { status: "PENDING" } })) >= MAX_PENDING) {
+      throw new ServiceUnavailableException("Cadastros temporariamente indisponíveis. Fale com o administrador.");
+    }
+    const slugBase = (name || email.split("@")[0])
+      .toLowerCase()
+      .normalize("NFD")
+      .replace(/[̀-ͯ]/g, "")
+      .replace(/\s+/g, "-")
+      .replace(/[^a-z0-9-]/g, "")
+      .slice(0, 40);
+    const uniqueSlug = `${slugBase}-${Date.now().toString(36)}`;
+    const first = (await prisma.user.count()) === 0;
+
+    const user = await prisma.user.create({
+      data: {
+        email,
+        name: name || email.split("@")[0],
+        role: first ? "ROOT" : "USER",
+        status: first ? "ACTIVE" : "PENDING",
+        approvedAt: first ? new Date() : null,
+        emailVerifiedAt: new Date(),
+        workspaces: {
+          create: {
+            role: "OWNER",
+            workspace: { create: { name: name || email, slug: uniqueSlug } },
+          },
+        },
+      },
+      include: { workspaces: { include: { workspace: true } } },
+    });
+
+    if (user.status !== "ACTIVE") return { pending: true, message: `${statusMessage(user.status)} Seu e-mail já está confirmado (entrou pelo Google).` };
+    return this.buildResponse(user);
+  }
+
+  /** Ponte entre o redirect do Google (sem HTTPS confiável para expor o token na URL) e o POST que cria a sessão de fato. */
+  async issueGoogleTicket(payload: unknown): Promise<string> {
+    const ticket = randomBytes(24).toString("base64url");
+    await this.state.set(loginTicketKey(ticket), payload, LOGIN_TICKET_MS);
+    return ticket;
+  }
+
+  async consumeGoogleTicket(ticket: string): Promise<{ accessToken: string; user: unknown } | null> {
+    if (!ticket || ticket.length > 100) return null;
+    const key = loginTicketKey(ticket);
+    const payload = await this.state.get<{ accessToken: string; user: unknown }>(key);
+    if (!payload) return null;
+    await this.state.del(key);
+    return payload;
   }
 
   async me(userId: string) {

@@ -5,10 +5,12 @@ import { PassportModule } from "@nestjs/passport";
 import { GoogleController } from "./google.controller";
 import { GoogleService } from "./google.service";
 import { jwtSecret } from "../../../config/jwt-secret";
+import { AuthModule } from "../../auth/auth.module";
 
 @Module({
   imports: [
     PassportModule,
+    AuthModule,
     JwtModule.registerAsync({
       useFactory: (config: ConfigService) => ({ secret: jwtSecret(config.get("JWT_SECRET")) }),
       inject: [ConfigService],

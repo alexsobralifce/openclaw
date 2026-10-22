@@ -1,4 +1,4 @@
-import { Body, Controller, Get, HttpCode, Patch, Post, Request, Res, UseGuards } from "@nestjs/common";
+import { Body, Controller, Get, HttpCode, Patch, Post, Request, Res, UnauthorizedException, UseGuards } from "@nestjs/common";
 import type { Response } from "express";
 import { Transform } from "class-transformer";
 import { IsEmail, IsOptional, IsString, Matches, MaxLength, MinLength } from "class-validator";
@@ -87,6 +87,15 @@ export class AuthController {
   @Post("login")
   async login(@Body() dto: LoginDto, @Res({ passthrough: true }) res: Response) {
     return startSession(res, await this.auth.login(dto.email, dto.password));
+  }
+
+  @UseGuards(RateLimitGuard)
+  @RateLimit("google-exchange", 20, 3600)
+  @Post("google/exchange")
+  async googleExchange(@Body() dto: { ticket: string }, @Res({ passthrough: true }) res: Response) {
+    const result = await this.auth.consumeGoogleTicket(dto.ticket);
+    if (!result) throw new UnauthorizedException("Link expirado. Tente entrar com o Google de novo.");
+    return startSession(res, result);
   }
 
   @UseGuards(RateLimitGuard)
