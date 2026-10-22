@@ -1,0 +1,12 @@
+# HTTPS automático. Antes de o certificado ser emitido, o DNS precisa apontar para a VM.
+# Enquanto o DNS de api.magobox.com.br não estiver apontado, o acesso por IP vai pelo :80.
+
+api.magobox.com.br {
+	reverse_proxy api:3001
+	encode zstd gzip
+}
+
+# Acesso direto pelo IP, sem HTTPS: usado só para testar antes de o DNS apontar.
+:80 {
+	reverse_proxy api:3001
+}

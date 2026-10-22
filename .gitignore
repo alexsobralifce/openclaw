@@ -16,3 +16,6 @@ skills-lock.json
 .next-prints
 .dist-prints
 scripts/onboarding-prints/.tmp
+
+# Deploy local da VM (contém segredos)
+deploy/.env
