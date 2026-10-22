@@ -17,6 +17,8 @@ import { pickTools } from "./tool-select";
 import { loadLocation, validCoords } from "./location";
 import { chatCompletion } from "./openai-chat";
 import { ConversationMemory, renderHistory } from "./conversation-memory";
+import { channelOfInstance } from "./channel-route";
+import { AppChatService } from "../app-chat/app-chat.service";
 
 const TZ = process.env.ASSISTANT_TZ || "America/Fortaleza";
 
@@ -203,6 +205,7 @@ export class AssistantService {
     private memory: MemoryService,
     private gemini: GeminiService,
     private state: StateService,
+    private appChat: AppChatService,
   ) {
     this.conv = new ConversationMemory(this.state);
     this.menu.setExecutor((ws, a) => this.execute(ws, a.name, a.args));
@@ -241,6 +244,10 @@ export class AssistantService {
 
   async sendToUser(c: Commander, instanceName: string, text: string) {
     const workspaceId = c.workspaceId;
+    if (channelOfInstance(instanceName) === "app") {
+      await this.appChat.deliver(c, text);
+      return;
+    }
     const owner = c.phone;
 
     // Modo carro: texto limpo e curto, que o Android Auto/CarPlay leem em voz alta (eles não tocam áudios)

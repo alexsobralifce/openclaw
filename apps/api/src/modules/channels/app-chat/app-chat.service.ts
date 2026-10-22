@@ -98,7 +98,7 @@ export class AppChatService {
       },
     });
     const msg = this.view(row);
-    this.gateway.emit(c.userId, "message", msg);
+    this.gateway.emit(c.userId, "chat:message", msg);
     return msg;
   }
 
@@ -111,12 +111,12 @@ export class AppChatService {
   async redact(messageId: string, c: Commander): Promise<void> {
     const expiresAt = new Date(Date.now() + SECRET_TTL_MS);
     await prisma.appMessage.updateMany({ where: { id: messageId, userId: c.userId }, data: { expiresAt } });
-    this.gateway.emit(c.userId, "redact", { id: messageId, expiresAt: expiresAt.toISOString() });
+    this.gateway.emit(c.userId, "chat:redacted", { id: messageId, expiresAt: expiresAt.toISOString() });
   }
 
   /** "Digitando…" no app enquanto o assistente pensa. */
   typing(userId: string, on: boolean): void {
-    this.gateway.emit(userId, "typing", { on });
+    this.gateway.emit(userId, "chat:typing", { on });
   }
 
   /** O app do usuário está aberto agora? Quem não está recebe notificação push. */
