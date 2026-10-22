@@ -85,9 +85,9 @@ export class GoogleService implements OnModuleInit {
   /** Uma escrita de nota por vez, por workspace+conta (evita duas notas com o mesmo nome). */
   private noteLocks = new Map<string, Promise<unknown>>();
   private contactCache = new Map<string, { at: number; contacts: any[] | null }>();
-  private calendarsCache = new Map<string, { at: number; ids: string[] }>();
+  private calendarsCache = new Map<string, { at: number; list: { id: string; name: string; primary: boolean }[] }>();
   /** Quem desempata quando a busca de contato acha mais de uma pessoa (ligado pelo assistente). */
-  private personPicker?: (query: string, candidates: any[], workspaceId: string) => Promise<any>;
+  private personPicker?: (query: string, candidates: any[]) => Promise<number | null>;
   private sleepMs = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 
@@ -169,7 +169,7 @@ export class GoogleService implements OnModuleInit {
       where: { workspaceId, type: "EMAIL", config: { path: ["provider"], equals: "google" } },
       orderBy: { createdAt: "asc" },
     });
-    return chs.map((c) => (c.config as any).email as string);
+    return chs.map((c: any) => (c.config as any).email as string);
   }
 
   async isConnected(workspaceId: string) {
@@ -214,7 +214,7 @@ export class GoogleService implements OnModuleInit {
         const m = await this.g<any>(
           workspaceId,
           account,
-          `https://gmail.googleapis.com/gmail/v1/users/me/messages/${id}?format=metadata&${GMAIL_HEADERS.map((n) => `metadataHeaders=${n}`).join("&")}`,
+          `https://gmail.googleapis.com/gmail/v1/users/me/messages/${id}?format=metadata&${GMAIL_HEADERS.map((n: any) => `metadataHeaders=${n}`).join("&")}`,
         );
         const h = (n: string) => m.payload?.headers?.find((x: any) => x.name === n)?.value;
         // Sinais para separar spam/promoção/automático (ver email-filter.ts); nomes em minúsculas
@@ -306,8 +306,8 @@ export class GoogleService implements OnModuleInit {
     const found = new Set<string>((await list(`name contains '${esc(name)}'`)).slice(0, 5));
     let level = [...found];
     for (let depth = 0; depth < 3 && level.length && found.size < 40; depth++) {
-      const kids: string[] = (await list(`(${level.map((id) => `'${id}' in parents`).join(" or ")})`)).filter((id: string) => !found.has(id));
-      kids.slice(0, 40 - found.size).forEach((id) => found.add(id));
+      const kids: string[] = (await list(`(${level.map((id: any) => `'${id}' in parents`).join(" or ")})`)).filter((id: string) => !found.has(id));
+      kids.slice(0, 40 - found.size).forEach((id: any) => found.add(id));
       level = kids;
     }
     return [...found];
@@ -329,7 +329,7 @@ export class GoogleService implements OnModuleInit {
     const kindQ = spec.kind ? KIND_Q[spec.kind] : "";
     // Filtros duros (valem em toda tentativa): extensão, autor (no nome ou no texto) e pasta. Os termos do nome é que afrouxam no fuzzy.
     const extQ = spec.ext ? extQuery(spec.ext) || `name contains '${esc(spec.ext)}'` : "";
-    const authorQ = (spec.author ?? []).map((w) => `fullText contains '${esc(w)}'`).join(" and ");
+    const authorQ = (spec.author ?? []).map((w: any) => `fullText contains '${esc(w)}'`).join(" and ");
     const hard = [extQ, authorQ];
     // O Drive não filtra por extensão nem sabe o que é "livro": o resto sai pelo nome, numa página maior
     const post = (f: { nome: string; tipo?: string }) => (spec.kind !== "book" || isBook(f)) && (!spec.ext || !needsNameCheck(spec.ext) || nameHasExt(f.nome, spec.ext));
@@ -357,16 +357,16 @@ export class GoogleService implements OnModuleInit {
       if (spec.folder) {
         const ids = await this.driveFolderIds(workspaceId, account, spec.folder);
         if (!ids.length) return [];
-        parentQ = `(${ids.map((id) => `'${id}' in parents`).join(" or ")})`;
+        parentQ = `(${ids.map((id: any) => `'${id}' in parents`).join(" or ")})`;
       }
       if (mode === "strict") {
         if (!spec.terms.length && !kindQ && !extQ && !authorQ && !parentQ) return [];
-        return await run(spec.terms.map((w) => `name contains '${esc(w)}'`).join(" and "), true);
+        return await run(spec.terms.map((w: any) => `name contains '${esc(w)}'`).join(" and "), true);
       }
       const words = [...new Set([...spec.terms, ...(spec.alternates ?? [])].flatMap(wordVariants))].slice(0, 16);
       if (!words.length) return [];
-      const byName = `(${words.map((w) => `name contains '${esc(w)}'`).join(" or ")})`;
-      const byText = `(${words.map((w) => `fullText contains '${esc(w)}'`).join(" or ")})`;
+      const byName = `(${words.map((w: any) => `name contains '${esc(w)}'`).join(" or ")})`;
+      const byText = `(${words.map((w: any) => `fullText contains '${esc(w)}'`).join(" or ")})`;
       // Tipo estrito (livro): o filtro nunca é largado, senão a busca por conteúdo devolve código e notas
       const loose = !!kindQ && !(spec.kind && STRICT_KINDS.has(spec.kind));
       const attempts: [string, boolean][] = [[byName, true], ...(loose ? ([[byName, false]] as [string, boolean][]) : []), [byText, true], ...(loose ? ([[byText, false]] as [string, boolean][]) : [])];
@@ -404,7 +404,7 @@ export class GoogleService implements OnModuleInit {
     }
   }
 
-  private async gBytes(workspaceId: string, account: string | undefined, url: string): Promise<Buffer> {
+  protected async gBytes(workspaceId: string, account: string | undefined, url: string): Promise<Buffer> {
     const token = await this.accessToken(workspaceId, account);
     const res = await fetch(url, { headers: { Authorization: `Bearer ${token}` }, signal: AbortSignal.timeout(60_000) });
     if (!res.ok) throw new Error(`Google API ${res.status}: ${(await res.text()).slice(0, 300)}`);
@@ -441,7 +441,7 @@ export class GoogleService implements OnModuleInit {
         description: ev.description ?? undefined,
         start,
         end,
-        attendees: ev.attendees?.map((email) => ({ email })),
+        attendees: ev.attendees?.map((email: any) => ({ email })),
       }),
     });
     return { id: e.id, link: e.htmlLink };
@@ -518,7 +518,7 @@ export class GoogleService implements OnModuleInit {
       return id;
   }
 
-  async driveUpload(workspaceId: string, account: string | undefined, method: any, url: any, content: any, meta: any) {
+  async driveUpload(workspaceId: string, account: string | undefined, method: string, url: string, content: string | Buffer, meta?: { name: string; parents: string[]; mimeType: string }) {
       const token = await this.accessToken(workspaceId, account);
       const boundary = `oc${Date.now().toString(36)}${Math.random().toString(36).slice(2)}`;
       const body = meta
@@ -565,12 +565,12 @@ export class GoogleService implements OnModuleInit {
   }
 
   async noteSearch(workspaceId: string, terms: any, account: string | undefined, max: number = 5) {
-      const esc = (w) => w.replace(/\\/g, "\\\\").replace(/'/g, "\\'");
+      const esc = (w: string) => w.replace(/\\/g, "\\\\").replace(/'/g, "\\'");
       const words = [...new Set(terms)].slice(0, 6);
       if (!words.length)
           return [];
       try {
-          const q = [`(${words.map((w) => `fullText contains '${esc(w)}'`).join(" or ")})`, "(mimeType='text/markdown' or mimeType='text/plain')", "trashed=false"].join(" and ");
+          const q = [`(${words.map((w: any) => `fullText contains '${esc(w)}'`).join(" or ")})`, "(mimeType='text/markdown' or mimeType='text/plain')", "trashed=false"].join(" and ");
           const p = new URLSearchParams({
               q,
               pageSize: String(max),
@@ -581,16 +581,16 @@ export class GoogleService implements OnModuleInit {
               supportsAllDrives: "true",
           });
           const r = await this.g(workspaceId, account, `https://www.googleapis.com/drive/v3/files?${p}`);
-          const hits = await Promise.all((r.files ?? []).map(async (f) => {
+          const hits = await Promise.all((r.files ?? []).map(async (f: any) => {
               if (Number(f.size ?? 0) > NOTE_MAX_BYTES)
                   return null;
               const bytes = await this.gBytes(workspaceId, account, `https://www.googleapis.com/drive/v3/files/${f.id}?alt=media&supportsAllDrives=true`).catch(() => null);
               if (!bytes)
                   return null;
-              const trechos = snippets(bytes.toString("utf8"), words.map((w) => w.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase()));
+              const trechos = snippets(bytes.toString("utf8"), words.map((w: any) => w.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase()));
               return trechos.length ? { id: f.id, nome: String(f.name), modificado: f.modifiedTime, link: f.webViewLink, trechos } : null;
           }));
-          return hits.filter((h) => !!h);
+          return hits.filter((h: any) => !!h);
       }
       catch (e: any) {
           throw this.driveError(e);
@@ -631,7 +631,7 @@ export class GoogleService implements OnModuleInit {
               return [];
           const p = new URLSearchParams({ q: `'${root}' in parents and mimeType='${FOLDER_MIME}' and trashed=false`, pageSize: "100", orderBy: "name", fields: "files(id,name)", spaces: "drive" });
           const r = await this.g(workspaceId, account, `https://www.googleapis.com/drive/v3/files?${p}`);
-          return (r.files ?? []).map((f) => ({ id: String(f.id), name: String(f.name) }));
+          return (r.files ?? []).map((f: any) => ({ id: String(f.id), name: String(f.name) }));
       }
       catch (e: any) {
           throw this.noteError(e);
@@ -648,7 +648,7 @@ export class GoogleService implements OnModuleInit {
               throw new Error("Esse assunto não está nas suas notas.");
           const p = new URLSearchParams({ q: `'${topicId}' in parents and mimeType!='${FOLDER_MIME}' and trashed=false`, pageSize: "100", orderBy: "name desc", fields: "files(id,name,modifiedTime,webViewLink)", spaces: "drive" });
           const r = await this.g(workspaceId, account, `https://www.googleapis.com/drive/v3/files?${p}`);
-          return (r.files ?? []).map((f) => ({ id: String(f.id), name: String(f.name).replace(/\.md$/, ""), modified: f.modifiedTime, link: f.webViewLink }));
+          return (r.files ?? []).map((f: any) => ({ id: String(f.id), name: String(f.name).replace(/\.md$/, ""), modified: f.modifiedTime, link: f.webViewLink }));
       }
       catch (e: any) {
           throw this.noteError(e);
@@ -711,7 +711,7 @@ export class GoogleService implements OnModuleInit {
               });
               if (!res.ok)
                   throw new Error(`Google API ${res.status}: ${(await res.text()).slice(0, 300)}`);
-              const f = await res.json();
+              const f: any = await res.json();
               return { id: String(f.id), link: f.webViewLink };
           }
           catch (e: any) {
@@ -738,7 +738,7 @@ export class GoogleService implements OnModuleInit {
       }
   }
 
-  peopleError(e: any, account: string | undefined) {
+  peopleError(e: any, account?: string) {
       const m = String(e?.message ?? e);
       if (/SERVICE_DISABLED|accessNotConfigured|has not been used in project|API has not been used/i.test(m)) {
           const url = m.match(/https:\/\/console\.(?:developers|cloud)\.google\.com\/[^\s"'\\)]+/)?.[0] ?? "https://console.cloud.google.com/apis/library/people.googleapis.com";
@@ -791,7 +791,7 @@ export class GoogleService implements OnModuleInit {
       return out;
   }
 
-  async driveWrite(workspaceId: string, account: string | undefined, folder: any, name: string, content: any, id: string) {
+  async driveWrite(workspaceId: string, account: string | undefined, folder: string, name: string, content: string | Buffer, id?: string) {
       if (id)
           return this.driveUpload(workspaceId, account, "PATCH", `https://www.googleapis.com/upload/drive/v3/files/${id}?uploadType=media`, content);
       await this.driveUpload(workspaceId, account, "POST", "https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id", content, { name, parents: [folder], mimeType: "text/markdown" });
@@ -804,11 +804,11 @@ export class GoogleService implements OnModuleInit {
               const target = storageAccount(accounts);
               if (!target)
                   throw new Error("Google não conectado");
-              const lists = await Promise.all(accounts.map((a) => this.contactsFetch(workspaceId, a).catch((e) => { throw this.peopleError(e, a); })));
+              const lists = await Promise.all(accounts.map((a: any) => this.contactsFetch(workspaceId, a).catch((e) => { throw this.peopleError(e, a); })));
               const { grouped } = await this.writeBook(workspaceId, target, CONTACTS_FOLDER, lists.flat(), at, "Contatos");
               for (const a of accounts)
                   await this.markContactsSynced(workspaceId, a, at);
-              return { total: [...grouped.values()].reduce((n, cs) => n + cs.length, 0), arquivos: grouped.size, contas: accounts.length, destino: target };
+              return { total: [...grouped.values()].reduce((n: any, cs: any) => n + cs.length, 0), arquivos: grouped.size, contas: accounts.length, destino: target };
           }
           catch (e: any) {
               throw this.peopleError(e);
@@ -823,14 +823,14 @@ export class GoogleService implements OnModuleInit {
       const existing = await this.driveFilesIn(workspaceId, target, folder);
       const day = dayStamp(at, CONTACTS_TZ);
       const jobs = [...grouped].map(([letter, cs]) => ({ name: fileOfLetter(letter), content: renderLetterFile(letter, cs, day, title) }));
-      const written = new Set(jobs.map((j) => j.name));
+      const written = new Set(jobs.map((j: any) => j.name));
       for (const name of existing.keys()) {
           const letter = name === fileOfLetter("#") ? "#" : name.match(/^([A-Z])\.md$/)?.[1];
           if (letter && !written.has(name))
               jobs.push({ name, content: renderLetterFile(letter, [], day, title) });
       }
       for (let i = 0; i < jobs.length; i += 4) {
-          await Promise.all(jobs.slice(i, i + 4).map((j) => this.driveWrite(workspaceId, target, folder, j.name, j.content, existing.get(j.name))));
+          await Promise.all(jobs.slice(i, i + 4).map((j: any) => this.driveWrite(workspaceId, target, folder, j.name, j.content, existing.get(j.name))));
       }
       this.contactCache.delete(`${workspaceId}:${target}:${folderName}`);
       return { grouped };
@@ -848,10 +848,10 @@ export class GoogleService implements OnModuleInit {
           return null;
       }
       const files = [...(await this.driveFilesIn(workspaceId, account, folder))].filter(([n]) => /^([A-Z]|Outros)\.md$/.test(n));
-      const contacts = [];
+      const contacts: any[] = [];
       for (let i = 0; i < files.length; i += 6) {
           const parts = await Promise.all(files.slice(i, i + 6).map(async ([, id]) => parseLetterFile((await this.gBytes(workspaceId, account, `https://www.googleapis.com/drive/v3/files/${id}?alt=media`)).toString("utf8"))));
-          parts.forEach((p) => contacts.push(...p));
+          parts.forEach((p: any) => contacts.push(...p));
       }
       this.contactCache.set(key, { at: Date.now(), contacts });
       return contacts;
@@ -872,15 +872,15 @@ export class GoogleService implements OnModuleInit {
 
   async gmailHeaders(workspaceId: string, account: string | undefined, query: string, max: number) {
       const list = await this.withQuotaRetry(() => this.g(workspaceId, account, `https://gmail.googleapis.com/gmail/v1/users/me/messages?maxResults=${Math.min(max, 500)}&q=${encodeURIComponent(query)}`));
-      const ids = (list.messages ?? []).map((m) => m.id);
+      const ids = (list.messages ?? []).map((m: any) => m.id);
       const out = [];
       for (let i = 0; i < ids.length; i += HEADERS_PARALLEL) {
-          const batch = await Promise.all(ids.slice(i, i + HEADERS_PARALLEL).map(async (id) => {
+          const batch = await Promise.all(ids.slice(i, i + HEADERS_PARALLEL).map(async (id: string) => {
               const m = await this.withQuotaRetry(() => this.g(workspaceId, account, `https://gmail.googleapis.com/gmail/v1/users/me/messages/${id}?format=metadata&metadataHeaders=From&metadataHeaders=To&metadataHeaders=Cc`)).catch(() => null);
-              const h = (n) => m?.payload?.headers?.find((x) => x.name === n)?.value;
+              const h = (n: string) => m?.payload?.headers?.find((x: any) => x.name === n)?.value;
               return m ? { from: h("From"), to: h("To"), cc: h("Cc") } : null;
           }));
-          out.push(...batch.filter((x) => !!x));
+          out.push(...batch.filter((x: any) => !!x));
       }
       return out;
   }
@@ -903,7 +903,7 @@ export class GoogleService implements OnModuleInit {
                       for (const x of [...parseAddresses(m.to), ...parseAddresses(m.cc)])
                           seen.push({ ...x, sent: true });
               }
-              const known = new Set((await this.loadBook(workspaceId, target, CONTACTS_FOLDER).catch(() => null))?.flatMap((c) => c.emails) ?? []);
+              const known = new Set((await this.loadBook(workspaceId, target, CONTACTS_FOLDER).catch(() => null))?.flatMap((c: any) => c.emails) ?? []);
               const book = buildBook(seen, { own: accounts, known });
               const { grouped } = await this.writeBook(workspaceId, target, EMAIL_BOOK_FOLDER, book, at, "Endereços de e-mail");
               return { total: book.length, arquivos: grouped.size, contas: accounts.length, destino: target };
@@ -917,13 +917,13 @@ export class GoogleService implements OnModuleInit {
   async markContactsSynced(workspaceId: string, account: string | undefined, at: Date) {
       const ch = await this.findChannel(workspaceId, account);
       if (ch)
-          await prisma.channel.update({ where: { id: ch.id }, data: { config: { ...ch.config, contactsSyncedAt: at.toISOString() } } });
+          await prisma.channel.update({ where: { id: ch.id }, data: { config: { ...((ch.config as object | null) ?? {}), contactsSyncedAt: at.toISOString() } } });
   }
 
   async importContactsOnce(workspaceId: string, account: string | undefined) {
       try {
           const ch = await this.findChannel(workspaceId, account);
-          if (!ch || ch.config?.contactsSyncedAt)
+          if (!ch || (ch.config as any)?.contactsSyncedAt)
               return;
           const r = await this.contactsImport(workspaceId);
           this.logger.log(`Contatos importados para o Drive: ${r.total} em ${r.arquivos} arquivo(s)`);
@@ -970,14 +970,14 @@ export class GoogleService implements OnModuleInit {
       const hit = this.calendarsCache.get(key);
       if (hit && Date.now() - hit.at < 5 * 60_000)
           return hit.list;
-      let list = only;
+      let list: { id: string; name: string; primary: boolean }[] = only;
       try {
           const r = await this.g(workspaceId, account, "https://www.googleapis.com/calendar/v3/users/me/calendarList?minAccessRole=reader&maxResults=50&fields=items(id,summary,summaryOverride,selected,primary)");
           const found = (r.items ?? [])
-              .filter((c) => c.primary || c.selected)
-              .map((c) => ({ id: c.primary ? "primary" : String(c.id), name: c.primary ? "" : String(c.summaryOverride || c.summary || ""), primary: !!c.primary }))
+              .filter((c: any) => c.primary || c.selected)
+              .map((c: any) => ({ id: c.primary ? "primary" : String(c.id), name: c.primary ? "" : String(c.summaryOverride || c.summary || ""), primary: !!c.primary }))
               .slice(0, 10);
-          if (found.some((c) => c.primary))
+          if (found.some((c: any) => c.primary))
               list = found;
       }
       catch (e: any) {
