@@ -3,15 +3,17 @@
 # A VM só baixa a imagem pronta do Artifact Registry.
 #
 #   gcloud builds submit --region=us-central1 --config=cloudbuild.yaml \
-#     --substitutions=_API_URL=http://34.133.1.75/api/v1,_SITE_URL=http://34.133.1.75 .
+#     --substitutions=_API_URL=http://34.133.1.75,_SITE_URL=http://34.133.1.75 .
+#
+# _API_URL é só a ORIGEM: o front monta `${API}/api/v1${path}` por conta própria.
 
 substitutions:
-  _API_URL: http://34.133.1.75/api/v1
+  _API_URL: http://34.133.1.75
   _SITE_URL: http://34.133.1.75
-  _REPO: us-central1-docker.pkg.dev/${PROJECT_ID}/openclaw
 
 options:
-  machineType: E2_HIGHCPU_8
+  # A cota do projeto não libera máquinas high-CPU nesta região; a padrão já
+  # resolve, porque o gargalo na VM era a rede, não a CPU.
   logging: CLOUD_LOGGING_ONLY
 
 timeout: 2400s
@@ -19,7 +21,7 @@ timeout: 2400s
 steps:
   - id: api
     name: gcr.io/cloud-builders/docker
-    args: ["build", "-f", "Dockerfile.api", "-t", "${_REPO}/api:latest", "."]
+    args: ["build", "-f", "Dockerfile.api", "-t", "us-central1-docker.pkg.dev/$PROJECT_ID/openclaw/api:latest", "."]
 
   - id: web
     name: gcr.io/cloud-builders/docker
@@ -32,9 +34,9 @@ steps:
       - --build-arg
       - NEXT_PUBLIC_SITE_URL=${_SITE_URL}
       - -t
-      - ${_REPO}/web:latest
+      - us-central1-docker.pkg.dev/$PROJECT_ID/openclaw/web:latest
       - .
 
 images:
-  - ${_REPO}/api:latest
-  - ${_REPO}/web:latest
+  - us-central1-docker.pkg.dev/$PROJECT_ID/openclaw/api:latest
+  - us-central1-docker.pkg.dev/$PROJECT_ID/openclaw/web:latest
