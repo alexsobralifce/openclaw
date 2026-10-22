@@ -1086,10 +1086,11 @@ export class MenuService {
     if (await this.isCar(ws)) return "🚗 Por segurança, não leio senhas em voz alta no modo carro. Desligue o modo carro para consultar.";
     const uid = await this.ownerId(ws);
     if (!this.vault || !uid) return "🔐 O cofre não está disponível agora.";
-    const r = await this.vault.lookup(uid, query);
+    const r = await this.vault.whatsappLookup(uid, query);
     if (r.state === "none") return "🔐 Você ainda não criou o cofre. Crie no painel, em *Cofre de senhas*.";
-    if (r.state === "locked") return "🔒 *O cofre está bloqueado.* No painel, em *Cofre de senhas*, digite a senha mestra e marque *Liberar consulta pelo WhatsApp*.";
-    if (r.state === "no_whatsapp") return "🔒 O cofre está aberto no painel, mas sem liberar o WhatsApp. Desbloqueie de novo marcando *Liberar consulta pelo WhatsApp*.";
+    if (r.state === "locked") return "🔒 *O cofre está bloqueado.* No painel, em *Cofre de senhas*, digite a senha mestra para liberar a consulta pelo WhatsApp.";
+    if (r.state === "no_pin") return "🔒 O cofre ainda não tem PIN para o WhatsApp. No painel, em *Cofre de senhas*, cadastre um PIN para consultar por aqui.";
+    if (r.state === "pin_required") return "🔒 Preciso do seu PIN do cofre antes de consultar. Envie o PIN para liberar.";
     if (!r.matches.length) return `🤔 Não achei nada parecido com *${short(query, 40)}* no cofre.`;
     if (r.matches.length === 1) return this.vaultReveal(ws, r.matches[0].id);
     await this.set(ws, "vault", { items: r.matches.map((m) => ({ id: m.id })) });
@@ -1103,12 +1104,13 @@ export class MenuService {
     if (!this.vault || !uid) return "🔐 O cofre não está disponível agora.";
     let d;
     try {
-      d = await this.vault.revealForWhatsapp(uid, entryId);
+      d = await this.vault.whatsappReveal(uid, entryId);
     } catch (e: any) {
       this.logger.warn(`Cofre: não abriu a entrada: ${e.message}`);
       return "😕 Não consegui abrir essa entrada. Use *Verificar integridade* no painel.";
     }
-    if (!d) return "🔒 O cofre foi bloqueado. Desbloqueie no painel marcando *Liberar consulta pelo WhatsApp*.";
+    if (d === "pin_required") return "🔒 Preciso do seu PIN do cofre antes de mostrar a senha. Envie o PIN para liberar.";
+    if (!d) return "🔒 O cofre foi bloqueado. Desbloqueie no painel, em *Cofre de senhas*, com a senha mestra.";
     await this.markSecret(ws);
     await this.setMain(ws);
     return [
