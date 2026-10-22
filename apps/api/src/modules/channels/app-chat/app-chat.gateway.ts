@@ -3,10 +3,12 @@ import { Logger } from "@nestjs/common";
 import { JwtService } from "@nestjs/jwt";
 import { Server, Socket } from "socket.io";
 import { prisma } from "@openclaw/database";
+import { socketToken } from "../../auth/session-cookie";
+import { webOrigins } from "../../../web-origins";
 
 /** Tempo real do chat do app: cada usuário entra na própria sala e recebe só as mensagens dele. */
 @WebSocketGateway({
-  cors: { origin: process.env.WEB_URL || "http://localhost:3000", credentials: true },
+  cors: { origin: webOrigins(), credentials: true },
   namespace: "/chat",
 })
 export class AppChatGateway implements OnGatewayConnection {
@@ -19,7 +21,7 @@ export class AppChatGateway implements OnGatewayConnection {
 
   async handleConnection(client: Socket) {
     try {
-      const token = client.handshake.auth?.token as string | undefined;
+      const token = socketToken(client.handshake);
       if (!token) throw new Error("sem token");
       const payload: any = this.jwt.verify(token);
       const user = await prisma.user.findUnique({ where: { id: payload.sub }, select: { status: true } });
