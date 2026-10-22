@@ -6,6 +6,8 @@
  * promo:  propaganda/newsletter (oculto)
  * spam:   lixo ou golpe provável (oculto)
  */
+import { normalize } from "./voice";
+
 export type EmailKind = "person" | "auto" | "promo" | "spam";
 
 export interface EmailSignals {

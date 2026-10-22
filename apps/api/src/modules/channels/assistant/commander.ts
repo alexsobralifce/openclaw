@@ -2,7 +2,7 @@ import { prisma } from "@openclaw/database";
 import { effectiveServices, Service } from "../../auth/permissions";
 import { planExpired } from "../../auth/plans";
 import { phoneVariants } from "../whatsapp/phone";
-import { APP_INSTANCE, connKey, isChannelKind, isWhatsappDown, pickChannel, TELEGRAM_INSTANCE } from "./channel-route";
+import { APP_INSTANCE, ConnState, connKey, isChannelKind, isWhatsappDown, pickChannel, TELEGRAM_INSTANCE } from "./channel-route";
 
 /** Serviços liberados; assinatura vencida pausa o assistente (nenhum serviço) até o pagamento voltar. */
 const servicesOf = (u: { role: any; services: string[]; plan?: string | null; planUntil?: Date | null }): Service[] => (planExpired(u) ? [] : effectiveServices(u.role, u.services));
@@ -81,11 +81,11 @@ export async function whatsappInstance(workspaceId: string): Promise<string | nu
   return (wa?.config as any)?.instanceName ?? (sharedInstance() || null);
 }
 
-async function connectionOf(instance: string): Promise<{ state?: string } | null> {
+async function connectionOf(instance: string): Promise<ConnState | null> {
   try {
     const row = await prisma.kvEntry.findUnique({ where: { key: connKey(instance) } });
     if (!row || (row.expiresAt && row.expiresAt.getTime() <= Date.now())) return null;
-    return row.value as { state?: string };
+    return row.value as unknown as ConnState;
   } catch {
     return null;
   }

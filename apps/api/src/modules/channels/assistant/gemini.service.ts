@@ -26,6 +26,15 @@ function pcmToWav(pcm: Buffer, sampleRate = 24000): Buffer {
  * Só o modelo principal recebe o nível de pensamento: medido no contrato de teste, o 3.8 Flash cai de 632 para 0 tokens de
  * pensamento com "low", mas o 3.1 Flash-Lite (o reserva) não pensa por padrão e passaria a pensar se recebesse "low".
  */
+/**
+ * Nível de pensamento do Gemini, por GEMINI_THINKING_LEVEL (low por padrão).
+ * Valor fora de low/medium/high desliga o campo em vez de mandar algo inválido à API.
+ */
+export function thinkingConfig(): { thinkingConfig?: { thinkingLevel: string } } {
+  const raw = (process.env.GEMINI_THINKING_LEVEL ?? "low").trim().toLowerCase();
+  return ["low", "medium", "high"].includes(raw) ? { thinkingConfig: { thinkingLevel: raw } } : {};
+}
+
 export function withThinking<T extends object>(body: T, isPrimary: boolean): T & { generationConfig?: object } {
   return isPrimary ? { ...body, generationConfig: thinkingConfig() } : body;
 }
