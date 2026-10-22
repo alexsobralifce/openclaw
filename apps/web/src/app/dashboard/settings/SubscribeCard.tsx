@@ -3,7 +3,6 @@
 import { useEffect, useState } from "react";
 import { api, type PlanInfo } from "@/lib/api";
 import { CardBrick, cardPaymentConfigured } from "./CardBrick";
-import { CardBrick, cardPaymentConfigured } from "./CardBrick";
 
 type Info = { plans: PlanInfo[]; plan: string | null; planUntil: string | null; billingStatus: string | null; expired: boolean; configured: boolean };
 const brl = (v: number) => v.toLocaleString("pt-BR", { minimumFractionDigits: 2 });
@@ -31,18 +30,6 @@ export function SubscribeCard() {
     const t = setInterval(() => {
       tries += 1;
       api.billing.sync().then((s) => { setInfo((cur) => (cur ? { ...cur, ...s } : cur)); if (s.planUntil && !s.expired) { setDone(false); setConfirmed(true); clearInterval(t); } }).catch(() => undefined);
-      if (tries >= 30) clearInterval(t);
-    }, 10_000);
-  }
-
-  /** Cartão pago aqui dentro: o primeiro débito pode levar um tempo, então confere de tempos em tempos. */
-  function afterCard() {
-    setCard(null);
-    setDone(true);
-    let tries = 0;
-    const t = setInterval(() => {
-      tries += 1;
-      api.billing.sync().then((s) => { setInfo((cur) => (cur ? { ...cur, ...s } : cur)); if (s.planUntil && !s.expired) { setDone(false); clearInterval(t); } }).catch(() => undefined);
       if (tries >= 30) clearInterval(t);
     }, 10_000);
   }

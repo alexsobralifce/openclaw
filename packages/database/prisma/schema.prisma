@@ -65,6 +65,8 @@ model User {
   assistantChannel String?
   telegramChatId   String?
   approvedAt   DateTime?
+  // Confirmou o e-mail pelo link de cadastro; nulo = ainda não confirmou. Sem @unique de propósito.
+  emailVerifiedAt DateTime?
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 

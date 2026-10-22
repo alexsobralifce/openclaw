@@ -98,6 +98,47 @@ export interface DocumentView {
 }
 
 /** Mensagem do chat do assistente no app. */
+/** Nota dentro de um assunto (pasta no Drive) — lista sem o conteúdo, que vem só ao abrir. */
+/** Plano comercial (teste/aprendiz/mago/arquimago) — mesmos campos de PlanDef no backend. */
+export interface PlanInfo {
+  id: string;
+  name: string;
+  priceBrl: number;
+  aiUsd: number;
+  googleAccounts: number;
+  pdfPages: number;
+  audioSeconds: number;
+  services: string[];
+  summary: string;
+}
+
+/** Relato de problema enviado pelo usuário (botão "Relatar problema"). */
+export interface BugReport {
+  id: string;
+  userId: string;
+  userName: string;
+  userEmail: string;
+  message: string;
+  page?: string | null;
+  userAgent?: string | null;
+  status: "NOVO" | "EM_ANALISE" | "RESOLVIDO";
+  createdAt: string;
+}
+
+export interface NoteItem {
+  id: string;
+  name: string;
+  modified?: string;
+  link?: string;
+}
+
+/** Assunto (pasta) com as notas dele; mesma organização usada pelo WhatsApp. */
+export interface NoteTopic {
+  id: string;
+  name: string;
+  notes: NoteItem[];
+}
+
 export interface ChatMessage {
   id: string;
   direction: "IN" | "OUT";
@@ -133,7 +174,20 @@ export const api = {
       return res.blob();
     },
   },
+  billing: {
+    me: () => request<{ plans: PlanInfo[]; plan: string | null; planUntil: string | null; billingStatus: string | null; expired: boolean; configured: boolean; publicKey: string | null }>("/billing/me"),
+    checkout: (plan: string, method: "card" | "pix") => request<{ url: string }>("/billing/checkout", { method: "POST", body: JSON.stringify({ plan, method }) }),
+    sync: () => request<{ plan: string | null; planUntil: string | null; billingStatus: string | null; expired: boolean; configured: boolean; publicKey: string | null }>("/billing/sync", { method: "POST" }),
+    subscribeCard: (plan: string, token: string) => request<{ status: string }>("/billing/subscribe-card", { method: "POST", body: JSON.stringify({ plan, token }) }),
+    pix: (plan: string) => request<{ qrCode: string; qrCodeBase64: string; expiresAt: string }>("/billing/pix", { method: "POST", body: JSON.stringify({ plan }) }),
+  },
+  bugReports: {
+    create: (data: { message: string; page?: string }) => request<BugReport>("/bug-reports", { method: "POST", body: JSON.stringify(data) }),
+    list: (status?: string) => request<BugReport[]>(`/bug-reports${status ? `?status=${encodeURIComponent(status)}` : ""}`),
+    setStatus: (id: string, status: string) => request<BugReport>(`/bug-reports/${encodeURIComponent(id)}`, { method: "PATCH", body: JSON.stringify({ status }) }),
+  },
   appChat: {
+    open: () => request<{ ok: true }>("/app-chat/open", { method: "POST" }),
     messages: (after?: string) => request<ChatMessage[]>(`/app-chat/messages${after ? `?after=${encodeURIComponent(after)}` : ""}`),
     send: (text: string) => request<ChatMessage>("/app-chat/messages", { method: "POST", body: JSON.stringify({ text }) }),
     sendAudio: (body: { base64: string; mime: string; seconds: number }) => request<ChatMessage>("/app-chat/audio", { method: "POST", body: JSON.stringify(body) }),
@@ -175,10 +229,14 @@ export const api = {
         body: JSON.stringify(data),
       }),
     googleExchange: (ticket: string) => request<{ accessToken: string; user: any }>("/auth/google/exchange", { method: "POST", body: JSON.stringify({ ticket }) }),
+    forgot: (email: string) => request<{ ok: true }>("/auth/forgot", { method: "POST", body: JSON.stringify({ email }) }),
+    reset: (token: string, newPassword: string) => request<{ ok: true }>("/auth/reset", { method: "POST", body: JSON.stringify({ token, newPassword }) }),
+    verifyEmail: (token: string) => request<{ ok: true }>("/auth/verify-email", { method: "POST", body: JSON.stringify({ token }) }),
     me: () => request<any>("/auth/me"),
     services: () => request<Record<string, string>>("/auth/services"),
     updateMe: (data: { name?: string; phone?: string }) =>
       request<any>("/auth/me", { method: "PATCH", body: JSON.stringify(data) }),
+    onboardingDone: () => request<{ ok: true }>("/auth/onboarding-done", { method: "POST" }),
   },
   usage: {
     report: (days: number) => request<UsageReport>(`/usage?days=${days}`),
@@ -188,6 +246,10 @@ export const api = {
     menu: () => request<{ items: MenuItem[] }>("/assistant/menu"),
     overview: () => request<{ routine: { total: number; today: { topic: string; when: string }[] }; memories: number }>("/assistant/overview"),
     setMenu: (hidden: string[]) => request<{ items: MenuItem[] }>("/assistant/menu", { method: "PUT", body: JSON.stringify({ hidden }) }),
+    notes: () => request<{ account: string; topics: NoteTopic[] }>("/assistant/notes"),
+    note: (id: string) => request<{ name: string; topic: string; content: string; link?: string }>(`/assistant/notes/${encodeURIComponent(id)}`),
+    createNote: (data: { topic?: string; title?: string; content: string }) =>
+      request<{ assunto: string; nome: string }>("/assistant/notes", { method: "POST", body: JSON.stringify(data) }),
   },
   users: {
     catalog: () => request<{ services: Record<string, string>; defaults: Record<string, string[]> }>("/users/services"),

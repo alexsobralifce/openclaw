@@ -9,7 +9,6 @@ const btn = "px-3 py-1.5 rounded-lg text-xs font-medium transition-colors";
 const PERIODS = [7, 30, 90];
 const nf = new Intl.NumberFormat("pt-BR");
 const usd = (v: number) => `US$ ${v.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: v < 1 ? 4 : 2 })}`;
-const usd = (v: number) => `US$ ${v.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: v < 1 ? 4 : 2 })}`;
 const PROVIDERS: Record<string, string> = { openai: "OpenAI", gemini: "Gemini", whisper: "Whisper" };
 
 export default function UsagePage() {

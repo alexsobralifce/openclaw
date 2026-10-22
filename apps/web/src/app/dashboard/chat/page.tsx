@@ -61,6 +61,10 @@ export default function ChatPage() {
   const fileInput = useRef<HTMLInputElement>(null);
   const field = useRef<HTMLTextAreaElement>(null);
   const rec = useRef<{ recorder: MediaRecorder; chunks: Blob[]; stream: MediaStream; timer: ReturnType<typeof setInterval>; started: number; cancelled: boolean } | null>(null);
+  // Última mensagem antes de limpar a tela (ex.: ao voltar ao app): busca só o que veio depois, em vez de tudo de novo
+  const cutoff = useRef<string | undefined>(undefined);
+  // Quando a tela ficou escondida (minimizada/trocou de aba), para decidir se limpa ao voltar
+  const hiddenAt = useRef<number | null>(null);
 
   const lastBotId = [...messages].reverse().find((x) => x.direction === "OUT")?.id;
   const add = useCallback((m: ChatMessage) => setMessages((prev) => (prev.some((p) => p.id === m.id) ? prev : [...prev, m])), []);
@@ -405,7 +409,6 @@ export default function ChatPage() {
         ))}
         {(typing || busy) && <p className="text-xs text-gray-500 px-1">{busy && !typing ? "Enviando…" : "Digitando…"}</p>}
         <div ref={bottom} />
-      </div>
       </div>
 
       {unread > 0 && (

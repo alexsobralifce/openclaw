@@ -1,7 +1,7 @@
-import { Body, Controller, Headers, HttpCode, Post, Query, Request, UseGuards } from "@nestjs/common";
+import { Body, Controller, Get, Headers, HttpCode, Post, Query, Request, UseGuards } from "@nestjs/common";
 import { IsIn, IsString } from "class-validator";
 import { Access, AllowExpired } from "../auth/access";
-import { PLAN_IDS } from "../auth/plans";
+import { PLAN_IDS, PLANS } from "../auth/plans";
 import { RateLimit, RateLimitGuard } from "../auth/rate-limit";
 import { BillingService } from "./billing.service";
 import { verifyMpSignature } from "./mp-utils";
@@ -9,6 +9,15 @@ import { verifyMpSignature } from "./mp-utils";
 class CheckoutDto {
   @IsString() @IsIn(PLAN_IDS) plan!: string;
   @IsIn(["card", "pix"]) method!: "card" | "pix";
+}
+
+class SubscribeCardDto {
+  @IsString() @IsIn(PLAN_IDS) plan!: string;
+  @IsString() token!: string;
+}
+
+class PixDto {
+  @IsString() @IsIn(PLAN_IDS) plan!: string;
 }
 
 @Controller("billing")
@@ -23,6 +32,46 @@ export class BillingController {
   @Post("checkout")
   checkout(@Request() req: any, @Body() dto: CheckoutDto) {
     return this.billing.checkout(req.user.id, dto.plan, dto.method);
+  }
+
+  /** Estado da assinatura + catálogo de planos pagos, para a tela de assinatura. */
+  @Access()
+  @AllowExpired()
+  @Get("me")
+  async me(@Request() req: any) {
+    const status = await this.billing.status(req.user.id);
+    const plans = Object.values(PLANS).filter((p) => p.priceBrl > 0);
+    return { ...status, plans };
+  }
+
+  /** O painel chama enquanto espera o aviso do Mercado Pago, para não deixar o usuário preso na tela. */
+  @Access()
+  @AllowExpired()
+  @UseGuards(RateLimitGuard)
+  @RateLimit("billing-sync", 30, 3600)
+  @Post("sync")
+  sync(@Request() req: any) {
+    return this.billing.sync(req.user.id);
+  }
+
+  /** Assinatura recorrente direto pelo cartão (Card Brick do Mercado Pago), sem sair do painel. */
+  @Access()
+  @AllowExpired()
+  @UseGuards(RateLimitGuard)
+  @RateLimit("billing-card", 10, 3600)
+  @Post("subscribe-card")
+  subscribeCard(@Request() req: any, @Body() dto: SubscribeCardDto) {
+    return this.billing.subscribeWithCard(req.user.id, dto.plan, dto.token);
+  }
+
+  /** Gera o QR code do Pix para pagamento único. */
+  @Access()
+  @AllowExpired()
+  @UseGuards(RateLimitGuard)
+  @RateLimit("billing-pix", 10, 3600)
+  @Post("pix")
+  pix(@Request() req: any, @Body() dto: PixDto) {
+    return this.billing.createPix(req.user.id, dto.plan);
   }
 
   /** Aviso do Mercado Pago (público, mas só vale com a assinatura secreta correta). */

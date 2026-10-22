@@ -14,6 +14,8 @@ export interface UserInfo {
   services?: string[];
   /** whatsapp | app | telegram */
   assistantChannel?: string;
+  /** Ainda não viu o tour de boas-vindas. */
+  onboarding?: boolean;
 }
 
 /** Marca de "Agora não" do aviso de instalação; cada login a apaga para o aviso voltar. */

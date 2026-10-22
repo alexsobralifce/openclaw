@@ -7,7 +7,7 @@ import { hasService, isAdmin, useMe } from "@/hooks/useMe";
 import { Logo } from "@/components/brand/Logo";
 
 // service: serviço que precisa estar liberado para o item aparecer; admin: só ROOT/ADMIN
-export const nav: { href: string; label: string; icon: React.ReactNode; service?: string; admin?: boolean; root?: boolean }[] = [
+export const nav: { href: string; label: string; icon: React.ReactNode; service?: string; admin?: boolean; root?: boolean; desktopOnly?: boolean }[] = [
   {
     href: "/dashboard/resumo",
     label: "Resumo",

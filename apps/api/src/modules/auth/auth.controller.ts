@@ -35,6 +35,26 @@ class LoginDto {
   password!: string;
 }
 
+class ForgotDto {
+  @Transform(normalizeEmail)
+  @IsEmail()
+  email!: string;
+}
+
+class ResetDto {
+  @IsString()
+  token!: string;
+
+  @IsString()
+  @MinLength(8)
+  newPassword!: string;
+}
+
+class VerifyEmailDto {
+  @IsString()
+  token!: string;
+}
+
 class ProfileDto {
   @IsOptional() @IsString() @MinLength(2) @MaxLength(80)
   name?: string;
@@ -69,6 +89,32 @@ export class AuthController {
     return startSession(res, await this.auth.login(dto.email, dto.password));
   }
 
+  @UseGuards(RateLimitGuard)
+  @RateLimit("forgot-password", 5, 3600)
+  @HttpCode(200)
+  @Post("forgot")
+  async forgot(@Body() dto: ForgotDto) {
+    await this.auth.forgotPassword(dto.email);
+    return { ok: true };
+  }
+
+  @UseGuards(RateLimitGuard)
+  @RateLimit("reset-password", 10, 3600)
+  @Post("reset")
+  async reset(@Body() dto: ResetDto) {
+    await this.auth.resetPassword(dto.token, dto.newPassword);
+    return { ok: true };
+  }
+
+  @UseGuards(RateLimitGuard)
+  @RateLimit("verify-email", 10, 3600)
+  @HttpCode(200)
+  @Post("verify-email")
+  async verifyEmail(@Body() dto: VerifyEmailDto) {
+    await this.auth.verifyEmail(dto.token);
+    return { ok: true };
+  }
+
   @Access()
   @AllowExpired()
   @Get("me")
@@ -87,5 +133,13 @@ export class AuthController {
   @Patch("me")
   updateMe(@Request() req: any, @Body() dto: ProfileDto) {
     return this.auth.updateProfile(req.user.id, dto);
+  }
+
+  @Access()
+  @HttpCode(200)
+  @Post("onboarding-done")
+  async onboardingDone(@Request() req: any) {
+    await this.auth.onboardingDone(req.user.id);
+    return { ok: true };
   }
 }

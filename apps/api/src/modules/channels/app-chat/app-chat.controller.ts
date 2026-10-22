@@ -25,6 +25,16 @@ export class AppChatController {
     return c;
   }
 
+  /**
+   * O app voltou ao primeiro plano. Fire-and-forget: hoje só marca a chegada no log
+   * (a presença real já é feita pela conexão do socket, em AppChatGateway/AppChatService.online).
+   */
+  @Post("open")
+  async open(@Request() req: any) {
+    await this.commander(req);
+    return { ok: true };
+  }
+
   @Get("messages")
   async messages(@Request() req: any, @Query("after") after?: string, @Query("limit") limit?: string) {
     const c = await this.commander(req);

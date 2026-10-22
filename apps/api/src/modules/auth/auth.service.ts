@@ -5,6 +5,8 @@ import * as bcrypt from "bcryptjs";
 import { statusMessage } from "./jwt.strategy";
 import { effectiveServices } from "./permissions";
 import { StateService } from "../state/state.service";
+import { consumeToken, issueToken } from "./account-tokens";
+import { MailService, mailHtml } from "./mail.service";
 
 // Falhas de senha por e-mail: depois de tantas, a conta espera um tempo (vale mesmo com IPs diferentes)
 const MAX_FAILS = 8;
@@ -17,7 +19,11 @@ const DUMMY_HASH = bcrypt.hashSync("nao-e-uma-senha-real", 12);
 
 @Injectable()
 export class AuthService {
-  constructor(private jwt: JwtService, private state: StateService) {}
+  constructor(private jwt: JwtService, private state: StateService, private mail: MailService) {}
+
+  private webUrl() {
+    return (process.env.WEB_URL || "http://localhost:3000").replace(/\/+$/, "");
+  }
 
   /**
    * Cada cadastro ganha o próprio workspace. O primeiro usuário do sistema vira ROOT;
@@ -61,8 +67,42 @@ export class AuthService {
       include: { workspaces: { include: { workspace: true } } },
     });
 
-    if (user.status !== "ACTIVE") return { pending: true, message: `${statusMessage(user.status)} Enviamos um e-mail para você confirmar seu endereço.` };
+    if (user.status !== "ACTIVE") {
+      void this.sendVerifyEmail(user.id, user.email).catch(() => undefined);
+      return { pending: true, message: `${statusMessage(user.status)} Enviamos um e-mail para você confirmar seu endereço.` };
+    }
     return this.buildResponse(user);
+  }
+
+  private async sendVerifyEmail(userId: string, email: string) {
+    const token = await issueToken(this.state, "verify-email", userId);
+    const url = `${this.webUrl()}/auth/confirmar?token=${token}`;
+    await this.mail.send(email, "Confirme seu e-mail — MagoBox", mailHtml("Confirme seu e-mail", ["Falta só confirmar seu e-mail para o cadastro seguir para aprovação."], { url, label: "Confirmar e-mail" }));
+  }
+
+  /** Link de cadastro: marca o e-mail como confirmado. Não aprova a conta — isso continua com o admin. */
+  async verifyEmail(token: string): Promise<void> {
+    const userId = await consumeToken(this.state, "verify-email", token);
+    if (!userId) throw new UnauthorizedException("Link inválido ou expirado.");
+    await prisma.user.update({ where: { id: userId }, data: { emailVerifiedAt: new Date() } });
+  }
+
+  /**
+   * Sempre responde do mesmo jeito, exista ou não o e-mail: a resposta não pode revelar quais contas existem.
+   */
+  async forgotPassword(email: string): Promise<void> {
+    const user = await prisma.user.findFirst({ where: { email: { equals: email, mode: "insensitive" } }, select: { id: true, email: true, passwordHash: true } });
+    if (!user || !user.passwordHash) return;
+    const token = await issueToken(this.state, "reset-password", user.id);
+    const url = `${this.webUrl()}/auth/redefinir?token=${token}`;
+    await this.mail.send(user.email, "Redefinir senha — MagoBox", mailHtml("Redefinir senha", ["Pedimos um link para você criar uma nova senha. Se não foi você, ignore este e-mail."], { url, label: "Criar nova senha" }));
+  }
+
+  async resetPassword(token: string, newPassword: string): Promise<void> {
+    const userId = await consumeToken(this.state, "reset-password", token);
+    if (!userId) throw new UnauthorizedException("Link inválido ou expirado.");
+    const passwordHash = await bcrypt.hash(newPassword, 12);
+    await prisma.user.update({ where: { id: userId }, data: { passwordHash } });
   }
 
   async login(email: string, password: string) {
@@ -119,7 +159,13 @@ export class AuthService {
       role: ws?.role ?? null,
       platformRole: user.role,
       services: effectiveServices(user.role, user.services),
+      // Ainda não viu o tour de boas-vindas: o painel mostra e marca como visto.
+      onboarding: !user.onboardedAt,
     };
+  }
+
+  async onboardingDone(userId: string): Promise<void> {
+    await prisma.user.update({ where: { id: userId }, data: { onboardedAt: new Date() } });
   }
 
   private buildResponse(user: any) {

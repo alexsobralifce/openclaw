@@ -128,7 +128,7 @@ const JSON_LD = {
       featureList: BENEFITS.map((b) => b.title),
       url: SITE,
       publisher: { "@id": `${SITE}/#org` },
-      offers: { "@type": "AggregateOffer", lowPrice: "9.90", highPrice: "69.90", priceCurrency: "BRL", offerCount: PLANS.length },
+      offers: { "@type": "AggregateOffer", lowPrice: "9.90", highPrice: "69.90", priceCurrency: "BRL", offerCount: PLAN.length },
     },
     {
       "@type": "FAQPage",
