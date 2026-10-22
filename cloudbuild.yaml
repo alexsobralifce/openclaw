@@ -21,10 +21,12 @@ timeout: 2400s
 steps:
   - id: api
     name: gcr.io/cloud-builders/docker
+    env: ["DOCKER_BUILDKIT=1"]
     args: ["build", "-f", "Dockerfile.api", "-t", "us-central1-docker.pkg.dev/$PROJECT_ID/openclaw/api:latest", "."]
 
   - id: web
     name: gcr.io/cloud-builders/docker
+    env: ["DOCKER_BUILDKIT=1"]
     args:
       - build
       - -f
