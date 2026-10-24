@@ -22,6 +22,8 @@ import { StateService } from "../../state/state.service";
 import { effectiveServices, Service } from "../../auth/permissions";
 import { normalize, parseChoice, pickByLabel } from "./voice";
 import { fmtWhen, mergeQueue, QUEUE_TTL_MS, QueuedEmail, removeFromQueue } from "./email-queue";
+
+type DigestItem = { de: string; assunto: string };
 import { addMute, loadMute, MutePrefs, recordDismiss, removeMute, saveMute, senderAddress } from "./email-mute";
 import { AgendaEvent, EventsPlan, extractJson, extractUrls, looksLikeAgendaIntent, parseEventsPlan } from "./agenda-events";
 import { openField, sealField } from "../../webhooks/crypto";
@@ -670,6 +672,43 @@ export class MenuService {
     if (q.length) await this.state.set(this.qkey(ws), q, QUEUE_TTL_MS);
     else await this.state.del(this.qkey(ws));
   }
+
+  /**
+   * E-mails novos entram na fila e no resumo do próximo horário (8h, 12h, 16h, 22h), sem aviso um a um.
+   * O resumo guarda só o que chegou desde o último envio.
+   */
+  async digestAdd(ws: string, items: QueuedEmail[]) {
+    const now = Date.now();
+    await this.queueSave(ws, mergeQueue(await this.queueGet(ws), items.map((m, i) => ({ ...m, at: m.at ?? now + i }))));
+    const pending = (await this.state.get<DigestItem[]>(this.dkey(ws))) ?? [];
+    const next = [...pending, ...items.map((m) => ({ de: m.de, assunto: m.assunto }))].slice(-100);
+    await this.state.set(this.dkey(ws), next, QUEUE_TTL_MS);
+  }
+
+  /** Texto do resumo do horário `slot` (ex.: "2026-10-24-12"), ou null se já foi enviado ou não há novidades. */
+  async digestText(ws: string, slot: string): Promise<string | null> {
+    if ((await this.state.get<string>(this.dslot(ws))) === slot) return null;
+    const list = (await this.state.get<DigestItem[]>(this.dkey(ws))) ?? [];
+    if (!list.length) return null;
+    const lines = list.slice(0, 20).map((m) => `• *${personName(m.de)}*: ${m.assunto || "(sem assunto)"}`);
+    const more = list.length > 20 ? `\n… e mais ${list.length - 20}` : "";
+    return [
+      head("📬", `Resumo de e-mails (${list.length})`),
+      ...lines,
+      more,
+      "",
+      "💡 _Diga *e-mails* para abrir a fila._",
+    ].filter((l) => l !== "").join("\n");
+  }
+
+  /** Marca o resumo do horário como enviado e limpa a lista. Chamado só depois do envio dar certo. */
+  async digestDone(ws: string, slot: string) {
+    await this.state.set(this.dslot(ws), slot, 7 * 24 * 3600_000);
+    await this.state.del(this.dkey(ws));
+  }
+
+  private dkey(ws: string) { return `digest:${ws}`; }
+  private dslot(ws: string) { return `digest-slot:${ws}`; }
 
   private async queueRemove(ws: string, id: string, account?: string) {
     const q = await this.queueGet(ws);

@@ -9,6 +9,9 @@ import { visibleNav } from "./Sidebar";
 
 const rowClass = "flex items-center gap-3 px-5 min-h-12 text-[15px] text-gray-300 active:bg-gray-800";
 
+/** Itens do menu sanduíche no celular: Resumo, Assistente, Canais, Config. e Ajuda. */
+const MOBILE_HREFS = new Set(["/dashboard/resumo", "/dashboard/chat", "/dashboard/channels", "/dashboard/settings", "/dashboard/ajuda"]);
+
 /** Menu sanduíche do celular: botão no cabeçalho e gaveta pela esquerda com todas as telas. A partir de 768 px entra a barra lateral. */
 export function MobileMenu() {
   const pathname = usePathname();
@@ -16,8 +19,8 @@ export function MobileMenu() {
   const me = useMe();
   const [open, setOpen] = useState(false);
 
-  // O que é de administração (API, usuários, consumo) fica só no computador
-  const items = visibleNav(me).filter((i) => !i.desktopOnly);
+  // Só o básico no celular: o restante (inbox, contatos, documentos, automações, cofre, API, usuários, consumo) fica no computador
+  const items = visibleNav(me).filter((i) => !i.desktopOnly && MOBILE_HREFS.has(i.href));
 
   useEffect(() => setOpen(false), [pathname]);
   useEffect(() => {

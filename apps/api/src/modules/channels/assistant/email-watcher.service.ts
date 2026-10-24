@@ -8,6 +8,21 @@ import { WebhooksService } from "../../webhooks/webhooks.service";
 import { assistantInstance, can, workspaceCommander } from "./commander";
 
 const INTERVAL_MS = Number(process.env.EMAIL_POLL_SECONDS || 60) * 1000;
+const DIGEST_HOURS = [8, 12, 16, 22];
+const TZ = process.env.ASSISTANT_TZ || "America/Fortaleza";
+
+/** Último horário de resumo já passado, no fuso do assistente (ex.: "2026-10-24-12"). */
+export function digestSlot(now: number): string {
+  const at = (ms: number) => {
+    const parts = new Intl.DateTimeFormat("en-CA", { timeZone: TZ, year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", hourCycle: "h23" }).formatToParts(new Date(ms));
+    const v = (t: string) => parts.find((p) => p.type === t)?.value ?? "";
+    return { date: `${v("year")}-${v("month")}-${v("day")}`, hour: Number(v("hour")) };
+  };
+  const today = at(now);
+  const h = [...DIGEST_HOURS].reverse().find((x) => x <= today.hour);
+  if (h !== undefined) return `${today.date}-${h}`;
+  return `${at(now - 24 * 3600_000).date}-22`;
+}
 
 @Injectable()
 export class EmailWatcherService implements OnModuleInit, OnModuleDestroy {
@@ -101,16 +116,21 @@ export class EmailWatcherService implements OnModuleInit, OnModuleDestroy {
     // Metadados (sem o corpo) para clientes que assinam email.received
     for (const m of fresh) this.webhooks.emit(workspaceId, "email.received", { account: m.account, id: m.id, from: m.de, subject: m.assunto });
 
-    if (fresh.length) {
-      // Avisa o dono do workspace, se ele tiver WhatsApp cadastrado e os serviços liberados
-      const owner = await workspaceCommander(workspaceId);
-      const instance = await assistantInstance(workspaceId);
-      if (owner && can(owner, "assistant") && can(owner, "email") && instance) {
-        const text = await this.menu.notifyNew(workspaceId, fresh);
+    // E-mails novos vão para o resumo, sem aviso um a um
+    if (fresh.length) await this.menu.digestAdd(workspaceId, fresh);
+
+    // Resumo nos horários fixos (8h, 12h, 16h e 22h), mesmo que nenhum e-mail novo tenha chegado nesta volta
+    const owner = await workspaceCommander(workspaceId);
+    const instance = await assistantInstance(workspaceId);
+    if (owner && can(owner, "assistant") && can(owner, "email") && instance) {
+      const slot = digestSlot(Date.now());
+      const text = await this.menu.digestText(workspaceId, slot);
+      if (text) {
         await this.assistant.sendToUser(owner, instance, text);
-      } else if (!instance) {
-        this.logger.warn(`Novo e-mail no workspace ${workspaceId}, mas não há WhatsApp para avisar.`);
+        await this.menu.digestDone(workspaceId, slot);
       }
+    } else if (fresh.length && !instance) {
+      this.logger.warn(`Novo e-mail no workspace ${workspaceId}, mas não há WhatsApp para avisar.`);
     }
 
     // Só avança o ponto de partida depois de tentar avisar

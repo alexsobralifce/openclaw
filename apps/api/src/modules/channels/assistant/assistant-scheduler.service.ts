@@ -1,6 +1,7 @@
 import { Injectable, Logger, OnModuleDestroy, OnModuleInit } from "@nestjs/common";
 import { prisma } from "@openclaw/database";
 import { StateService } from "../../state/state.service";
+import { PushService } from "../app-chat/push.service";
 import { AssistantService } from "./assistant.service";
 import { MenuService } from "./menu.service";
 import { assistantInstance, Commander, workspaceCommander } from "./commander";
@@ -30,6 +31,7 @@ export class AssistantSchedulerService implements OnModuleInit, OnModuleDestroy 
     private assistant: AssistantService,
     private menu: MenuService,
     private state: StateService,
+    private push: PushService,
   ) {}
 
   onModuleInit() {
@@ -86,8 +88,17 @@ export class AssistantSchedulerService implements OnModuleInit, OnModuleDestroy 
       try {
         if (!(await notifyOn(this.state, ws, "agenda"))) continue;
         const owner = await workspaceCommander(ws);
-        const instance = owner ? await assistantInstance(ws, owner) : null;
-        if (owner && instance) await this.assistant.sendToUser(owner, instance, eventReminderText(r, TZ));
+        if (!owner) {
+          this.logger.warn(`Lembrete de evento: sem dono ativo no workspace ${ws}.`);
+          continue;
+        }
+        const text = eventReminderText(r, TZ);
+        // Push sempre, com ou sem WhatsApp; o WhatsApp continua sendo o canal do texto
+        await this.push
+          .notify(owner.userId, { title: "Compromisso", body: text.replace(/[*_~]/g, ""), url: "/dashboard/resumo" })
+          .catch((e: any) => this.logger.warn(`Push de compromisso falhou: ${e.message}`));
+        const instance = await assistantInstance(ws, owner);
+        if (instance) await this.assistant.sendToUser(owner, instance, text);
         else this.logger.warn(`Lembrete de evento: sem canal para avisar o workspace ${ws}.`);
       } catch (e: any) {
         this.logger.warn(`Lembrete de evento falhou: ${e.message}`);
