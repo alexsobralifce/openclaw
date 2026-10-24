@@ -19,6 +19,7 @@ import { EvolutionModule } from "./evolution/evolution.module";
 import { AutomationsModule } from "../automations/automations.module";
 import { VaultModule } from "../vault/vault.module";
 import { InboundService } from "./inbound/inbound.service";
+import { LeadDistributionService } from "./inbound/lead-distribution.service";
 import { InstagramService } from "./instagram/instagram.service";
 import { TelegramService } from "./telegram/telegram.service";
 import { TelegramController } from "./telegram/telegram.controller";
@@ -42,7 +43,7 @@ import { jwtSecret } from "../../config/jwt-secret";
     }),
   ],
   controllers: [ChannelsController, AssistantSettingsController, TelegramController, AppChatController, DocumentsController, SpotifyController],
-  providers: [SpotifyService, TelegramService, AppChatService, AppChatGateway, PushService, ChannelsService, WhatsappWorker, InstagramWorker, InstagramService, InboundService, AssistantService, MenuService, MemoryService, GeminiService, IntentService, EmailWatcherService, WeatherService, AssistantSchedulerService],
+  providers: [SpotifyService, TelegramService, AppChatService, AppChatGateway, PushService, ChannelsService, WhatsappWorker, InstagramWorker, InstagramService, InboundService, LeadDistributionService, AssistantService, MenuService, MemoryService, GeminiService, IntentService, EmailWatcherService, WeatherService, AssistantSchedulerService],
   exports: [ChannelsService, EvolutionModule, AssistantService],
 })
 export class ChannelsModule {}

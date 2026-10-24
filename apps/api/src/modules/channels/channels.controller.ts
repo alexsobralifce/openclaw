@@ -1,6 +1,6 @@
 import {
   BadRequestException, Body, Controller, Delete, Get, HttpCode, Param, Query,
-  Post, RawBodyRequest, Req, Request, Res, Headers, Logger, ForbiddenException, UseFilters,
+  Post, Put, RawBodyRequest, Req, Request, Res, Headers, Logger, ForbiddenException, UseFilters,
 } from "@nestjs/common";
 import { JwtService } from "@nestjs/jwt";
 import { Access } from "../auth/access";
@@ -9,6 +9,7 @@ import { ChannelsService } from "./channels.service";
 import { EvolutionService } from "./evolution/evolution.service";
 import { EvolutionExceptionFilter } from "./evolution/evolution.filter";
 import { InboundService } from "./inbound/inbound.service";
+import { readDistribution } from "./inbound/lead-distribution.service";
 import { InboxService } from "../inbox/inbox.service";
 import { InstagramApiError, InstagramService, REPLY_WINDOW_MS } from "./instagram/instagram.service";
 import { prisma } from "@openclaw/database";
@@ -103,6 +104,43 @@ export class ChannelsController {
 
   // Enviar mensagem de saída via WhatsApp
   @Access("inbox")
+  /** Configuração da distribuição de clientes entre vendedores. Só OWNER e ADMIN. */
+  @Get("whatsapp/:channelId/distribution")
+  async getDistribution(@Request() req: any, @Param("channelId") channelId: string) {
+    const workspaceId: string = req.user.workspaces[0]?.workspaceId;
+    await this.assertManager(req.user.id, workspaceId);
+    const channel = await prisma.channel.findFirstOrThrow({ where: { id: channelId, workspaceId, type: "WHATSAPP" } });
+    return readDistribution(channel.config);
+  }
+
+  @Put("whatsapp/:channelId/distribution")
+  async setDistribution(
+    @Request() req: any,
+    @Param("channelId") channelId: string,
+    @Body() body: { enabled: boolean; sellers: { name: string; phone: string }[] },
+  ) {
+    const workspaceId: string = req.user.workspaces[0]?.workspaceId;
+    await this.assertManager(req.user.id, workspaceId);
+    const channel = await prisma.channel.findFirstOrThrow({ where: { id: channelId, workspaceId, type: "WHATSAPP" } });
+    const sellers = (Array.isArray(body.sellers) ? body.sellers : [])
+      .map((s) => ({ name: String(s?.name ?? "").trim().slice(0, 80), phone: String(s?.phone ?? "").replace(/\D/g, "") }))
+      .filter((s) => s.phone);
+    if (sellers.some((s) => s.phone.length < 10 || s.phone.length > 15)) throw new BadRequestException("Telefone de vendedor inválido");
+    if (body.enabled && sellers.length === 0) throw new BadRequestException("Cadastre pelo menos um vendedor para ativar");
+    const cfg: any = channel.config ?? {};
+    const cursor = readDistribution(cfg).cursor;
+    await prisma.channel.update({
+      where: { id: channel.id },
+      data: { config: { ...cfg, distribution: { enabled: body.enabled === true, sellers, cursor } } },
+    });
+    return { enabled: body.enabled === true, sellers, cursor };
+  }
+
+  private async assertManager(userId: string, workspaceId: string) {
+    const m = await prisma.workspaceMember.findFirst({ where: { workspaceId, userId, role: { in: ["OWNER", "ADMIN"] } } });
+    if (!m) throw new ForbiddenException("Somente dono ou administrador podem configurar a distribuição");
+  }
+
   @Post("whatsapp/:channelId/send")
   async sendMessage(
     @Request() req: any,

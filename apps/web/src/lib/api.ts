@@ -341,6 +341,10 @@ export const api = {
       request<any>(`/channels/whatsapp/${channelId}/status`),
     deleteWhatsapp: (channelId: string) =>
       request<any>(`/channels/whatsapp/${channelId}`, { method: "DELETE" }),
+    getDistribution: (channelId: string) =>
+      request<{ enabled: boolean; sellers: { name: string; phone: string }[]; cursor: number }>(`/channels/whatsapp/${channelId}/distribution`),
+    setDistribution: (channelId: string, body: { enabled: boolean; sellers: { name: string; phone: string }[] }) =>
+      request<any>(`/channels/whatsapp/${channelId}/distribution`, { method: "PUT", body: JSON.stringify(body) }),
     instagramAuthUrl: () => request<{ url: string }>("/channels/instagram/auth-url"),
     disconnectInstagram: (channelId: string) =>
       request<any>(`/channels/instagram/${channelId}`, { method: "DELETE" }),

@@ -6,6 +6,7 @@ import { WhatsappWorker } from "../workers/whatsapp.worker";
 import { InstagramWorker } from "../workers/instagram.worker";
 import { InstagramEvent, parseInstagramWebhook } from "../instagram/parse";
 import { AutomationRunner } from "../../automations/automation-runner.service";
+import { LeadDistributionService } from "./lead-distribution.service";
 import { agendaMedia, audioSeconds, commandText, isVoiceOrAudio, locationOf, quotedText } from "../whatsapp/parse";
 import { isGroupOrBroadcast, phoneFromJid, samePhone, senderPhone } from "../whatsapp/phone";
 import { QUOTA_NOTICE, quotaHit } from "../assistant/usage";
@@ -55,6 +56,7 @@ export class InboundService implements OnModuleInit, OnModuleDestroy {
     private whatsapp: WhatsappWorker,
     private instagram: InstagramWorker,
     private automations: AutomationRunner,
+    private leads: LeadDistributionService,
   ) {}
 
   onModuleInit() {
@@ -208,6 +210,7 @@ export class InboundService implements OnModuleInit, OnModuleDestroy {
 
     const res = await this.whatsapp.process(channel.workspaceId, channel.id, body);
     if (res) await this.fireAutomations(channel.workspaceId, channel.id, res);
+    if (res) await this.leads.distribute(channel, res);
   }
 
   private async processInstagram(ev: InstagramEvent) {

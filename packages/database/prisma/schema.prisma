@@ -243,6 +243,18 @@ model Channel {
   conversations Conversation[]
 }
 
+// Cliente já entregue a um vendedor (distribuição de leads no WhatsApp). Sem @unique: o db push roda no boot.
+model LeadAssignment {
+  id           String   @id @default(cuid())
+  workspaceId  String
+  channelId    String
+  contactPhone String
+  sellerPhone  String
+  createdAt    DateTime @default(now())
+
+  @@index([workspaceId, channelId, contactPhone])
+}
+
 enum ChannelType {
   WHATSAPP
   INSTAGRAM

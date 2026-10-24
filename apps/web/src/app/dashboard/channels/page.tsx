@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { api } from "@/lib/api";
 import { WhatsappSetup } from "@/components/channels/WhatsappSetup";
+import { LeadDistributionPanel } from "@/components/channels/LeadDistributionPanel";
 import { SpotifyCard } from "@/components/channels/SpotifyCard";
 
 export default function ChannelsPage() {
@@ -104,6 +105,7 @@ async function connectInstagram() {
 function ChannelCard({ channel, onDelete }: { channel: any; onDelete: () => void }) {
   const [status, setStatus] = useState<string>("checking");
   const [showQr, setShowQr] = useState(false);
+  const [showDistribution, setShowDistribution] = useState(false);
   const [actionError, setActionError] = useState("");
 
   const isInstagram = channel.type === "INSTAGRAM";
@@ -155,6 +157,14 @@ function ChannelCard({ channel, onDelete }: { channel: any; onDelete: () => void
               Ver QR Code
             </button>
           )}
+          {channel.type === "WHATSAPP" && (
+            <button
+              onClick={() => setShowDistribution((v) => !v)}
+              className="px-3 py-1.5 text-xs font-medium bg-violet-500/10 text-violet-400 hover:bg-violet-500/20 rounded-lg transition-colors"
+            >
+              Vendedores
+            </button>
+          )}
           {isInstagram && igNeedsReconnect && (
             <button
               onClick={() => connectInstagram().catch((e: any) => setActionError(e?.message ?? "Não foi possível abrir o login do Instagram"))}
@@ -186,6 +196,8 @@ function ChannelCard({ channel, onDelete }: { channel: any; onDelete: () => void
       {showQr && (
         <QrCodePanel channelId={channel.id} onClose={() => setShowQr(false)} onConnected={() => { setStatus("open"); setShowQr(false); }} />
       )}
+
+      {showDistribution && channel.type === "WHATSAPP" && <LeadDistributionPanel channelId={channel.id} />}
     </div>
   );
 }
