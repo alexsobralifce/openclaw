@@ -5,9 +5,10 @@ name: Monitor
 #
 # Frequência: a cada 30 min cabe nos 2.000 min/mês grátis de repositório privado (~1.440 min).
 # Se o repositório for público (minutos ilimitados), pode trocar por "*/5 * * * *".
+# DESABILITADO: agendamento removido (só roda manualmente). Para reativar, restaure:
+#   schedule:
+#     - cron: "*/30 * * * *"
 on:
-  schedule:
-    - cron: "*/30 * * * *"
   workflow_dispatch:
 
 concurrency:
