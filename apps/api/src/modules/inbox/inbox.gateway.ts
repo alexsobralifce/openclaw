@@ -32,6 +32,9 @@ export class InboxGateway implements OnGatewayConnection, OnGatewayDisconnect {
       const token = socketToken(client.handshake);
       if (!token) throw new Error("sem token");
       const payload: any = this.jwt.verify(token);
+      // O JWT pode continuar válido depois que a conta foi desativada: confere o status a cada conexão
+      const user = await prisma.user.findUnique({ where: { id: payload.sub }, select: { status: true } });
+      if (!user || user.status !== "ACTIVE") throw new Error("conta inativa ou apagada");
       const member = await prisma.workspaceMember.findFirst({ where: { userId: payload.sub } });
       if (!member) throw new Error("sem workspace");
       client.data.workspaceId = member.workspaceId;

@@ -1,4 +1,5 @@
-import { Body, Controller, Get, Patch, Request } from "@nestjs/common";
+import { Body, Controller, ForbiddenException, Get, Patch, Request } from "@nestjs/common";
+import { prisma } from "@openclaw/database";
 import { Access } from "../auth/access";
 import { WorkspaceService } from "./workspace.service";
 
@@ -13,7 +14,12 @@ export class WorkspaceController {
   }
 
   @Patch()
-  update(@Request() req: any, @Body() body: any) {
-    return this.ws.updateWorkspace(req.user.workspaces[0]?.workspaceId, body);
+  async update(@Request() req: any, @Body() body: any) {
+    const workspaceId: string = req.user.workspaces[0]?.workspaceId;
+    const member = await prisma.workspaceMember.findFirst({
+      where: { workspaceId, userId: req.user.id, role: { in: ["OWNER", "ADMIN"] } },
+    });
+    if (!member) throw new ForbiddenException("Somente dono ou administrador podem alterar o workspace");
+    return this.ws.updateWorkspace(workspaceId, body);
   }
 }
