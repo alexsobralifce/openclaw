@@ -5,6 +5,7 @@ import { api, type PlanInfo, MenuItem } from "@/lib/api";
 import { setUser } from "@/lib/auth";
 import { useMe } from "@/hooks/useMe";
 import { SubscribeCard } from "./SubscribeCard";
+import { AlertPrefs } from "@/components/settings/AlertPrefs";
 
 const card = "bg-gray-900 border border-gray-800 rounded-xl p-4";
 const input = "w-full bg-gray-950 border border-gray-700 rounded-lg px-3 py-2 text-sm text-gray-200 placeholder-gray-600 focus:outline-none focus:border-violet-500";
@@ -125,6 +126,8 @@ export default function SettingsPage() {
           {saving ? "Salvando..." : "Salvar"}
         </button>
       </form>
+
+      <AlertPrefs />
 
       <section className={card}>
         <h2 className="text-sm font-semibold text-gray-300 mb-2">Serviços liberados para sua conta</h2>
