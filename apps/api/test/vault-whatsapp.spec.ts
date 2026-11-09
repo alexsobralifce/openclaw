@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 
-vi.mock("@openclaw/database", () => ({
+vi.mock("@magobox/database", () => ({
   prisma: { workspaceMember: { findFirst: async () => ({ userId: "u1", user: { role: "ROOT", services: [], name: "Ana" } }) } },
 }));
 
@@ -230,7 +230,7 @@ describe("apagar a resposta com senha", () => {
     rows.push({ key: "wipe:A", value: { due: Date.now() - 1, instance: "i", key: { id: "A", remoteJid: "j", fromMe: true } }, expiresAt: null });
     rows.push({ key: "wipe:B", value: { due: Date.now() + 60_000, instance: "i", key: { id: "B", remoteJid: "j", fromMe: true } }, expiresAt: null });
     store.set("wipe:A", 1);
-    const db = await import("@openclaw/database");
+    const db = await import("@magobox/database");
     (db.prisma as any).kvEntry = { findMany: async ({ where }: any) => rows.filter((r) => r.key.startsWith(where.key.startsWith)) };
     const sched = new AssistantSchedulerService({ wipeMessage } as any, {} as any, state as any);
     await sched.tick();

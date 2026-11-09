@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 
-vi.mock("@openclaw/database", () => ({ prisma: { workspaceMember: { findFirst: async () => ({ user: { role: "ROOT", services: [], name: "Ana" } }) } } }));
+vi.mock("@magobox/database", () => ({ prisma: { workspaceMember: { findFirst: async () => ({ user: { role: "ROOT", services: [], name: "Ana" } }) } } }));
 
 import { AssistantService } from "../src/modules/channels/assistant/assistant.service";
 import { KIND_Q, driveQueryFrom, looksLikeDriveRequest, looksLikeMediaRequest, parseDriveQuery } from "../src/modules/channels/assistant/drive";

@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-vi.mock("@openclaw/database", () => ({ prisma: {} }));
+vi.mock("@magobox/database", () => ({ prisma: {} }));
 
 import { AssistantService } from "../src/modules/channels/assistant/assistant.service";
 

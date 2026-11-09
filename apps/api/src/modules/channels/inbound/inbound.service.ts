@@ -2,7 +2,7 @@ import { planOf } from "../../auth/plans";
 import { fmtDuration, maxAudioSeconds } from "../assistant/media-limits";
 import { QUOTA_NOTICE, quotaHit, trackUser } from "../assistant/usage";
 import { Injectable, Logger, OnModuleDestroy, OnModuleInit } from "@nestjs/common";
-import { prisma, Prisma } from "@openclaw/database";
+import { prisma, Prisma } from "@magobox/database";
 import { AssistantService } from "../assistant/assistant.service";
 import { findCommander, can } from "../assistant/commander";
 import { WhatsappWorker } from "../workers/whatsapp.worker";

@@ -9,7 +9,7 @@ import { APP_INSTANCE, channelOfInstance, channelOrder, TELEGRAM_INSTANCE } from
 import { AppChatService, DriveListItem } from "../app-chat/app-chat.service";
 import { TelegramService } from "../telegram/telegram.service";
 import { Injectable, Logger } from "@nestjs/common";
-import { prisma } from "@openclaw/database";
+import { prisma } from "@magobox/database";
 import { GoogleService } from "../../integrations/google/google.service";
 import { MenuService } from "./menu.service";
 import { MemoryService } from "./memory.service";

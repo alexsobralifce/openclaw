@@ -220,10 +220,10 @@ importers:
       '@nestjs/websockets':
         specifier: ^10.4.15
         version: 10.4.22(@nestjs/common@10.4.22(class-transformer@0.5.1)(class-validator@0.14.4)(reflect-metadata@0.2.2)(rxjs@7.8.2)(supports-color@8.1.1))(@nestjs/core@10.4.22)(@nestjs/platform-socket.io@10.4.22)(reflect-metadata@0.2.2)(rxjs@7.8.2)
-      '@openclaw/database':
+      '@magobox/database':
         specifier: workspace:*
         version: link:../../packages/database
-      '@openclaw/types':
+      '@magobox/types':
         specifier: workspace:*
         version: link:../../packages/types
       '@typesafe-ai/sdk':
@@ -305,7 +305,7 @@ importers:
 
   apps/web:
     dependencies:
-      '@openclaw/types':
+      '@magobox/types':
         specifier: workspace:*
         version: link:../../packages/types
       next:

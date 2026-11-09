@@ -1,5 +1,5 @@
 import { BadRequestException, ConflictException, ForbiddenException, Injectable, Logger, NotFoundException, OnModuleInit } from "@nestjs/common";
-import { prisma } from "@openclaw/database";
+import { prisma } from "@magobox/database";
 import * as bcrypt from "bcryptjs";
 import { EvolutionService } from "../channels/evolution/evolution.service";
 import { canEditUser, effectiveServices, isService, PlatformRole, ROLE_DEFAULTS, UserStatus } from "../auth/permissions";

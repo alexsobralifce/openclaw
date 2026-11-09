@@ -9,7 +9,7 @@ import { EvolutionService } from "./evolution/evolution.service";
 import { EvolutionExceptionFilter } from "./evolution/evolution.filter";
 import { InboundService } from "./inbound/inbound.service";
 import { InboxService } from "../inbox/inbox.service";
-import { prisma } from "@openclaw/database";
+import { prisma } from "@magobox/database";
 
 @Controller("channels")
 @UseFilters(EvolutionExceptionFilter)

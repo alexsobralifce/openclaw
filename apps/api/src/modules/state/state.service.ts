@@ -1,5 +1,5 @@
 import { Injectable, Logger, OnModuleDestroy, OnModuleInit } from "@nestjs/common";
-import { prisma, Prisma } from "@openclaw/database";
+import { prisma, Prisma } from "@magobox/database";
 
 const CLEANUP_MS = 10 * 60_000;
 

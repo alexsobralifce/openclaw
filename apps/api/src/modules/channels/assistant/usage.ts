@@ -2,7 +2,7 @@
 // à OpenAI/Gemini registram o consumo sem receber o usuário como parâmetro. Registrar nunca derruba o comando.
 
 import { AsyncLocalStorage } from "node:async_hooks";
-import { prisma } from "@openclaw/database";
+import { prisma } from "@magobox/database";
 import { dayStamp } from "./notes";
 
 export const SYSTEM_USER = "sistema";

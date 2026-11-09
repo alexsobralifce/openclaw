@@ -6,7 +6,7 @@ const db = vi.hoisted(() => ({
   channels: [] as any[],
 }));
 
-vi.mock("@openclaw/database", () => ({
+vi.mock("@magobox/database", () => ({
   prisma: {
     user: {
       count: async (a?: any) => db.users.filter((u) => !a?.where?.status || u.status === a.where.status).length,

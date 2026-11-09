@@ -1,6 +1,6 @@
 import { classifyEmail, isHidden } from "./email-filter";
 import { Inject, Injectable, Logger, forwardRef } from "@nestjs/common";
-import { prisma } from "@openclaw/database";
+import { prisma } from "@magobox/database";
 import { GoogleService } from "../../integrations/google/google.service";
 import { AssistantService } from "./assistant.service";
 import { MenuService } from "./menu.service";

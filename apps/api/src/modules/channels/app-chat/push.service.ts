@@ -1,5 +1,5 @@
 import { Injectable, Logger } from "@nestjs/common";
-import { prisma } from "@openclaw/database";
+import { prisma } from "@magobox/database";
 import * as webpush from "web-push";
 
 /** Notificações do navegador (Web Push). Só funciona com as chaves VAPID configuradas (WEBPUSH_PUBLIC_KEY, WEBPUSH_PRIVATE_KEY). */

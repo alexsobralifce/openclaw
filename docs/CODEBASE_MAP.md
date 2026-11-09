@@ -178,11 +178,11 @@ Webhook → `InboundEvent` → worker → `InboxService.processIncoming` → `We
 
 ## Convenções
 
-- Prisma é importado direto (`import { prisma } from "@openclaw/database"`); sem `PrismaService`. Toda consulta filtra por `workspaceId`; controllers pegam `req.user.workspaces[0]` (assume 1 workspace por usuário).
+- Prisma é importado direto (`import { prisma } from "@magobox/database"`); sem `PrismaService`. Toda consulta filtra por `workspaceId`; controllers pegam `req.user.workspaces[0]` (assume 1 workspace por usuário).
 - Lógica pura separada dos `.service` (que têm efeitos e DI). Texto normalizado (`flat` = minúsculas, sem acento, sem pontuação) é a base das regex de intenção.
 - Logs `[AUDIT]`, `[AUDIT-API]`, `[BACKUP]`. Timers com `setInterval` em `onModuleInit`, com flag `running`.
 - Sem `@unique` em coluna nova (`prisma db push` no boot); unicidade garantida no código.
-- Testes (Vitest): `apps/api/test/<tema>.spec.ts`, descrições em português, serviços instanciados à mão com `as any`, `@openclaw/database` sempre mockado com `vi.mock`.
+- Testes (Vitest): `apps/api/test/<tema>.spec.ts`, descrições em português, serviços instanciados à mão com `as any`, `@magobox/database` sempre mockado com `vi.mock`.
 
 ## Gotchas
 
@@ -313,7 +313,7 @@ Webhook → `InboundEvent` → worker → `InboxService.processIncoming` → `We
 | Apagar evento / concluir nota | `MenuService.eventDeletePick` e telas `event_delete`, `event_delete_confirm`; `GoogleService.calendarDelete` e `noteTrash` (sem tela de nota do Drive); `test/delete-event-note.spec.ts` |
 | Novo serviço/permissão | `auth/permissions.ts` (`SERVICES`, `ROLE_DEFAULTS`), `Sidebar.tsx` (`nav`) |
 | Mudar o cofre | `vault-crypto.ts` (puro), `vault.service.ts`, `test/vault-*.spec.ts`; ver gotchas 13 e 14 |
-| Novo campo no banco | `packages/database/prisma/schema.prisma` (aditivo, sem `@unique`), depois `pnpm --filter @openclaw/database db:generate` |
+| Novo campo no banco | `packages/database/prisma/schema.prisma` (aditivo, sem `@unique`), depois `pnpm --filter @magobox/database db:generate` |
 | Novo canal | `Channel.type` no schema, worker em `channels/workers/`, controller de webhook, `InboundService.process` |
 | Rodar testes | `cd apps/api && pnpm test` (ou `pnpm vitest run test/<arquivo>.spec.ts`) |
 | Deploy | `railway up --service api --detach` / `--service web --detach` (skill `railway-ifce`) |

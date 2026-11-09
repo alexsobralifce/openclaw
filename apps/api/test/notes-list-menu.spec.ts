@@ -9,7 +9,7 @@ const match = (r: any, where: any) =>
     if (v instanceof Date) return r[k]?.getTime() === v.getTime();
     return r[k] === v;
   });
-vi.mock("@openclaw/database", () => ({
+vi.mock("@magobox/database", () => ({
   prisma: {
     workspaceMember: { findFirst: async () => ({ user: { role: "ROOT", services: [], name: "Ana" } }) },
     listNote: {

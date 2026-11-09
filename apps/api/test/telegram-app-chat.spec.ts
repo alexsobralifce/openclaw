@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const users: any[] = [];
-vi.mock("@openclaw/database", () => ({
+vi.mock("@magobox/database", () => ({
   prisma: {
     user: {
       findFirst: async ({ where }: any) => users.find((u) => (where.telegramChatId ? u.telegramChatId === where.telegramChatId && (!where.id?.not || u.id !== where.id.not) : true)) ?? null,

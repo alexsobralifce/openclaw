@@ -1,5 +1,5 @@
 import { Injectable, Logger } from "@nestjs/common";
-import { prisma } from "@openclaw/database";
+import { prisma } from "@magobox/database";
 import { EvolutionService } from "../channels/evolution/evolution.service";
 
 const CHECK_TIMEOUT_MS = 5_000;

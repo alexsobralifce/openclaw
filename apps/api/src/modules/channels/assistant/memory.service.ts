@@ -1,5 +1,5 @@
 import { Injectable } from "@nestjs/common";
-import { prisma } from "@openclaw/database";
+import { prisma } from "@magobox/database";
 import { openField, sealField } from "../../webhooks/crypto";
 import { encodeRoutine, MAX_ROUTINE, parseRoutine, RoutineItem, topicKey, when } from "./routine";
 

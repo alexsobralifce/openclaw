@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const users: any[] = [];
-vi.mock("@openclaw/database", () => ({
+vi.mock("@magobox/database", () => ({
   prisma: {
     user: {
       findUnique: async ({ where }: any) => users.find((u) => u.id === where.id) ?? null,

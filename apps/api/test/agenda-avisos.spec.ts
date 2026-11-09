@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 
 const rows: { key: string; value: any; expiresAt: Date | null }[] = [];
-vi.mock("@openclaw/database", () => ({
+vi.mock("@magobox/database", () => ({
   prisma: {
     kvEntry: { findMany: async () => rows },
     workspaceMember: { findFirst: async () => ({ user: { role: "ROOT", services: [], name: "Ana" } }) },

@@ -1,6 +1,6 @@
 // Notas em lista no Postgres. Toda consulta filtra por workspaceId.
 
-import { prisma } from "@openclaw/database";
+import { prisma } from "@magobox/database";
 import { openField, sealField } from "../../webhooks/crypto";
 import { cleanNoteTitle, NoteItem, sanitizeItems } from "./list-notes";
 

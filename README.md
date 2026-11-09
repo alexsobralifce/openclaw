@@ -69,8 +69,8 @@ cp .env.example apps/api/.env
 # Schema do banco. O Prisma CLI não lê o .env da API e o `turbo` não repassa variáveis:
 # exporte a URL e rode pelo pacote, sem passar pelo `pnpm db:push` da raiz.
 export DATABASE_URL="postgresql://openclaw:openclaw@localhost:5433/openclaw"
-pnpm --filter @openclaw/database db:generate
-pnpm --filter @openclaw/database db:push
+pnpm --filter @magobox/database db:generate
+pnpm --filter @magobox/database db:push
 
 pnpm dev        # API em :3001 e painel em :3000
 ```
@@ -84,8 +84,8 @@ Para conectar o WhatsApp: **Canais → WhatsApp**, escaneie o QR code. Para o as
 ```bash
 pnpm typecheck                         # tipos em todos os pacotes
 pnpm build                             # build de tudo
-pnpm --filter @openclaw/api test       # testes da API (vitest)
-pnpm --filter @openclaw/database db:studio   # Prisma Studio
+pnpm --filter @magobox/api test       # testes da API (vitest)
+pnpm --filter @magobox/database db:studio   # Prisma Studio
 ```
 
 ## Variáveis de ambiente

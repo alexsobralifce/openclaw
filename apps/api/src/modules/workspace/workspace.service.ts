@@ -1,5 +1,5 @@
 import { BadRequestException, Injectable } from "@nestjs/common";
-import { prisma } from "@openclaw/database";
+import { prisma } from "@magobox/database";
 
 @Injectable()
 export class WorkspaceService {

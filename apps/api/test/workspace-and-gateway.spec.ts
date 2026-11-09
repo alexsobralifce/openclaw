@@ -6,7 +6,7 @@ const db = vi.hoisted(() => ({
   workspaceMember: { findFirst: vi.fn() },
   conversation: { findFirst: vi.fn() },
 }));
-vi.mock("@openclaw/database", () => ({ prisma: db }));
+vi.mock("@magobox/database", () => ({ prisma: db }));
 
 import { BadRequestException } from "@nestjs/common";
 import { WorkspaceService } from "../src/modules/workspace/workspace.service";

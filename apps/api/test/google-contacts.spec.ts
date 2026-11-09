@@ -8,7 +8,7 @@ const db = vi.hoisted(() => ({
   channels: [] as { id: string; config: Record<string, unknown> }[],
   update: vi.fn(async (_: any) => {}),
 }));
-vi.mock("@openclaw/database", () => ({
+vi.mock("@magobox/database", () => ({
   prisma: {
     channel: {
       findMany: async () => db.channels,

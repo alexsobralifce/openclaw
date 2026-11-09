@@ -1,4 +1,4 @@
-// Openclaw Widget — embeddável via <script>
+// MagoBox Widget — embeddável via <script>
 // Uso: <script src="widget.js" data-workspace-id="xxx" data-api-url="https://api.seudominio.com"></script>
 
 (function () {
@@ -7,7 +7,7 @@
   const apiUrl = script?.dataset.apiUrl || "";
 
   if (!workspaceId) {
-    console.warn("[Openclaw] data-workspace-id ausente");
+    console.warn("[MagoBox] data-workspace-id ausente");
     return;
   }
 

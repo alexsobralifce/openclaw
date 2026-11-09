@@ -1,6 +1,6 @@
 import { Injectable, UnauthorizedException, ConflictException, ForbiddenException, HttpException, HttpStatus } from "@nestjs/common";
 import { JwtService } from "@nestjs/jwt";
-import { prisma } from "@openclaw/database";
+import { prisma } from "@magobox/database";
 import * as bcrypt from "bcryptjs";
 import { statusMessage } from "./jwt.strategy";
 import { effectiveServices } from "./permissions";

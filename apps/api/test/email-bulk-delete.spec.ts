@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 
-vi.mock("@openclaw/database", () => ({ prisma: { workspaceMember: { findFirst: async () => null } } }));
+vi.mock("@magobox/database", () => ({ prisma: { workspaceMember: { findFirst: async () => null } } }));
 
 import { MenuService } from "../src/modules/channels/assistant/menu.service";
 

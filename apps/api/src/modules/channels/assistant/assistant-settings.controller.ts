@@ -1,7 +1,7 @@
 import { BadRequestException, Body, Controller, Get, Put, Request } from "@nestjs/common";
 import { Access } from "../../auth/access";
 import { GoogleService } from "../../integrations/google/google.service";
-import { prisma } from "@openclaw/database";
+import { prisma } from "@magobox/database";
 import { MemoryService } from "./memory.service";
 import { MenuService } from "./menu.service";
 import { todayItems, when } from "./routine";

@@ -1,5 +1,5 @@
 import { Injectable, Logger } from "@nestjs/common";
-import { prisma } from "@openclaw/database";
+import { prisma } from "@magobox/database";
 import { randomBytes } from "crypto";
 import { StateService } from "../../state/state.service";
 import { openText, sealText } from "../../webhooks/crypto";

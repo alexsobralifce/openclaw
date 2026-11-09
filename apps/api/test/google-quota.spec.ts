@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-vi.mock("@openclaw/database", () => ({ prisma: {} }));
+vi.mock("@magobox/database", () => ({ prisma: {} }));
 
 import { GoogleQuotaError, GoogleService } from "../src/modules/integrations/google/google.service";
 

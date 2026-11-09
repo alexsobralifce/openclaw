@@ -8,6 +8,6 @@ ENV NEXT_PUBLIC_API_URL=$NEXT_PUBLIC_API_URL
 # Endereço público do site: usado na imagem de compartilhamento (Open Graph)
 ARG NEXT_PUBLIC_SITE_URL
 ENV NEXT_PUBLIC_SITE_URL=$NEXT_PUBLIC_SITE_URL
-RUN pnpm --filter @openclaw/types build && pnpm --filter @openclaw/web build
+RUN pnpm --filter @magobox/types build && pnpm --filter @magobox/web build
 ENV NODE_ENV=production
 CMD ["sh", "-c", "cd apps/web && npx next start -p ${PORT:-3000}"]

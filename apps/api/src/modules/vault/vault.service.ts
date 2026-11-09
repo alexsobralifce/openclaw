@@ -1,5 +1,5 @@
 import { BadGatewayException, BadRequestException, ConflictException, ForbiddenException, HttpException, HttpStatus, Injectable, Logger, NotFoundException, UnauthorizedException } from "@nestjs/common";
-import { prisma } from "@openclaw/database";
+import { prisma } from "@magobox/database";
 import { randomUUID } from "crypto";
 import { StateService } from "../state/state.service";
 import { GoogleService } from "../integrations/google/google.service";

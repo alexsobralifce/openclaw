@@ -31,7 +31,7 @@ const db = vi.hoisted(() => {
     contact: { findUnique: vi.fn(async () => ({ id: "p1", name: "Ana", phone: "5585" })), create: vi.fn() },
   };
 });
-vi.mock("@openclaw/database", () => ({ prisma: db }));
+vi.mock("@magobox/database", () => ({ prisma: db }));
 process.env.WEBHOOK_SECRET = "segredo-de-teste-campos";
 
 import { InboxService } from "../src/modules/inbox/inbox.service";

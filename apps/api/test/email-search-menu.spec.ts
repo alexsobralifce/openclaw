@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 
 const h = vi.hoisted(() => ({ role: "ROOT", services: [] as string[] }));
-vi.mock("@openclaw/database", () => ({ prisma: { workspaceMember: { findFirst: async () => ({ user: { role: h.role, services: h.services, name: "Ana" } }) } } }));
+vi.mock("@magobox/database", () => ({ prisma: { workspaceMember: { findFirst: async () => ({ user: { role: h.role, services: h.services, name: "Ana" } }) } } }));
 
 import { MenuService } from "../src/modules/channels/assistant/menu.service";
 

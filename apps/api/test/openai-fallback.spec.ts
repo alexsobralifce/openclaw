@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const h = vi.hoisted(() => ({ upsert: vi.fn(async (_a: any) => ({})) }));
-vi.mock("@openclaw/database", () => ({ prisma: { aiUsage: { upsert: (a: any) => h.upsert(a) } } }));
+vi.mock("@magobox/database", () => ({ prisma: { aiUsage: { upsert: (a: any) => h.upsert(a) } } }));
 
 import { chatCompletion, fallbackReasoning, shouldFallback } from "../src/modules/channels/assistant/openai-chat";
 

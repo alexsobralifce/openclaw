@@ -1,4 +1,4 @@
-import { prisma } from "@openclaw/database";
+import { prisma } from "@magobox/database";
 import { effectiveServices, Service } from "../../auth/permissions";
 import { planExpired } from "../../auth/plans";
 

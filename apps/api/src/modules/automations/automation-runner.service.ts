@@ -1,5 +1,5 @@
 import { Injectable, Logger } from "@nestjs/common";
-import { prisma } from "@openclaw/database";
+import { prisma } from "@magobox/database";
 import { EvolutionService } from "../channels/evolution/evolution.service";
 import { InboxService } from "../inbox/inbox.service";
 import { StateService } from "../state/state.service";

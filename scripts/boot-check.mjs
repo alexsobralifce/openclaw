@@ -4,7 +4,7 @@
 // Uso: `pnpm boot-check` (compila a API e sobe por até 30 s).
 import { execFileSync, spawn } from "node:child_process";
 
-execFileSync("pnpm", ["--filter", "@openclaw/api", "build"], { stdio: "ignore" });
+execFileSync("pnpm", ["--filter", "@magobox/api", "build"], { stdio: "ignore" });
 const child = spawn("node", ["dist/main"], {
   cwd: "apps/api",
   env: { ...process.env, PORT: "3998", DATABASE_URL: "postgresql://x:x@127.0.0.1:1/x", JWT_SECRET: "boot-check", WEBHOOK_SECRET: "boot-check" },

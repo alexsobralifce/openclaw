@@ -6,7 +6,7 @@ const h = vi.hoisted(() => ({
   owner: { userId: "u1", role: "USER", plan: "FREE" } as any,
 }));
 
-vi.mock("@openclaw/database", () => ({
+vi.mock("@magobox/database", () => ({
   prisma: {
     channel: {
       findMany: async () => h.channels,

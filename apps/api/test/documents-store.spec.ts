@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const rows: any[] = [];
 let seq = 0;
-vi.mock("@openclaw/database", () => ({
+vi.mock("@magobox/database", () => ({
   prisma: {
     document: {
       findFirst: async ({ where }: any) => rows.find((r) => Object.entries(where).every(([k, v]) => r[k] === v)) ?? null,

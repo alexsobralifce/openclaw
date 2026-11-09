@@ -4,7 +4,7 @@ const db = vi.hoisted(() => ({
   conversation: { findFirstOrThrow: vi.fn(), delete: vi.fn(), count: vi.fn() },
   contact: { delete: vi.fn() },
 }));
-vi.mock("@openclaw/database", () => ({ prisma: db }));
+vi.mock("@magobox/database", () => ({ prisma: db }));
 
 import { InboxService } from "../src/modules/inbox/inbox.service";
 

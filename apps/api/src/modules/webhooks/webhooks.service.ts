@@ -1,6 +1,6 @@
 import { BadRequestException, ForbiddenException, Injectable, Logger, NotFoundException, OnModuleDestroy, OnModuleInit } from "@nestjs/common";
 import { createHmac, randomBytes } from "crypto";
-import { prisma } from "@openclaw/database";
+import { prisma } from "@magobox/database";
 import { decryptSecret, encryptSecret } from "./crypto";
 import { assertPublicUrl } from "./url-guard";
 import { limitsFor } from "./plan-limits";

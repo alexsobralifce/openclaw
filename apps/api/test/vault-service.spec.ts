@@ -43,7 +43,7 @@ const { vaults, blocks, db } = vi.hoisted(() => {
   };
   return { vaults, blocks, db };
 });
-vi.mock("@openclaw/database", () => ({ prisma: db }));
+vi.mock("@magobox/database", () => ({ prisma: db }));
 
 import { matchEntries, VaultService } from "../src/modules/vault/vault.service";
 

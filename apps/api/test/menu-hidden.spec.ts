@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 
-vi.mock("@openclaw/database", () => ({ prisma: { workspaceMember: { findFirst: async () => ({ user: { role: "ROOT", services: [], name: "Ana" } }) } } }));
+vi.mock("@magobox/database", () => ({ prisma: { workspaceMember: { findFirst: async () => ({ user: { role: "ROOT", services: [], name: "Ana" } }) } } }));
 
 import { MenuService } from "../src/modules/channels/assistant/menu.service";
 import { ALWAYS_VISIBLE, MENU_ITEMS, menuHiddenKey, sanitizeHidden } from "../src/modules/channels/assistant/menu-items";

@@ -7,7 +7,7 @@ const h = vi.hoisted(() => ({
   userFind: vi.fn(async (_a: any) => ({ id: "u1", email: "a@b.c", role: "USER", status: "ACTIVE" }) as any),
   userUpdate: vi.fn(async (a: any) => ({ id: "u1", name: "Ana", email: "a@b.c", role: "USER", status: "ACTIVE", services: a.data.services ?? [], plan: a.data.plan ?? null, workspaces: [] })),
 }));
-vi.mock("@openclaw/database", () => ({
+vi.mock("@magobox/database", () => ({
   prisma: {
     aiUsage: { upsert: (a: any) => h.upsert(a), findMany: () => h.findMany() },
     workspaceMember: { findFirst: (a: any) => h.ownerFind(a), count: async () => 1 },

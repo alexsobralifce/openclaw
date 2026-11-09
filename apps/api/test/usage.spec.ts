@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 
 const h = vi.hoisted(() => ({ upsert: vi.fn(async (_a: any) => ({})) }));
-vi.mock("@openclaw/database", () => ({ prisma: { aiUsage: { upsert: (a: any) => h.upsert(a) } } }));
+vi.mock("@magobox/database", () => ({ prisma: { aiUsage: { upsert: (a: any) => h.upsert(a) } } }));
 
 import { costOf, geminiTokens, loadPrices, openaiTokens, recordUsage, rollup, runAs, SYSTEM_USER } from "../src/modules/channels/assistant/usage";
 
@@ -90,7 +90,7 @@ describe("contador de tokens", () => {
 describe("limite mensal por usuário, em dólar", async () => {
   const { assertQuota, QuotaExceededError, quotaHit, monthlyLimitUsd, resetQuotaCache, limitCost, monthSpend } = await import("../src/modules/channels/assistant/usage");
   const find = vi.fn();
-  (await import("@openclaw/database")).prisma.aiUsage.findMany = find as any;
+  (await import("@magobox/database")).prisma.aiUsage.findMany = find as any;
   const PRICES = '{"gemini-x":{"in":0.75,"out":3.75}}';
   const setup = (rows: { model: string; inputTokens: number; outputTokens: number }[], limit: string | undefined) => {
     resetQuotaCache();

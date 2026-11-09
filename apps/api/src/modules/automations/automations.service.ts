@@ -1,5 +1,5 @@
 import { BadRequestException, Injectable, NotFoundException } from "@nestjs/common";
-import { prisma } from "@openclaw/database";
+import { prisma } from "@magobox/database";
 import { isRuleError, validateRule } from "./rules";
 
 @Injectable()

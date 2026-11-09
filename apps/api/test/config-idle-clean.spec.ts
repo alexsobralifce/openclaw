@@ -4,7 +4,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 afterEach(() => vi.unstubAllEnvs());
 
 const kv: { key: string; value: any; expiresAt: Date | null }[] = [];
-vi.mock("@openclaw/database", () => ({
+vi.mock("@magobox/database", () => ({
   prisma: {
     workspaceMember: { findFirst: async () => ({ user: { role: "ROOT", services: [], name: "Ana" } }) },
     kvEntry: { findMany: async ({ where }: any) => kv.filter((r) => r.key.startsWith(where.key.startsWith)) },

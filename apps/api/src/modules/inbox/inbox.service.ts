@@ -1,9 +1,9 @@
 import { Injectable } from "@nestjs/common";
-import { prisma } from "@openclaw/database";
+import { prisma } from "@magobox/database";
 import { InboxGateway } from "./inbox.gateway";
 import { WebhooksService } from "../webhooks/webhooks.service";
 import { openField, sealField } from "../webhooks/crypto";
-import type { IncomingMessage } from "@openclaw/types";
+import type { IncomingMessage } from "@magobox/types";
 
 @Injectable()
 export class InboxService {

@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { fmtWhen, mergeQueue, QUEUE_MAX, removeFromQueue } from "../src/modules/channels/assistant/email-queue";
 
-vi.mock("@openclaw/database", () => ({
+vi.mock("@magobox/database", () => ({
   prisma: {
     workspaceMember: { findFirst: async () => ({ user: { role: "ROOT", services: [], name: "Ana" } }) },
     channel: { findFirst: async () => null },

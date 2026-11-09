@@ -51,7 +51,7 @@ const paymentHeaders = [{ key: "Content-Security-Policy", value: contentSecurity
 const nextConfig: NextConfig = {
   // Pasta de build separada (usada pelo script de prints do tour, para não mexer no `next dev` em uso)
   distDir: process.env.NEXT_DIST_DIR || ".next",
-  transpilePackages: ["@openclaw/types"],
+  transpilePackages: ["@magobox/types"],
   poweredByHeader: false,
   async headers() {
     return [

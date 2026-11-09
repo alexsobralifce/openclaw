@@ -1,5 +1,5 @@
 import { Injectable, Logger, OnModuleInit } from "@nestjs/common";
-import { prisma } from "@openclaw/database";
+import { prisma } from "@magobox/database";
 import { isSealed, openToken, sealToken } from "../../webhooks/crypto";
 import { nextDay } from "../../channels/assistant/agenda-events";
 import { DriveKind, KIND_Q, STRICT_KINDS, extQuery, isBook, nameHasExt, needsNameCheck, wordVariants } from "../../channels/assistant/drive";

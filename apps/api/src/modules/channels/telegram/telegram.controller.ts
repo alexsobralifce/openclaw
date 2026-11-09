@@ -1,5 +1,5 @@
 import { BadRequestException, Body, Controller, Delete, ForbiddenException, Get, Headers, HttpCode, Logger, Post, Request } from "@nestjs/common";
-import { prisma } from "@openclaw/database";
+import { prisma } from "@magobox/database";
 import { randomBytes, timingSafeEqual } from "crypto";
 import { Access } from "../../auth/access";
 import { StateService } from "../../state/state.service";

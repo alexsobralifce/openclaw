@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 
 const created: any[] = [];
-vi.mock("@openclaw/database", () => ({
+vi.mock("@magobox/database", () => ({
   prisma: {
     workspaceMember: { findFirst: async () => ({ user: { role: "ROOT", services: [], name: "Ana" } }) },
     appMessage: {

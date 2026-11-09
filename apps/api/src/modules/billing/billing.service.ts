@@ -1,5 +1,5 @@
 import { BadGatewayException, BadRequestException, HttpException, Injectable, Logger, ServiceUnavailableException } from "@nestjs/common";
-import { prisma } from "@openclaw/database";
+import { prisma } from "@magobox/database";
 import { randomUUID } from "crypto";
 import { MercadoPagoConfig, Payment, PreApproval, Preference } from "mercadopago";
 import { isPlan, planExpired, PLANS } from "../auth/plans";

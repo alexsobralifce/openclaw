@@ -1,7 +1,7 @@
 // Avaliação com serviços de verdade (gasta poucos centavos): escolha de ferramentas (palavras-chave + Jev), comportamento do
 // chat com e sem corte de ferramentas, modelo reserva com ferramentas e pensamento do Gemini em PDF.
 // Uso (precisa das chaves de produção; roda na sua máquina, nada é gravado no servidor):
-//   pnpm --filter @openclaw/api build && railway run --service api node apps/api/scripts/eval-tools.cjs [fases: a,b,c,d]
+//   pnpm --filter @magobox/api build && railway run --service api node apps/api/scripts/eval-tools.cjs [fases: a,b,c,d]
 const path = require("node:path");
 const dist = (f) => require(path.join(__dirname, "..", "dist", "modules", "channels", "assistant", f));
 const cases = require("../test/fixtures/tool-eval-cases.json");

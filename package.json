@@ -1,5 +1,5 @@
 {
-  "name": "openclaw",
+  "name": "magobox",
   "private": true,
   "scripts": {
     "dev": "turbo run dev",

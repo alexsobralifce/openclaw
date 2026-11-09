@@ -2,7 +2,7 @@
 import { describe, expect, it, vi } from "vitest";
 import cases from "./fixtures/tool-eval-cases.json";
 
-vi.mock("@openclaw/database", () => ({ prisma: {} }));
+vi.mock("@magobox/database", () => ({ prisma: {} }));
 
 import { TOOLS } from "../src/modules/channels/assistant/assistant.service";
 import { selectToolNames } from "../src/modules/channels/assistant/tool-select";

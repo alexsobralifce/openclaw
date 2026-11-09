@@ -1,7 +1,7 @@
 // Catálogo de documentos no Postgres. Toda consulta filtra por workspaceId; a unicidade de (workspaceId, driveFileId) é garantida aqui,
 // porque `@unique` em coluna nova trava o `prisma db push` de produção.
 
-import { prisma } from "@openclaw/database";
+import { prisma } from "@magobox/database";
 import { DocFields, sanitizeTags } from "./documents";
 import { cleanTitle, cleanTopic } from "./notes";
 

@@ -6,7 +6,7 @@ const db = vi.hoisted(() => ({
   channels: [{ config: { instanceName: "inst" } }] as any[],
 }));
 
-vi.mock("@openclaw/database", () => ({
+vi.mock("@magobox/database", () => ({
   prisma: {
     $queryRaw: async () => {
       if (!db.up) throw new Error("connection refused");

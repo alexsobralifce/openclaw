@@ -1,5 +1,5 @@
 import { Injectable, Logger, OnModuleDestroy, OnModuleInit } from "@nestjs/common";
-import { prisma } from "@openclaw/database";
+import { prisma } from "@magobox/database";
 import { StateService } from "../../state/state.service";
 import { AssistantService } from "./assistant.service";
 import { MenuService } from "./menu.service";

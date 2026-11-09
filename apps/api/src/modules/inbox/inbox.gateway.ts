@@ -10,8 +10,8 @@ import {
 import { Logger } from "@nestjs/common";
 import { JwtService } from "@nestjs/jwt";
 import { Server, Socket } from "socket.io";
-import { prisma } from "@openclaw/database";
-import type { WsNewMessage, WsConversationUpdated, WsConversationDeleted } from "@openclaw/types";
+import { prisma } from "@magobox/database";
+import type { WsNewMessage, WsConversationUpdated, WsConversationDeleted } from "@magobox/types";
 import { webOrigins } from "../../web-origins";
 import { socketToken } from "../auth/session-cookie";
 

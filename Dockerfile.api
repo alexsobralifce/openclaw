@@ -4,9 +4,9 @@ RUN npm i -g pnpm@12.6.0
 WORKDIR /app
 COPY . .
 RUN pnpm install --frozen-lockfile
-RUN pnpm --filter @openclaw/database db:generate \
- && pnpm --filter @openclaw/database build \
- && pnpm --filter @openclaw/types build \
- && pnpm --filter @openclaw/api build
+RUN pnpm --filter @magobox/database db:generate \
+ && pnpm --filter @magobox/database build \
+ && pnpm --filter @magobox/types build \
+ && pnpm --filter @magobox/api build
 ENV NODE_ENV=production
 CMD ["sh", "-c", "cd packages/database && npx prisma db push --skip-generate && cd ../../apps/api && node dist/main"]

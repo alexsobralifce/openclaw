@@ -9,7 +9,7 @@ const db = vi.hoisted(() => ({
   deleteMany: vi.fn(),
 }));
 
-vi.mock("@openclaw/database", () => ({
+vi.mock("@magobox/database", () => ({
   prisma: { inboundEvent: db, channel: { findFirst: vi.fn() } },
   Prisma: {},
 }));

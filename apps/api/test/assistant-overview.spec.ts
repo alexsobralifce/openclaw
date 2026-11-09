@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 
 const count = vi.hoisted(() => vi.fn(async (_args?: unknown) => 7));
-vi.mock("@openclaw/database", () => ({ prisma: { memory: { count } } }));
+vi.mock("@magobox/database", () => ({ prisma: { memory: { count } } }));
 
 import { AssistantSettingsController } from "../src/modules/channels/assistant/assistant-settings.controller";
 

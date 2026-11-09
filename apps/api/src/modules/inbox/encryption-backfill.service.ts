@@ -1,5 +1,5 @@
 import { Injectable, Logger, OnModuleInit } from "@nestjs/common";
-import { prisma } from "@openclaw/database";
+import { prisma } from "@magobox/database";
 import { sealField } from "../webhooks/crypto";
 
 const BATCH = 200;

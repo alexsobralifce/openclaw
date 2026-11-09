@@ -1,5 +1,5 @@
 import { Inject, Injectable, Logger, Optional, forwardRef } from "@nestjs/common";
-import { prisma } from "@openclaw/database";
+import { prisma } from "@magobox/database";
 import { EvolutionService } from "../evolution/evolution.service";
 import { GoogleService } from "../../integrations/google/google.service";
 import { MemoryService } from "./memory.service";

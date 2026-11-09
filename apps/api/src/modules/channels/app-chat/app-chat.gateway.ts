@@ -3,7 +3,7 @@ import { socketToken } from "../../auth/session-cookie";
 import { Logger } from "@nestjs/common";
 import { JwtService } from "@nestjs/jwt";
 import { Server, Socket } from "socket.io";
-import { prisma } from "@openclaw/database";
+import { prisma } from "@magobox/database";
 import { webOrigins } from "../../../web-origins";
 
 /** Tempo real do chat do app: cada usuário entra na própria sala e recebe só as mensagens dele. */

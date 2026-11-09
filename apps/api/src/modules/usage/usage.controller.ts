@@ -1,5 +1,5 @@
 import { Controller, ForbiddenException, Get, Query, Request } from "@nestjs/common";
-import { prisma } from "@openclaw/database";
+import { prisma } from "@magobox/database";
 import { Access, AllowExpired } from "../auth/access";
 import { planOf } from "../auth/plans";
 import { dayStamp } from "../channels/assistant/notes";

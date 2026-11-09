@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-vi.mock("@openclaw/database", () => ({ prisma: { aiUsage: { upsert: async () => ({}) } } }));
+vi.mock("@magobox/database", () => ({ prisma: { aiUsage: { upsert: async () => ({}) } } }));
 
 import { AssistantService } from "../src/modules/channels/assistant/assistant.service";
 import { GeminiService, thinkingConfig } from "../src/modules/channels/assistant/gemini.service";

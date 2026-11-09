@@ -1,5 +1,5 @@
 import { Controller, Get, Query, Request, Res, BadRequestException, ServiceUnavailableException } from "@nestjs/common";
-import { prisma } from "@openclaw/database";
+import { prisma } from "@magobox/database";
 import { randomBytes } from "crypto";
 import { AuthService } from "../../auth/auth.service";
 import { StateService } from "../../state/state.service";

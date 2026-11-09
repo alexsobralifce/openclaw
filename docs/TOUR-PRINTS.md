@@ -7,7 +7,7 @@ Resumo, menu, chat, Canais, Documentos, Cofre e Assinatura.
 ## Como gerar
 
 1. Postgres local: `docker compose -f docker-compose.dev.yml up -d postgres` (porta 5433).
-2. Schema local: `DATABASE_URL=postgresql://openclaw:openclaw@localhost:5433/openclaw pnpm --filter @openclaw/database db:push`.
+2. Schema local: `DATABASE_URL=postgresql://openclaw:openclaw@localhost:5433/openclaw pnpm --filter @magobox/database db:push`.
 3. API em outra porta (3011), sem mexer no `dist/` do dia a dia:
    ```
    cd apps/api && ./node_modules/.bin/tsc -p tsconfig.json --outDir .dist-prints

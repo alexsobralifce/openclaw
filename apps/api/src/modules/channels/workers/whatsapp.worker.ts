@@ -1,6 +1,6 @@
 import { Injectable, Logger } from "@nestjs/common";
 import { InboxService } from "../../inbox/inbox.service";
-import type { IncomingMessage } from "@openclaw/types";
+import type { IncomingMessage } from "@magobox/types";
 import { parseWhatsappMessage } from "../whatsapp/parse";
 import { senderPhone } from "../whatsapp/phone";
 

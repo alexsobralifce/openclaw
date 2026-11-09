@@ -4,7 +4,7 @@ import { openNoteRow as plain } from "../src/modules/channels/assistant/list-not
 const rows: any[] = [];
 let seq = 0;
 const match = (r: any, where: any) => Object.entries(where).every(([k, v]) => r[k] === v);
-vi.mock("@openclaw/database", () => ({
+vi.mock("@magobox/database", () => ({
   prisma: {
     listNote: {
       findMany: async ({ where, take }: any) => rows.filter((r) => match(r, where)).slice(0, take ?? 1000),

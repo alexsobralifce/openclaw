@@ -1,5 +1,5 @@
 import { BadRequestException, Body, Controller, Delete, ForbiddenException, Get, NotFoundException, Param, Post, Put, Query, Request, Res } from "@nestjs/common";
-import { prisma } from "@openclaw/database";
+import { prisma } from "@magobox/database";
 import { Access } from "../../auth/access";
 import { AssistantService, MAX_MEDIA_BYTES } from "../assistant/assistant.service";
 import { APP_INSTANCE, isChannelKind } from "../assistant/channel-route";

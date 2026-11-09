@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 
 const rows: any[] = [];
-vi.mock("@openclaw/database", () => ({
+vi.mock("@magobox/database", () => ({
   prisma: {
     memory: {
       findMany: async ({ where }: any) => rows.filter((r) => r.workspaceId === where.workspaceId && (where.kind?.not ? r.kind !== where.kind.not : where.kind ? r.kind === where.kind : true)),

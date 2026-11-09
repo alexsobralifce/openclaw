@@ -6,7 +6,7 @@ const h = vi.hoisted(() => ({
   sent: [] as any[][],
 }));
 
-vi.mock("@openclaw/database", () => ({ prisma: {} }));
+vi.mock("@magobox/database", () => ({ prisma: {} }));
 vi.mock("../src/modules/channels/assistant/openai-chat", async (importOriginal) => ({
   ...(await importOriginal<typeof import("../src/modules/channels/assistant/openai-chat")>()),
   chatCompletion: async (req: { messages: any[] }) => {

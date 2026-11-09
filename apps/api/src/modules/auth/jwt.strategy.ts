@@ -3,7 +3,7 @@ import { ForbiddenException, Injectable, UnauthorizedException } from "@nestjs/c
 import { PassportStrategy } from "@nestjs/passport";
 import { ExtractJwt, Strategy } from "passport-jwt";
 import { tokenFromCookie } from "./session-cookie";
-import { prisma } from "@openclaw/database";
+import { prisma } from "@magobox/database";
 
 interface JwtPayload {
   sub: string;
