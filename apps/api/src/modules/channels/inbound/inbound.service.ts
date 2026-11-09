@@ -47,7 +47,8 @@ export class InboundService implements OnModuleInit, OnModuleDestroy {
   ) {}
 
   onModuleInit() {
-    this.timer = setInterval(() => void this.tick(), TICK_MS);
+    // DESATIVADO PARA MEDIÇÃO: polling do worker em segundo plano
+    // this.timer = setInterval(() => void this.tick(), TICK_MS);
   }
 
   onModuleDestroy() {

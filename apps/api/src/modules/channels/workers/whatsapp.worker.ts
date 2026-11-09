@@ -22,7 +22,10 @@ export class WhatsappWorker {
   constructor(private inbox: InboxService) {}
 
   /** Grava a mensagem do cliente. Devolve null se não for conteúdo (reação, mensagem apagada...) ou se já foi gravada. */
-  async process(workspaceId: string, channelId: string, raw: EvolutionPayload) {
+  async process(workspaceId: string, channelId: string, raw: EvolutionPayload): Promise<any> {
+    // DESATIVADO A PEDIDO PARA TESTE
+    return null;
+    /*
     const { data } = raw;
     const parsed = parseWhatsappMessage(data.message);
     if (!parsed) return null;
@@ -45,5 +48,6 @@ export class WhatsappWorker {
     const res = await this.inbox.processIncoming(msg);
     if (res) this.logger.log(`WhatsApp ${parsed.type} recebido de ${from}`);
     return res;
+    */
   }
 }

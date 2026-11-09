@@ -6,7 +6,7 @@ export default function manifest(): MetadataRoute.Manifest {
     id: "/",
     name: "MagoBox — sua secretária virtual",
     short_name: "MagoBox",
-    description: "Sua secretária virtual: e-mail, agenda, Drive, senhas e clientes, no WhatsApp e no app.",
+    description: "Sua secretária virtual: e-mail, agenda, Drive, senhas e clientes, direto no app.",
     lang: "pt-BR",
     start_url: "/dashboard",
     scope: "/",

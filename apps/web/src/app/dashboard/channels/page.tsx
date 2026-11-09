@@ -5,6 +5,10 @@ import { api } from "@/lib/api";
 import { WhatsappSetup } from "@/components/channels/WhatsappSetup";
 import { SpotifyCard } from "@/components/channels/SpotifyCard";
 
+// Integração automática com WhatsApp e Instagram pausada: o usuário junta contatos manualmente.
+// Para religar, mude para true (o código de canais continua no repositório).
+const INTEGRACAO_WA_IG_ATIVA = false;
+
 export default function ChannelsPage() {
   const [channels, setChannels] = useState<any[]>([]);
   const [showAdd, setShowAdd] = useState(false);
@@ -55,12 +59,12 @@ export default function ChannelsPage() {
         >
           Conectar Google
         </button>
-        <button
+        {INTEGRACAO_WA_IG_ATIVA && <button
           onClick={() => setShowAdd(true)}
           className="flex-1 sm:flex-none flex items-center justify-center gap-2 px-4 py-2 bg-violet-500 hover:bg-violet-400 text-white text-sm font-medium rounded-lg transition-colors"
         >
           <span>+</span> Adicionar canal
-        </button>
+        </button>}
         </div>
       </div>
 
@@ -71,7 +75,7 @@ export default function ChannelsPage() {
       <SpotifyCard onMessage={setGoogleMsg} />
 
       {/* Canal cards */}
-      {channels.length === 0 ? (
+      {INTEGRACAO_WA_IG_ATIVA && (channels.length === 0 ? (
         <div className="border border-dashed border-gray-800 rounded-xl p-12 text-center">
           <div className="w-12 h-12 rounded-xl bg-gray-800 flex items-center justify-center mx-auto mb-3">
             <span className="text-2xl">📱</span>
@@ -85,10 +89,10 @@ export default function ChannelsPage() {
             <ChannelCard key={ch.id} channel={ch} onDelete={load} />
           ))}
         </div>
-      )}
+      ))}
 
       {/* Opções de canal */}
-      {showAdd && (
+      {INTEGRACAO_WA_IG_ATIVA && showAdd && (
         <AddChannelModal onClose={() => setShowAdd(false)} onCreated={(ch) => { setChannels((p) => [...p, ch]); setShowAdd(false); }} />
       )}
     </div>

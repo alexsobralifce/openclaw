@@ -12,7 +12,10 @@ export class InstagramWorker {
   constructor(private inbox: InboxService, private instagram: InstagramService) {}
 
   /** Grava a mensagem do cliente. Devolve null se o canal não existe/está desligado ou se já foi gravada. */
-  async process(ev: InstagramEvent) {
+  async process(ev: InstagramEvent): Promise<any> {
+    // DESATIVADO A PEDIDO PARA TESTE
+    return null;
+    /*
     const channel = await this.instagram.findByAccount(ev.accountId);
     if (!channel || !channel.isActive) {
       this.logger.warn(`Canal do Instagram não encontrado ou desligado para a conta ${ev.accountId}`);
@@ -46,5 +49,6 @@ export class InstagramWorker {
     const res = await this.inbox.processIncoming(msg);
     if (res) this.logger.log(`Instagram ${content.type} recebido de ${ev.senderId}`);
     return res ? { channel, ...res } : null;
+    */
   }
 }
