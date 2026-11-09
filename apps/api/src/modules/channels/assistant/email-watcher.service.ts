@@ -1,5 +1,5 @@
 import { classifyEmail, isHidden } from "./email-filter";
-import { Injectable, Logger, OnModuleDestroy, OnModuleInit } from "@nestjs/common";
+import { Inject, Injectable, Logger, forwardRef } from "@nestjs/common";
 import { prisma } from "@openclaw/database";
 import { GoogleService } from "../../integrations/google/google.service";
 import { AssistantService } from "./assistant.service";
@@ -11,29 +11,22 @@ import { channelOfInstance } from "./channel-route";
 import { StateService } from "../../state/state.service";
 import { notifyOn } from "./notify-prefs";
 
-const INTERVAL_MS = Number(process.env.EMAIL_POLL_SECONDS || 60) * 1000;
+/** Intervalo mínimo entre duas conferências do mesmo workspace (pedidos mais seguidos reaproveitam a última). */
+const MIN_CHECK_MS = 30_000;
 
 @Injectable()
-export class EmailWatcherService implements OnModuleInit, OnModuleDestroy {
+export class EmailWatcherService {
   private readonly logger = new Logger(EmailWatcherService.name);
-  private timer?: NodeJS.Timeout;
-  private running = false;
+  private readonly running = new Map<string, Promise<void>>();
+  private readonly lastStart = new Map<string, number>();
 
   constructor(
     private google: GoogleService,
     private assistant: AssistantService,
-    private menu: MenuService,
+    @Inject(forwardRef(() => MenuService)) private menu: MenuService,
     private webhooks: WebhooksService,
     private state: StateService,
   ) {}
-
-  onModuleInit() {
-    this.timer = setInterval(() => this.tick(), INTERVAL_MS);
-  }
-
-  onModuleDestroy() {
-    if (this.timer) clearInterval(this.timer);
-  }
 
   private lastFailure = new Map<string, { message: string; at: number }>();
 
@@ -49,24 +42,32 @@ export class EmailWatcherService implements OnModuleInit, OnModuleDestroy {
     this.logger.error(`Vigia de e-mail falhou (${workspaceId}); tenta de novo na próxima volta: ${message}`);
   }
 
-  private async tick() {
-    if (this.running) return;
-    this.running = true;
-    try {
-      const channels = await prisma.channel.findMany({
-        where: { type: "EMAIL", config: { path: ["provider"], equals: "google" } },
-      });
-      const byWorkspace = new Map<string, typeof channels>();
-      for (const c of channels) byWorkspace.set(c.workspaceId, [...(byWorkspace.get(c.workspaceId) ?? []), c]);
+  /**
+   * Confere os e-mails novos de um workspace e avisa, só quando o usuário pede (abrir a tela de e-mails ou o comando
+   * "verificar e-mails"). Não há timer: nada roda sozinho. Um workspace não roda duas vezes ao mesmo tempo e não roda
+   * de novo antes de 30 s. Erros são registrados aqui e não chegam a quem pediu.
+   */
+  checkNow(workspaceId: string): Promise<void> {
+    const inFlight = this.running.get(workspaceId);
+    if (inFlight) return inFlight;
+    const last = this.lastStart.get(workspaceId);
+    if (last !== undefined && Date.now() - last < MIN_CHECK_MS) return Promise.resolve();
+    this.lastStart.set(workspaceId, Date.now());
+    const job = this.runWorkspace(workspaceId)
+      .then(() => {
+        this.lastFailure.delete(workspaceId);
+      })
+      .catch((e) => this.logFailure(workspaceId, e))
+      .finally(() => this.running.delete(workspaceId));
+    this.running.set(workspaceId, job);
+    return job;
+  }
 
-      for (const [workspaceId, list] of byWorkspace) {
-        await this.checkWorkspace(workspaceId, list)
-          .then(() => this.lastFailure.delete(workspaceId))
-          .catch((e) => this.logFailure(workspaceId, e));
-      }
-    } finally {
-      this.running = false;
-    }
+  private async runWorkspace(workspaceId: string) {
+    const channels = await prisma.channel.findMany({
+      where: { workspaceId, type: "EMAIL", config: { path: ["provider"], equals: "google" } },
+    });
+    if (channels.length) await this.checkWorkspace(workspaceId, channels);
   }
 
   private async checkWorkspace(workspaceId: string, channels: any[]) {

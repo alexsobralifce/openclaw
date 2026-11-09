@@ -1,4 +1,4 @@
-import { Injectable, Logger } from "@nestjs/common";
+import { Inject, Injectable, Logger, Optional, forwardRef } from "@nestjs/common";
 import { prisma } from "@openclaw/database";
 import { EvolutionService } from "../evolution/evolution.service";
 import { GoogleService } from "../../integrations/google/google.service";
@@ -19,6 +19,7 @@ import { type DriveKind, KIND_LABEL, driveQueryFrom, fileIcon, fmtSize, looksLik
 import { suspiciousReasons } from "./security";
 import { contactQuery, looksLikeContactsRefresh } from "./contacts";
 import { EmailSearchSpec, emailSearchSpec } from "./email-search";
+import { EmailWatcherService } from "./email-watcher.service";
 import { looksLikeEmailBookRefresh } from "./email-book";
 import { cleanSubject, ComposeSeed, composeSeed, extractAddresses, MAX_BODY, verbatimBody } from "./email-compose";
 import { carOptionEnabled, CAR_DISABLED_NOTICE, menuHiddenKey, MENU_ITEMS, sanitizeHidden } from "./menu-items";
@@ -125,6 +126,7 @@ export class MenuService {
     private vault?: VaultService,
     private intents?: IntentService,
     private spotify?: SpotifyService,
+    @Optional() @Inject(forwardRef(() => EmailWatcherService)) private emailWatcher?: EmailWatcherService,
   ) {}
 
   private spotifyAssistant?: SpotifyAssistant;
@@ -173,6 +175,8 @@ export class MenuService {
     await this.touchMode(workspaceId);
     const clean = text.toLowerCase().replace(/[.!?,;:"“”']/g, "").trim();
     const flat = normalize(text);
+    // Comando global: confere os e-mails novos na hora e abre a tela de e-mails (vale também numa tela de digitação)
+    if (/^verificar e-?mails?$/.test(flat)) return this.emailsEntry(workspaceId);
     const isInput = !!st && st.screen.endsWith("_input");
     let n: number | null = null;
     if (/^\d{1,2}$/.test(clean)) n = Number(clean);
@@ -1346,7 +1350,10 @@ _Ou 0 para voltar._`;
   }
 
   private async runAction(ws: string, opt: any) {
-    if (opt.type === "emails") return this.emailList(ws, opt.account);
+    if (opt.type === "emails") {
+      await this.emailWatcher?.checkNow(ws);
+      return this.emailList(ws, opt.account);
+    }
     if (opt.type === "emails_pick") return this.emailsEntry(ws);
     if (opt.type === "agenda") return this.agendaMenu(ws);
     if (opt.type === "clients") return this.clientList(ws);
@@ -2597,6 +2604,7 @@ _Ou 0 para voltar._`;
 
   /** Com mais de uma conta, pergunta qual (Pessoal ou IFCE); com uma, abre direto. */
   private async emailsEntry(ws: string) {
+    await this.emailWatcher?.checkNow(ws);
     const accounts = await this.google.listAccounts(ws);
     if (accounts.length === 0) return this.noGoogle();
     if (accounts.length === 1) return this.emailList(ws, accounts[0]);
