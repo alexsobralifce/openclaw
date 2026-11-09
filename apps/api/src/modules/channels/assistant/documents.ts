@@ -261,6 +261,9 @@ export function looksLikeReclassify(flat: string): boolean {
 }
 
 /** A nota veio de um PDF ou foto? (`renderNote` grava "origem: arquivo" nas propriedades do topo). */
+/** "organizar pastas": manda os PDFs para as pastas das categorias (só quando o usuário pede). */
+export const looksLikeOrganize = (flat: string) => /\borganiz\w*\s+(as\s+|os\s+)?pastas?\b/.test(flat);
+
 export const isFileOriginNote = (content: string) => /^---\r?\n[\s\S]*?\borigem:\s*arquivo\b[\s\S]*?\r?\n---/.test(content);
 
 /** Quantas notas por rodada (cada uma custa uma chamada de IA) e quantas no máximo se abrem para checar a origem. */

@@ -4,7 +4,11 @@ const rows: any[] = [];
 vi.mock("@magobox/database", () => ({
   prisma: {
     document: {
-      findFirst: async ({ where }: any) => rows.find((r) => Object.entries(where).every(([k, v]) => r[k] === v)) ?? null,
+      // devolve cópia, como o Prisma: a leitura "antes" não muda quando o update grava
+      findFirst: async ({ where }: any) => {
+        const r = rows.find((x) => Object.entries(where).every(([k, v]) => x[k] === v));
+        return r ? { ...r } : null;
+      },
       findMany: async ({ where }: any) => rows.filter((r) => r.workspaceId === where.workspaceId).sort((a, b) => b.createdAt - a.createdAt),
       aggregate: async ({ where }: any) => {
         const mine = rows.filter((r) => r.workspaceId === where.workspaceId);
@@ -222,3 +226,55 @@ describe("biblioteca: categorias (criar e apagar)", () => {
     await expect(c.removeCat(req(), "Nada")).rejects.toThrow(/não encontrada/);
   });
 });
+
+describe("categoria nova move o PDF no Drive", () => {
+  const moverOk = () => ({ documentMove: vi.fn(async () => {}) });
+
+  it("trocar a categoria chama documentMove uma vez, com a categoria nova", async () => {
+    const d = seed({ title: "Contrato", topic: "Contratos" });
+    const google = moverOk();
+    await ctrl(google).update(req(), d.id, { topic: "Finanças" } as any);
+    expect(google.documentMove).toHaveBeenCalledTimes(1);
+    expect(google.documentMove).toHaveBeenCalledWith("w1", d.driveFileId, "Finanças", "pessoal@gmail.com");
+  });
+
+  it("repetir a mesma categoria não move nada", async () => {
+    const d = seed({ title: "Contrato", topic: "Contratos" });
+    const google = moverOk();
+    await ctrl(google).update(req(), d.id, { topic: "Contratos" } as any);
+    expect(google.documentMove).not.toHaveBeenCalled();
+  });
+
+  it("falha no Drive mantém a ficha com a categoria nova", async () => {
+    const d = seed({ title: "Contrato", topic: "Contratos" });
+    const google = { documentMove: vi.fn(async () => { throw new Error("Google API 403: x"); }) };
+    const out = (await ctrl(google).update(req(), d.id, { topic: "Finanças" } as any)) as any;
+    expect(out.topic).toBe("Finanças");
+    expect(rows.find((r) => r.id === d.id).topic).toBe("Finanças");
+  });
+
+  it("apagar categoria manda os PDFs dela para Sem categoria, uma vez cada; nenhum é apagado", async () => {
+    seed({ title: "A", topic: "Contratos" });
+    seed({ title: "B", topic: "Contratos" });
+    seed({ title: "C", topic: "Saúde" });
+    const google = moverOk();
+    await ctrl(google).removeCat(req(), "Contratos");
+    expect(google.documentMove).toHaveBeenCalledTimes(2);
+    expect(google.documentMove.mock.calls.every((c: any[]) => c[2] === "Sem categoria")).toBe(true);
+    expect(rows).toHaveLength(3);
+  });
+
+  it("organizar pastas: 50 por chamada, e a próxima chamada segue do ponto em que parou", async () => {
+    for (let i = 0; i < 120; i++) seed({ title: `Doc ${i}`, topic: "Contratos" });
+    const google = moverOk();
+    const c = ctrl(google);
+    const primeiro = (await c.organize(req(), "0")) as any;
+    expect(primeiro).toMatchObject({ processed: 50, moved: 50, nextOffset: 50 });
+    const segundo = (await c.organize(req(), "50")) as any;
+    expect(segundo).toMatchObject({ processed: 50, nextOffset: 100 });
+    const ultimo = (await c.organize(req(), "100")) as any;
+    expect(ultimo).toMatchObject({ processed: 20, nextOffset: null });
+    expect(google.documentMove).toHaveBeenCalledTimes(120);
+  });
+});
+

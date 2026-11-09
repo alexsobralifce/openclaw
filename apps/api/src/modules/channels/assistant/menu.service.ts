@@ -30,9 +30,9 @@ import { label as trackLabel, SpotifyAssistant } from "../spotify/spotify-assist
 import { SpotifyCmd, spotifyCommand } from "../spotify/spotify-commands";
 // import normal (não `import type`): o Nest precisa da classe em tempo de execução para injetar
 import { SpotifyService } from "../spotify/spotify.service";
-import { applyTagEdit, categoryKey, categoryQuery, cleanCategory, MAX_CUSTOM_CATEGORIES, NO_CATEGORY, parseCategoryCreate, parseCategoryDelete, docFileName, docQuery, docsInCategory, looksLikeCategoriesList, matchCategory, parseCategoryEdit, topCategories, isFileOriginNote, looksLikeDocsHome, looksLikeReclassify, looksLikeTagsList, RECLASSIFY_BATCH, RECLASSIFY_MAX_READS, parseDocPlan, parseTagEdit, searchTerms, tagsLine, topTags } from "./documents";
+import { applyTagEdit, categoryKey, categoryQuery, cleanCategory, MAX_CUSTOM_CATEGORIES, NO_CATEGORY, parseCategoryCreate, parseCategoryDelete, docFileName, docQuery, docsInCategory, looksLikeCategoriesList, matchCategory, parseCategoryEdit, topCategories, isFileOriginNote, looksLikeDocsHome, looksLikeReclassify, looksLikeTagsList, RECLASSIFY_BATCH, RECLASSIFY_MAX_READS, parseDocPlan, parseTagEdit, looksLikeOrganize, searchTerms, tagsLine, topTags } from "./documents";
 import { isCloseTie, searchGraph } from "./document-graph";
-import { allCategories, createCategory, deleteCategory } from "./document-categories";
+import { allCategories, createCategory, deleteCategory, moveDocumentFile, organizeDocumentsBatch } from "./document-categories";
 import { catalogedDriveIds, createDocument, deleteDocument, docIndex, getDocument, listDocuments, setDocumentsTopic, setDocumentTags, updateDocument } from "./documents-store";
 import { pdfPageCount } from "./media-limits";
 import { chatCompletion } from "./openai-chat";
@@ -2059,6 +2059,7 @@ _Ou 0 para voltar._`;
     const catCmd = this.categoryCommand(ws, text);
     if (catCmd) return catCmd;
     if (looksLikeReclassify(f)) return this.docsReclassify(ws);
+    if (looksLikeOrganize(f)) return this.docsOrganize(ws);
     if (parseTagEdit(text) || parseCategoryEdit(text)) return "🤔 Abra primeiro o documento (busque e escolha o número) e então diga as tags ou a categoria.";
     const cat = categoryQuery(f);
     if (cat) return this.categoryDocsView(ws, cat);
@@ -2138,6 +2139,7 @@ _Ou 0 para voltar._`;
   private async categoryDelete(ws: string, name: string): Promise<string> {
     const r = await deleteCategory(this.state, ws, name);
     if (!r.ok) return this.categoriesView(ws, `🤔 Não achei a categoria *${short(name, 30)}*.`);
+    for (const d of r.docs) await moveDocumentFile(this.google, ws, d, NO_CATEGORY); // a pasta da categoria fica no Drive
     return this.categoriesView(ws, `✅ *Categoria apagada:* ${short(name, 30)}${r.moved ? `\n📄 ${r.moved} ${r.moved === 1 ? "documento foi" : "documentos foram"} para *${NO_CATEGORY}*.` : ""}`);
   }
 
@@ -2194,6 +2196,8 @@ _Ou 0 para voltar._`;
     // Reaproveita a grafia de uma categoria que já existe ("saude" → "Saúde")
     const known = (await this.allCategories(ws)).find((c) => categoryKey(c.name) === categoryKey(name));
     const updated = await updateDocument(ws, id, { topic: known?.name ?? name });
+    // a ficha já mudou; o PDF acompanha a categoria (só quando ela mudou de fato)
+    if (updated && updated.topic !== doc.topic) await moveDocumentFile(this.google, ws, updated, updated.topic);
     return this.docCardView(ws, updated ?? doc, updated ? "✅ *Categoria atualizada*" : "😕 _Não consegui mudar a categoria._");
   }
 
@@ -2202,6 +2206,28 @@ _Ou 0 para voltar._`;
    * como o PDF original nunca foi guardado, a ficha é do tipo "nota"). Roda em lotes pequenos, porque cada nota custa uma chamada
    * de IA; pedir de novo continua de onde parou. As notas já checadas que não vieram de arquivo ficam anotadas para não serem relidas.
    */
+  /** "organizar pastas": manda todos os PDFs do catálogo para as pastas das categorias, em lotes de 50. Só por pedido. */
+  private async docsOrganize(ws: string): Promise<string> {
+    let offset: number | null = 0;
+    let moved = 0;
+    let failed = 0;
+    while (offset !== null) {
+      const r = await organizeDocumentsBatch(this.google, ws, offset);
+      moved += r.moved;
+      failed += r.failed;
+      offset = r.nextOffset;
+    }
+    return [
+      head("📂", "Documentos"),
+      `✅ Organizei ${moved} PDF(s) nas pastas das categorias.`,
+      failed ? `⚠️ ${failed} não puderam ser movidos. Confira no Google Drive.` : "",
+      DIV,
+      "_Diga 0 para voltar._",
+    ]
+      .filter(Boolean)
+      .join("\n");
+  }
+
   private async docsReclassify(ws: string): Promise<string> {
     if (!this.gemini?.enabled()) return "🔌 Para sugerir tags preciso do Gemini configurado no servidor (GEMINI_API_KEY).";
     const target = storageAccount(await this.google.listAccounts(ws));

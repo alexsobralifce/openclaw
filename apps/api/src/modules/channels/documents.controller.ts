@@ -5,7 +5,7 @@ import { AssistantService, MAX_MEDIA_BYTES } from "./assistant/assistant.service
 import { commanderForUser } from "./assistant/commander";
 import { GoogleService } from "../integrations/google/google.service";
 import { StateService } from "../state/state.service";
-import { allCategories, createCategory, deleteCategory } from "./assistant/document-categories";
+import { allCategories, createCategory, deleteCategory, moveDocumentFile, organizeDocumentsBatch } from "./assistant/document-categories";
 import { cleanTag, docsInCategory, MAX_TAGS, NO_CATEGORY, topTags } from "./assistant/documents";
 import { searchGraph } from "./assistant/document-graph";
 import { deleteDocument, docIndex, getDocument, listDocuments, updateDocument } from "./assistant/documents-store";
@@ -121,14 +121,27 @@ export class DocumentsController {
       if (r.reason === "fixed") throw new BadRequestException(`"${NO_CATEGORY}" não pode ser apagada.`);
       throw new NotFoundException("Categoria não encontrada.");
     }
+    // a pasta da categoria apagada fica no Drive; só os PDFs que estavam nela vão para "Sem categoria"
+    for (const d of r.docs) await moveDocumentFile(this.google, ws, d, NO_CATEGORY);
     return { moved: r.moved, categories: await allCategories(this.state, ws) };
   }
 
   @Patch(":id")
   async update(@Request() req: any, @Param("id") id: string, @Body() body: UpdateDocumentDto) {
-    const d = await updateDocument(this.ws(req), id, { title: body.title, topic: body.topic, tags: body.tags });
+    const ws = this.ws(req);
+    const before = await getDocument(ws, id);
+    const d = await updateDocument(ws, id, { title: body.title, topic: body.topic, tags: body.tags });
     if (!d) throw new NotFoundException("Documento não encontrado.");
+    // banco primeiro; se a categoria mudou, o PDF acompanha (falha do Drive não desfaz a ficha)
+    if (before && d.topic !== before.topic) await moveDocumentFile(this.google, ws, d, d.topic);
     return view(d);
+  }
+
+  /** Organiza os PDFs nas pastas das categorias, 50 por chamada. Continue com `offset = nextOffset` até vir null. Só por pedido. */
+  @Post("organize")
+  async organize(@Request() req: any, @Query("offset") offset?: string) {
+    const off = Math.max(0, Math.trunc(Number(offset) || 0));
+    return organizeDocumentsBatch(this.google, this.ws(req), off);
   }
 
   /** Apaga: o PDF vai para a lixeira do Drive (30 dias) e a ficha sai. Ficha de nota antiga só sai do catálogo. */

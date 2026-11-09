@@ -762,7 +762,7 @@ export class GoogleService implements OnModuleInit {
   /** Id da pasta Assist.IA/Documentos, ou null se ainda não existe. */
   private async documentsFolder(workspaceId: string, account?: string): Promise<string | null> {
     const root = await this.driveFirst(workspaceId, account, `name='${NOTES_FOLDER}' and mimeType='${FOLDER_MIME}' and trashed=false`);
-    return root ? this.driveFirst(workspaceId, account, `name='${DOCS_FOLDER}' and mimeType='${FOLDER_MIME}' and '${root}' in parents and trashed=false`) : null;
+    return (root && (await this.driveFirst(workspaceId, account, `name='${DOCS_FOLDER}' and mimeType='${FOLDER_MIME}' and '${root}' in parents and trashed=false`))) || null;
   }
 
   /** O arquivo está em Documentos (pai direto) ou numa subpasta de categoria (avô). */

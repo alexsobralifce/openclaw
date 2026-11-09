@@ -41,6 +41,7 @@ function build(opts: { gemini?: boolean; accounts?: string[]; extract?: string; 
     listAccounts: async () => opts.accounts ?? ["pessoal@gmail.com"],
     documentStore: vi.fn(async () => ({ id: "drivefile01", link: "x" })),
     documentTrash: vi.fn(async () => {}),
+    documentMove: vi.fn(async () => {}),
     driveFile: vi.fn(async (_ws: string, id: string) => ({ nome: `arquivo-${id}.pdf`, mime: "application/pdf", base64: "QUJD" })),
   };
   Object.assign(google, opts.google ?? {});
@@ -497,9 +498,19 @@ describe("categorias: escolher ao guardar, criar, listar e apagar", () => {
     expect(rows[0].topic).toBe("Viagens de trabalho");
   });
 
+  it("organizar pastas: manda os PDFs do catálogo para as pastas das categorias, e só quando pedido", async () => {
+    seed({ topic: "Saúde" });
+    seed({ topic: "Contratos" });
+    const { say, google } = build();
+    expect(google.documentMove).not.toHaveBeenCalled(); // guardar e listar não movem nada
+    await say("documentos");
+    expect(await say("organizar pastas")).toContain("Organizei 2 PDF");
+    expect(google.documentMove).toHaveBeenCalledTimes(2);
+  });
+
   it("criar categoria vazia, listar e apagar (os documentos vão para Sem categoria)", async () => {
     seed({ topic: "Saúde" });
-    const { say, screen } = build();
+    const { say, screen, google } = build();
     expect(await say("criar categoria Faculdade")).toContain("Categoria criada");
     const list = await say("categorias");
     expect(list).toContain("Faculdade · 0");
@@ -511,6 +522,7 @@ describe("categorias: escolher ao guardar, criar, listar e apagar", () => {
     expect(await say("1")).toContain("Categoria apagada");
     expect(rows).toHaveLength(1);
     expect(rows[0].topic).toBe("Sem categoria");
+    expect(google.documentMove).toHaveBeenCalledWith("w1", rows[0].driveFileId, "Sem categoria", rows[0].account);
     // a vazia some sem mover nada
     await say("apagar categoria faculdade");
     expect(await say("sim")).toContain("Categoria apagada");
