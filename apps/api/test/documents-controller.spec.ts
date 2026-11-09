@@ -6,6 +6,10 @@ vi.mock("@magobox/database", () => ({
     document: {
       findFirst: async ({ where }: any) => rows.find((r) => Object.entries(where).every(([k, v]) => r[k] === v)) ?? null,
       findMany: async ({ where }: any) => rows.filter((r) => r.workspaceId === where.workspaceId).sort((a, b) => b.createdAt - a.createdAt),
+      aggregate: async ({ where }: any) => {
+        const mine = rows.filter((r) => r.workspaceId === where.workspaceId);
+        return { _count: { _all: mine.length }, _max: { updatedAt: null } };
+      },
       updateMany: async ({ where, data }: any) => {
         const hit = rows.filter((r) => (where.id?.in ? where.id.in.includes(r.id) : r.id === where.id) && r.workspaceId === where.workspaceId);
         hit.forEach((r) => Object.assign(r, data));
@@ -21,6 +25,7 @@ vi.mock("@magobox/database", () => ({
 }));
 
 import { DocumentsController } from "../src/modules/channels/documents.controller";
+import { docIndex } from "../src/modules/channels/assistant/documents-store";
 
 const req = (ws = "w1") => ({ user: { workspaces: [{ workspaceId: ws }] } });
 let n = 0;
@@ -45,6 +50,24 @@ beforeEach(() => {
   rows.length = 0;
   kv.clear();
   n = 0;
+  // o índice é um singleton; as fixtures mudam a cada teste, então cada teste começa sem cache
+  docIndex.invalidate("w1");
+  docIndex.invalidate("w2");
+});
+
+describe("biblioteca: busca por grafo", () => {
+  it("'unimed' acha o documento da categoria Saúde com a tag plano-de-saude, com o motivo", async () => {
+    seed({ title: "Consulta na Unimed", topic: "Saúde", tags: ["unimed", "plano-de-saude"] });
+    seed({ title: "Carteirinha", topic: "Saúde", tags: ["plano-de-saude"] });
+    seed({ title: "Contrato de aluguel", topic: "Contratos", tags: ["aluguel"] });
+    const r = await ctrl().list(req(), "unimed");
+    const titles = r.documents.map((d: any) => d.title);
+    expect(titles).toContain("Carteirinha");
+    expect(titles).not.toContain("Contrato de aluguel");
+    const carteirinha = r.documents.find((d: any) => d.title === "Carteirinha") as any;
+    expect(carteirinha.reasons).toContain("vizinha de tag unimed");
+    expect(carteirinha.topic).toBe("Saúde");
+  });
 });
 
 describe("biblioteca: listar e filtrar", () => {
@@ -62,9 +85,12 @@ describe("biblioteca: listar e filtrar", () => {
     seed({ title: "Contrato de aluguel", tags: ["contrato", "aluguel"] });
     seed({ title: "Exame de sangue", topic: "Saúde", tags: ["saude", "exame"] });
     seed({ title: "Contrato de estágio", tags: ["contrato", "estagio"] });
-    expect((await ctrl().list(req(), "estagio")).documents.map((d) => d.title)).toEqual(["Contrato de estágio"]);
+    // o acerto direto vem primeiro; o grafo acrescenta o vizinho por tag ("contrato") com o motivo
+    const porEstagio = (await ctrl().list(req(), "estagio")).documents as any[];
+    expect(porEstagio[0].title).toBe("Contrato de estágio");
+    expect(porEstagio[0].reasons).toContain("tag estagio");
     expect((await ctrl().list(req(), undefined, "contrato")).documents).toHaveLength(2);
-    expect((await ctrl().list(req(), "estagio", "contrato")).documents).toHaveLength(1);
+    expect((await ctrl().list(req(), "estagio", "contrato")).documents.map((d) => d.title)).toContain("Contrato de estágio");
     expect((await ctrl().list(req(), "estagio", "saude")).documents).toHaveLength(0);
     // a tag do filtro também é limpa (#Saúde → saude)
     expect((await ctrl().list(req(), undefined, "#Saúde")).documents.map((d) => d.title)).toEqual(["Exame de sangue"]);

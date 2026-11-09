@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildDocGraph, searchGraph } from "../src/modules/channels/assistant/document-graph";
+import { buildDocGraph, isCloseTie, searchGraph } from "../src/modules/channels/assistant/document-graph";
 import type { DocLike } from "../src/modules/channels/assistant/documents";
 
 const doc = (id: string, over: Partial<DocLike> & { createdAt?: string } = {}): DocLike => ({
@@ -79,5 +79,11 @@ describe("buildDocGraph e searchGraph", () => {
     expect(tBuild).toBeLessThan(50);
     expect(tSearch).toBeLessThan(20);
     expect(hits.length).toBeGreaterThan(0);
+  });
+
+  it("empate só vale quando o segundo tem pelo menos 90% da nota do primeiro", () => {
+    expect(isCloseTie([{ id: "a", score: 1, reasons: [] }, { id: "b", score: 0.95, reasons: [] }])).toBe(true);
+    expect(isCloseTie([{ id: "a", score: 1, reasons: [] }, { id: "b", score: 0.5, reasons: [] }])).toBe(false);
+    expect(isCloseTie([{ id: "a", score: 1, reasons: [] }])).toBe(false);
   });
 });

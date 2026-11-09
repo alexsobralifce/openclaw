@@ -30,9 +30,10 @@ import { label as trackLabel, SpotifyAssistant } from "../spotify/spotify-assist
 import { SpotifyCmd, spotifyCommand } from "../spotify/spotify-commands";
 // import normal (não `import type`): o Nest precisa da classe em tempo de execução para injetar
 import { SpotifyService } from "../spotify/spotify.service";
-import { applyTagEdit, categoryKey, categoryQuery, cleanCategory, MAX_CUSTOM_CATEGORIES, NO_CATEGORY, parseCategoryCreate, parseCategoryDelete, docFileName, docQuery, docsInCategory, looksLikeCategoriesList, matchCategory, parseCategoryEdit, topCategories, isFileOriginNote, looksLikeDocsHome, looksLikeReclassify, looksLikeTagsList, RECLASSIFY_BATCH, RECLASSIFY_MAX_READS, parseDocPlan, parseTagEdit, searchDocs, searchTerms, tagsLine, topTags } from "./documents";
+import { applyTagEdit, categoryKey, categoryQuery, cleanCategory, MAX_CUSTOM_CATEGORIES, NO_CATEGORY, parseCategoryCreate, parseCategoryDelete, docFileName, docQuery, docsInCategory, looksLikeCategoriesList, matchCategory, parseCategoryEdit, topCategories, isFileOriginNote, looksLikeDocsHome, looksLikeReclassify, looksLikeTagsList, RECLASSIFY_BATCH, RECLASSIFY_MAX_READS, parseDocPlan, parseTagEdit, searchTerms, tagsLine, topTags } from "./documents";
+import { isCloseTie, searchGraph } from "./document-graph";
 import { allCategories, createCategory, deleteCategory } from "./document-categories";
-import { catalogedDriveIds, createDocument, deleteDocument, getDocument, listDocuments, setDocumentsTopic, setDocumentTags, updateDocument } from "./documents-store";
+import { catalogedDriveIds, createDocument, deleteDocument, docIndex, getDocument, listDocuments, setDocumentsTopic, setDocumentTags, updateDocument } from "./documents-store";
 import { pdfPageCount } from "./media-limits";
 import { chatCompletion } from "./openai-chat";
 import { StateService } from "../../state/state.service";
@@ -2010,7 +2011,15 @@ _Ou 0 para voltar._`;
   private async docsSearchView(ws: string, query: string): Promise<string> {
     const docs = await listDocuments(ws);
     if (!docs.length) return this.docsEntry(ws);
-    let found = searchDocs(docs, query);
+    // Busca pelo grafo (sem IA). O Jev só desempata quando os dois primeiros ficam a menos de 10% um do outro.
+    const hits = searchGraph(await docIndex.get(ws), query, { limit: docs.length });
+    const byId = new Map(docs.map((d) => [d.id, d]));
+    let found = hits.flatMap((h) => (byId.get(h.id) ? [byId.get(h.id)!] : []));
+    if (found.length >= 2 && isCloseTie(hits)) {
+      const top = found.slice(0, 8);
+      const pick = await this.intents?.pickFile(query, top.map((d) => ({ nome: d.title })));
+      if (pick !== null && pick !== undefined && top[pick]) found = [top[pick], ...found.filter((d) => d !== top[pick])];
+    }
     if (!found.length) {
       const terms = searchTerms(query);
       const near = docs

@@ -128,6 +128,8 @@ export interface DocumentView {
   pages: number | null;
   origin: string;
   createdAt: string;
+  /** Motivo do acerto na busca (ex.: "tag unimed", "vizinha de tag unimed"); só vem com `q`. */
+  reasons?: string[];
 }
 
 /** Mensagem do chat do assistente no app. */

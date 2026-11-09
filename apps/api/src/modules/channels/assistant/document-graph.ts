@@ -281,3 +281,8 @@ export function searchGraph(g: DocGraph, query: string, opts: SearchOptions = {}
   hits.sort((a, b) => b.score - a.score || byTimeThenId(g)(a.id, b.id));
   return hits.slice(0, limit);
 }
+
+/** Empate entre os dois primeiros: o segundo tem pelo menos 90% da nota do primeiro. Só nesse caso vale perguntar ao Jev. */
+export function isCloseTie(hits: GraphHit[]): boolean {
+  return hits.length >= 2 && hits[1].score >= hits[0].score * 0.9;
+}

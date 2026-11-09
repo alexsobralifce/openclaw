@@ -6,8 +6,9 @@ import { commanderForUser } from "./assistant/commander";
 import { GoogleService } from "../integrations/google/google.service";
 import { StateService } from "../state/state.service";
 import { allCategories, createCategory, deleteCategory } from "./assistant/document-categories";
-import { cleanTag, docsInCategory, MAX_TAGS, NO_CATEGORY, searchDocs, topTags } from "./assistant/documents";
-import { deleteDocument, getDocument, listDocuments, updateDocument } from "./assistant/documents-store";
+import { cleanTag, docsInCategory, MAX_TAGS, NO_CATEGORY, topTags } from "./assistant/documents";
+import { searchGraph } from "./assistant/document-graph";
+import { deleteDocument, docIndex, getDocument, listDocuments, updateDocument } from "./assistant/documents-store";
 
 class UploadDocumentDto {
   @IsString()
@@ -62,15 +63,28 @@ export class DocumentsController {
   /** Lista com busca (`q`: tag, título, assunto ou resumo) e filtros por tag (`tag`) e categoria (`category`); devolve também as tags e as categorias com a contagem. */
   @Get()
   async list(@Request() req: any, @Query("q") q?: string, @Query("tag") tag?: string, @Query("category") category?: string) {
-    const all = await listDocuments(this.ws(req));
-    let docs = q?.trim() ? searchDocs(all, q.slice(0, 80)) : all;
+    const ws = this.ws(req);
+    const all = await listDocuments(ws);
+    let docs = all;
+    const why = new Map<string, string[]>();
+    if (q?.trim()) {
+      // a busca não chama IA: o grafo do workspace (cacheado) dá a ordem e o motivo de cada acerto
+      const hits = searchGraph(await docIndex.get(ws), q.slice(0, 80), { limit: all.length });
+      const byId = new Map(all.map((d) => [d.id, d]));
+      docs = hits.flatMap((h) => {
+        const d = byId.get(h.id);
+        if (d) why.set(h.id, h.reasons);
+        return d ? [d] : [];
+      });
+    }
     const t = cleanTag(tag);
     if (t) docs = docs.filter((d) => d.tags.includes(t));
     if (category?.trim()) {
       const inCat = new Set(docsInCategory(docs, category.slice(0, 60)).map((d) => d.id));
       docs = docs.filter((d) => inCat.has(d.id));
     }
-    return { documents: docs.map(view), tags: topTags(all, 50), categories: await allCategories(this.state, this.ws(req), all), total: all.length };
+    const documents = docs.map((d) => ({ ...view(d), ...(why.has(d.id) ? { reasons: why.get(d.id) } : {}) }));
+    return { documents, tags: topTags(all, 50), categories: await allCategories(this.state, ws, all), total: all.length };
   }
 
   /** Guarda um PDF novo no Drive e no catálogo. Com `category`, vale a escolhida (nova ou existente); sem ela, a IA sugere. */

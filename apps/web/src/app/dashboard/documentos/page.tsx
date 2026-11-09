@@ -321,6 +321,7 @@ export default function DocumentosPage() {
               <span aria-hidden className="text-2xl leading-none">{d.kind === "pdf" ? "📄" : "📝"}</span>
               <div className="min-w-0 flex-1">
                 <h2 className="font-medium text-gray-200 break-words">{d.title}</h2>
+                {d.reasons?.length ? <p className="text-xs text-gray-400 break-words">Achei por: {d.reasons.join(", ")}</p> : null}
                 <p className="text-xs text-gray-500">
                   {new Date(d.createdAt).toLocaleDateString("pt-BR")}
                   {d.sizeBytes ? ` · ${fileSizeLabel(d.sizeBytes)}` : ""}
