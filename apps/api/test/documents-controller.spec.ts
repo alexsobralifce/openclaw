@@ -228,14 +228,14 @@ describe("biblioteca: categorias (criar e apagar)", () => {
 });
 
 describe("categoria nova move o PDF no Drive", () => {
-  const moverOk = () => ({ documentMove: vi.fn(async () => {}) });
+  const moverOk = () => ({ documentMove: vi.fn(async () => true) });
 
   it("trocar a categoria chama documentMove uma vez, com a categoria nova", async () => {
     const d = seed({ title: "Contrato", topic: "Contratos" });
     const google = moverOk();
     await ctrl(google).update(req(), d.id, { topic: "Finanças" } as any);
     expect(google.documentMove).toHaveBeenCalledTimes(1);
-    expect(google.documentMove).toHaveBeenCalledWith("w1", d.driveFileId, "Finanças", "pessoal@gmail.com");
+    expect(google.documentMove).toHaveBeenCalledWith("w1", d.driveFileId, "Finanças", "pessoal@gmail.com", expect.any(Map));
   });
 
   it("repetir a mesma categoria não move nada", async () => {
@@ -264,17 +264,21 @@ describe("categoria nova move o PDF no Drive", () => {
     expect(rows).toHaveLength(3);
   });
 
-  it("organizar pastas: 50 por chamada, e a próxima chamada segue do ponto em que parou", async () => {
-    for (let i = 0; i < 120; i++) seed({ title: `Doc ${i}`, topic: "Contratos" });
+  it("organizar pastas: no máximo 50 PDFs por chamada, e a resposta diz quantos sobraram", async () => {
+    for (let i = 0; i < 60; i++) seed({ title: `Doc ${i}`, topic: "Contratos" });
     const google = moverOk();
-    const c = ctrl(google);
-    const primeiro = (await c.organize(req(), "0")) as any;
-    expect(primeiro).toMatchObject({ processed: 50, moved: 50, nextOffset: 50 });
-    const segundo = (await c.organize(req(), "50")) as any;
-    expect(segundo).toMatchObject({ processed: 50, nextOffset: 100 });
-    const ultimo = (await c.organize(req(), "100")) as any;
-    expect(ultimo).toMatchObject({ processed: 20, nextOffset: null });
-    expect(google.documentMove).toHaveBeenCalledTimes(120);
+    const r = (await ctrl(google).organize(req())) as any;
+    expect(r).toMatchObject({ moved: 50, remaining: 10 });
+    expect(google.documentMove).toHaveBeenCalledTimes(50);
+  });
+
+  it("apagar categoria com mais de 50 PDFs move só 50, não apaga nenhum e informa quantos ficaram", async () => {
+    for (let i = 0; i < 60; i++) seed({ title: `Doc ${i}`, topic: "Contratos" });
+    const google = moverOk();
+    const r = (await ctrl(google).removeCat(req(), "Contratos")) as any;
+    expect(google.documentMove).toHaveBeenCalledTimes(50);
+    expect(r.pendentes).toBe(10);
+    expect(rows).toHaveLength(60);
   });
 });
 

@@ -7,46 +7,58 @@ import { listDocuments, setDocumentsTopic } from "./documents-store";
 
 /** O que o Drive precisa para mover o PDF (o GoogleService cumpre). */
 export interface DocFileMover {
-  documentMove(workspaceId: string, fileId: string, category: string | undefined, account?: string): Promise<void>;
+  documentMove(workspaceId: string, fileId: string, category: string | undefined, account?: string, folders?: Map<string, string>): Promise<boolean>;
 }
 
 const moveLog = new Logger("Documentos");
+
+/** "moved": foi para a pasta nova; "unchanged": já estava lá (ou não é PDF); "failed": o Drive recusou. */
+export type MoveOutcome = "moved" | "unchanged" | "failed";
 
 /**
  * Leva o PDF para a pasta da categoria. Depois que a ficha mudou no banco: se o Drive falhar, a ficha continua mudada,
  * o erro fica no log e o arquivo segue onde estava. Notas antigas (kind "nota") não são movidas.
  */
-export async function moveDocumentFile(mover: DocFileMover, ws: string, d: { kind?: string; driveFileId: string; account: string }, category: string): Promise<boolean> {
-  if (d.kind && d.kind !== "pdf") return false;
+export async function moveDocumentFile(
+  mover: DocFileMover,
+  ws: string,
+  d: { kind?: string; driveFileId: string; account: string },
+  category: string,
+  folders = new Map<string, string>(),
+): Promise<MoveOutcome> {
+  if (d.kind && d.kind !== "pdf") return "unchanged";
   try {
-    await mover.documentMove(ws, d.driveFileId, category, d.account);
-    return true;
+    return (await mover.documentMove(ws, d.driveFileId, category, d.account, folders)) ? "moved" : "unchanged";
   } catch (e: any) {
     moveLog.warn(`Não consegui mover o arquivo ${d.driveFileId} para a pasta "${category || NO_CATEGORY}": ${e?.message ?? e}`);
-    return false;
+    return "failed";
   }
 }
 
-/** Quantos PDFs de cada lote do "organizar pastas" (cada um é uma chamada ao Drive). */
+/**
+ * Teto de PDFs que mudam (ou falham) por chamada do "organizar pastas": cada um custa ~6 a 7 chamadas ao Drive.
+ * Quem já está no lugar não conta para o teto. Cada chamada recomeça do início; como os já organizados não geram
+ * movimento, a sequência de chamadas termina quando sobra zero.
+ */
 export const ORGANIZE_BATCH = 50;
 
-/** Manda um lote de PDFs (a partir de `offset`, do mais novo) para as pastas das categorias. Idempotente: quem já está no lugar não muda. */
+/** Organiza os PDFs nas pastas das categorias, até ORGANIZE_BATCH mudanças. `remaining` = PDFs que ficaram sem visita. */
 export async function organizeDocumentsBatch(
   mover: DocFileMover,
   ws: string,
-  offset: number,
-): Promise<{ processed: number; moved: number; failed: number; nextOffset: number | null }> {
-  const docs = await listDocuments(ws, 5000);
-  const batch = docs.slice(offset, offset + ORGANIZE_BATCH);
+): Promise<{ moved: number; failed: number; remaining: number }> {
+  const docs = (await listDocuments(ws, 5000)).filter((d) => d.kind === "pdf");
+  const folders = new Map<string, string>();
   let moved = 0;
   let failed = 0;
-  for (const d of batch) {
-    if (d.kind !== "pdf") continue;
-    if (await moveDocumentFile(mover, ws, d, d.topic)) moved++;
-    else failed++;
+  let i = 0;
+  while (i < docs.length && moved + failed < ORGANIZE_BATCH) {
+    const outcome = await moveDocumentFile(mover, ws, docs[i], docs[i].topic, folders);
+    i++;
+    if (outcome === "moved") moved++;
+    else if (outcome === "failed") failed++;
   }
-  const next = offset + batch.length;
-  return { processed: batch.length, moved, failed, nextOffset: next < docs.length ? next : null };
+  return { moved, failed, remaining: docs.length - i };
 }
 
 export interface CategoryState {

@@ -738,20 +738,25 @@ export class GoogleService implements OnModuleInit {
 
   /**
    * Muda o PDF para a subpasta da categoria dentro de Documentos. Só mexe em arquivo que já está em Documentos (raiz ou
-   * subpasta); mover para a pasta em que ele já está não faz nada. Usa a mesma fila do upload.
+   * subpasta). Devolve true só quando houve PATCH; false se já estava na pasta. `folders` guarda o id das pastas de categoria
+   * já achadas ou criadas numa mesma sequência (o Drive pode não listar uma pasta recém-criada ainda). Usa a mesma fila do upload.
    */
-  documentMove(workspaceId: string, fileId: string, category: string | undefined, account?: string): Promise<void> {
+  documentMove(workspaceId: string, fileId: string, category: string | undefined, account?: string, folders = new Map<string, string>()): Promise<boolean> {
     if (!/^[\w-]{8,100}$/.test(fileId)) return Promise.reject(new Error("Documento inválido."));
     return this.serial(`${workspaceId}:${account ?? ""}`, async () => {
       try {
         const docs = await this.documentsFolder(workspaceId, account);
         const f = await this.g<any>(workspaceId, account, `https://www.googleapis.com/drive/v3/files/${encodeURIComponent(fileId)}?fields=parents,trashed,mimeType`);
         if (!docs || f.trashed || f.mimeType === FOLDER_MIME || !(await this.inDocuments(workspaceId, account, f.parents ?? [], docs))) throw notInDocs();
-        const target = await this.driveEnsureFolder(workspaceId, account, docFolderName(category), docs);
+        const name = docFolderName(category);
+        const key = `${account ?? ""}|${name}`;
+        const target = folders.get(key) ?? (await this.driveEnsureFolder(workspaceId, account, name, docs));
+        folders.set(key, target);
         const parents: string[] = f.parents ?? [];
-        if (parents.includes(target)) return;
+        if (parents.includes(target)) return false;
         const q = new URLSearchParams({ addParents: target, removeParents: parents.join(","), fields: "id,parents" });
         await this.g(workspaceId, account, `https://www.googleapis.com/drive/v3/files/${encodeURIComponent(fileId)}?${q}`, { method: "PATCH" });
+        return true;
       } catch (e: any) {
         if (/Google API 40[34]\b/.test(String(e?.message))) throw new Error("Não tenho permissão para mover esse arquivo (só mexo nos que eu mesmo guardei). Confira no Google Drive.");
         throw this.noteError(e);

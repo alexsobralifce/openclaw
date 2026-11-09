@@ -32,7 +32,7 @@ import { SpotifyCmd, spotifyCommand } from "../spotify/spotify-commands";
 import { SpotifyService } from "../spotify/spotify.service";
 import { applyTagEdit, categoryKey, categoryQuery, cleanCategory, MAX_CUSTOM_CATEGORIES, NO_CATEGORY, parseCategoryCreate, parseCategoryDelete, docFileName, docQuery, docsInCategory, looksLikeCategoriesList, matchCategory, parseCategoryEdit, topCategories, isFileOriginNote, looksLikeDocsHome, looksLikeReclassify, looksLikeTagsList, RECLASSIFY_BATCH, RECLASSIFY_MAX_READS, parseDocPlan, parseTagEdit, looksLikeOrganize, searchTerms, tagsLine, topTags } from "./documents";
 import { isCloseTie, searchGraph } from "./document-graph";
-import { allCategories, createCategory, deleteCategory, moveDocumentFile, organizeDocumentsBatch } from "./document-categories";
+import { allCategories, createCategory, deleteCategory, moveDocumentFile, ORGANIZE_BATCH, organizeDocumentsBatch } from "./document-categories";
 import { catalogedDriveIds, createDocument, deleteDocument, docIndex, getDocument, listDocuments, setDocumentsTopic, setDocumentTags, updateDocument } from "./documents-store";
 import { pdfPageCount } from "./media-limits";
 import { chatCompletion } from "./openai-chat";
@@ -2139,8 +2139,13 @@ _Ou 0 para voltar._`;
   private async categoryDelete(ws: string, name: string): Promise<string> {
     const r = await deleteCategory(this.state, ws, name);
     if (!r.ok) return this.categoriesView(ws, `🤔 Não achei a categoria *${short(name, 30)}*.`);
-    for (const d of r.docs) await moveDocumentFile(this.google, ws, d, NO_CATEGORY); // a pasta da categoria fica no Drive
-    return this.categoriesView(ws, `✅ *Categoria apagada:* ${short(name, 30)}${r.moved ? `\n📄 ${r.moved} ${r.moved === 1 ? "documento foi" : "documentos foram"} para *${NO_CATEGORY}*.` : ""}`);
+    const lote = r.docs.slice(0, ORGANIZE_BATCH); // a pasta da categoria fica no Drive; o resto fica para "organizar pastas"
+    for (const d of lote) await moveDocumentFile(this.google, ws, d, NO_CATEGORY);
+    const sobram = r.docs.length - lote.length;
+    return this.categoriesView(
+      ws,
+      `✅ *Categoria apagada:* ${short(name, 30)}${r.moved ? `\n📄 ${r.moved} ${r.moved === 1 ? "documento foi" : "documentos foram"} para *${NO_CATEGORY}*.` : ""}${sobram ? `\n⏳ ${sobram} ${sobram === 1 ? "arquivo ainda está" : "arquivos ainda estão"} na pasta antiga. Diga *organizar pastas* para movê-los.` : ""}`,
+    );
   }
 
   /** Depois de guardar um PDF: pergunta a categoria (a sugerida pela IA vem primeiro) e deixa criar uma nova. */
@@ -2208,19 +2213,13 @@ _Ou 0 para voltar._`;
    */
   /** "organizar pastas": manda todos os PDFs do catálogo para as pastas das categorias, em lotes de 50. Só por pedido. */
   private async docsOrganize(ws: string): Promise<string> {
-    let offset: number | null = 0;
-    let moved = 0;
-    let failed = 0;
-    while (offset !== null) {
-      const r = await organizeDocumentsBatch(this.google, ws, offset);
-      moved += r.moved;
-      failed += r.failed;
-      offset = r.nextOffset;
-    }
+    const r = await organizeDocumentsBatch(this.google, ws);
     return [
       head("📂", "Documentos"),
-      `✅ Organizei ${moved} PDF(s) nas pastas das categorias.`,
-      failed ? `⚠️ ${failed} não puderam ser movidos. Confira no Google Drive.` : "",
+      r.remaining
+        ? `✅ Organizei ${r.moved} PDF(s); faltam ${r.remaining}. Diga *organizar pastas* de novo para continuar.`
+        : `✅ Organizei ${r.moved} PDF(s) nas pastas das categorias.`,
+      r.failed ? `⚠️ ${r.failed} não puderam ser movidos. Confira no Google Drive.` : "",
       DIV,
       "_Diga 0 para voltar._",
     ]

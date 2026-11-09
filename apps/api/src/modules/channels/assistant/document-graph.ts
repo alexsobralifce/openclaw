@@ -282,7 +282,10 @@ export function searchGraph(g: DocGraph, query: string, opts: SearchOptions = {}
   return hits.slice(0, limit);
 }
 
-/** Empate entre os dois primeiros: o segundo tem pelo menos 90% da nota do primeiro. Só nesse caso vale perguntar ao Jev. */
+/**
+ * Empate entre os dois primeiros: o primeiro tem nota positiva e o segundo tem pelo menos 90% dela.
+ * Nota zero (consulta só com palavras de enchimento) não é empate. Só nesse caso vale perguntar ao Jev.
+ */
 export function isCloseTie(hits: GraphHit[]): boolean {
-  return hits.length >= 2 && hits[1].score >= hits[0].score * 0.9;
+  return hits.length >= 2 && hits[0].score > 0 && hits[1].score >= hits[0].score * 0.9;
 }

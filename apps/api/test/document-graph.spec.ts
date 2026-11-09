@@ -86,4 +86,11 @@ describe("buildDocGraph e searchGraph", () => {
     expect(isCloseTie([{ id: "a", score: 1, reasons: [] }, { id: "b", score: 0.5, reasons: [] }])).toBe(false);
     expect(isCloseTie([{ id: "a", score: 1, reasons: [] }])).toBe(false);
   });
+
+  it("consulta só com palavra de enchimento não é empate, mesmo com dois documentos", () => {
+    const docs = [doc("a", { title: "Contrato" }), doc("b", { title: "Recibo" })];
+    const hits = searchGraph(buildDocGraph(docs), "meus documentos");
+    expect(hits.length).toBe(2);
+    expect(isCloseTie(hits)).toBe(false);
+  });
 });

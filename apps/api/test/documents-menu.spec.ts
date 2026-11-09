@@ -41,7 +41,7 @@ function build(opts: { gemini?: boolean; accounts?: string[]; extract?: string; 
     listAccounts: async () => opts.accounts ?? ["pessoal@gmail.com"],
     documentStore: vi.fn(async () => ({ id: "drivefile01", link: "x" })),
     documentTrash: vi.fn(async () => {}),
-    documentMove: vi.fn(async () => {}),
+    documentMove: vi.fn(async () => true),
     driveFile: vi.fn(async (_ws: string, id: string) => ({ nome: `arquivo-${id}.pdf`, mime: "application/pdf", base64: "QUJD" })),
   };
   Object.assign(google, opts.google ?? {});
@@ -522,7 +522,7 @@ describe("categorias: escolher ao guardar, criar, listar e apagar", () => {
     expect(await say("1")).toContain("Categoria apagada");
     expect(rows).toHaveLength(1);
     expect(rows[0].topic).toBe("Sem categoria");
-    expect(google.documentMove).toHaveBeenCalledWith("w1", rows[0].driveFileId, "Sem categoria", rows[0].account);
+    expect(google.documentMove).toHaveBeenCalledWith("w1", rows[0].driveFileId, "Sem categoria", rows[0].account, expect.any(Map));
     // a vazia some sem mover nada
     await say("apagar categoria faculdade");
     expect(await say("sim")).toContain("Categoria apagada");
