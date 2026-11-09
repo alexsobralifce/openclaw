@@ -36,7 +36,7 @@ describe("limite de trocas e de tamanho", () => {
   it("fica com as mais recentes, em ordem", () => {
     const kept = fitBudget(Array.from({ length: 25 }, (_, i) => turn(i)));
     expect(kept).toHaveLength(MAX_TURNS);
-    expect(kept[0].user).toBe("p15");
+    expect(kept[0].user).toBe(`p${25 - MAX_TURNS}`);
     expect(kept[kept.length - 1].user).toBe("p24");
   });
   it("respeita o teto de caracteres, mas sempre guarda a última troca", () => {
@@ -88,7 +88,7 @@ describe("memória de 24 h", () => {
     for (let i = 0; i < 14; i++) await mem.remember("u1", "w1", `pergunta ${i}`, `resposta ${i}`, i);
     const turns = await mem.load("u1", "w1");
     expect(turns).toHaveLength(MAX_TURNS);
-    expect(turns[0].user).toBe("pergunta 4");
+    expect(turns[0].user).toBe(`pergunta ${14 - MAX_TURNS}`);
   });
 
   it("dado ilegível some do histórico sem derrubar a conversa", async () => {

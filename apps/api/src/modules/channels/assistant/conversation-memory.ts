@@ -8,11 +8,11 @@ import type { StateService } from "../../state/state.service";
  */
 export const MEMORY_TTL_MS = 24 * 3_600_000;
 /** Quantas trocas (pergunta + resposta) ficam: o histórico entra em cada chamada da IA, então custa tokens a cada mensagem. */
-export const MAX_TURNS = 10;
+export const MAX_TURNS = 6;
 const MAX_USER_CHARS = 400;
 const MAX_ANSWER_CHARS = 500;
 /** Teto de caracteres do histórico inteiro (~1.500 tokens). */
-export const MAX_TOTAL_CHARS = 5_000;
+export const MAX_TOTAL_CHARS = 3_000;
 
 export interface Turn {
   user: string;

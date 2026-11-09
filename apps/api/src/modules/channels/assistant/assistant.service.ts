@@ -310,7 +310,58 @@ const EXTERNAL = new Set(["gmail_search", "gmail_read", "list_conversations", "d
 const PREFERENCE_TOOLS = new Set(["remember", "forget", "email_no_interest", "routine_set", "routine_remove", "set_location", "note_add", "note_create", "note_update", "set_conversation_status"]);
 const MAX_PENDING = 3;
 export const MAX_MEDIA_BYTES = 15 * 1024 * 1024;
-const MAX_ROUNDS = 6;
+const MAX_ROUNDS = 4;
+/** Teto do conteúdo de cada resultado de ferramenta que volta para a IA (~600 tokens): o resto do contexto fica pequeno. */
+const TOOL_CONTENT_MAX = 2_500;
+
+/** Maior lista dentro do resultado (em qualquer nível), com o caminho até ela. */
+function largestArray(value: unknown, path: (string | number)[] = []): { path: (string | number)[]; arr: unknown[] } | null {
+  if (Array.isArray(value)) {
+    let best: { path: (string | number)[]; arr: unknown[] } = { path, arr: value };
+    value.forEach((v, i) => {
+      const inner = largestArray(v, [...path, i]);
+      if (inner && inner.arr.length > best.arr.length) best = inner;
+    });
+    return best;
+  }
+  if (value && typeof value === "object") {
+    let best: { path: (string | number)[]; arr: unknown[] } | null = null;
+    for (const [k, v] of Object.entries(value)) {
+      const inner = largestArray(v, [...path, k]);
+      if (inner && (!best || inner.arr.length > best.arr.length)) best = inner;
+    }
+    return best;
+  }
+  return null;
+}
+
+/**
+ * Texto do resultado de uma ferramenta para a mensagem `tool`, com no máximo `max` caracteres. Se estourar, encolhe a
+ * maior lista (mantém os primeiros itens) e avisa quantos saíram; sem lista, corta o texto e avisa quantos caracteres.
+ */
+export function capToolContent(result: unknown, max = TOOL_CONTENT_MAX): string {
+  const full = JSON.stringify(result) ?? "null";
+  if (full.length <= max) return full;
+  const big = largestArray(result);
+  if (big) {
+    for (let keep = big.arr.length - 1; keep >= 0; keep--) {
+      const trimmed = big.path.length
+        ? (() => {
+            const clone = JSON.parse(full);
+            let cur: any = clone;
+            for (const k of big.path.slice(0, -1)) cur = cur[k];
+            cur[big.path[big.path.length - 1]] = big.arr.slice(0, keep);
+            return clone;
+          })()
+        : big.arr.slice(0, keep);
+      const notice = `\n…(${big.arr.length - keep} itens omitidos)`;
+      const body = JSON.stringify(trimmed);
+      if (body.length + notice.length <= max) return body + notice;
+    }
+  }
+  const cut = max - 30;
+  return `${full.slice(0, cut)}…(${full.length - cut} caracteres omitidos)`;
+}
 
 // Serviço que o usuário precisa ter liberado para cada ferramenta (sem entrada = sempre disponível)
 const TOOL_SERVICE: Record<string, Service | Service[]> = {
@@ -802,7 +853,7 @@ export class AssistantService {
             };
           }
         }
-        messages.push({ role: "tool", tool_call_id: call.id, content: JSON.stringify(result) });
+        messages.push({ role: "tool", tool_call_id: call.id, content: capToolContent(result) });
       }
     }
     if (pending.length) return this.menu.requestConfirm(workspaceId, pending);
