@@ -35,7 +35,6 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     <html lang="pt-BR" suppressHydrationWarning>
       <head>
-        <script defer src="https://umami-production-8dd4.up.railway.app/script.js" data-website-id="a48228a8-709f-483a-bfbf-672c8e16b099" />
         {/* Tema do aparelho (claro/escuro) aplicado antes da primeira pintura; só vale no painel (ver ThemeSync) */}
         <script dangerouslySetInnerHTML={{ __html: "try{if(matchMedia('(prefers-color-scheme: light)').matches&&location.pathname.indexOf('/dashboard')===0)document.documentElement.classList.add('light')}catch(e){}" }} />
       </head>
