@@ -7,7 +7,6 @@ import { timingSafeEqual } from "crypto";
 import { ChannelsService } from "./channels.service";
 import { EvolutionService } from "./evolution/evolution.service";
 import { EvolutionExceptionFilter } from "./evolution/evolution.filter";
-import { InboundService } from "./inbound/inbound.service";
 import { InboxService } from "../inbox/inbox.service";
 import { prisma } from "@openclaw/database";
 
@@ -19,7 +18,6 @@ export class ChannelsController {
   constructor(
     private channels: ChannelsService,
     private evolution: EvolutionService,
-    private inbound: InboundService,
     private inbox: InboxService,
   ) {}
 
@@ -119,12 +117,11 @@ export class ChannelsController {
 
   // ─── Webhook público (Evolution API → openclaw) ────────────────
 
-  /** Só grava na fila e responde: o processamento (IA, transcrição, banco) acontece no InboundService. */
+  /** Valida o segredo e responde. A fila de entrada foi removida: a mensagem não é gravada nem processada. */
   @Post("webhooks/whatsapp/:instanceName")
   @HttpCode(200)
   async whatsappWebhook(
-    @Param("instanceName") instanceName: string,
-    @Body() body: any,
+    @Param("instanceName") _instanceName: string,
     @Headers("x-openclaw-secret") secret?: string,
   ) {
     const expected = process.env.WEBHOOK_SECRET;
@@ -134,9 +131,6 @@ export class ChannelsController {
       if (a.length !== b.length || !timingSafeEqual(a, b)) throw new ForbiddenException("segredo do webhook inválido");
     }
 
-    // Se a gravação falhar, a exceção vira 500 e o Evolution pode reenviar; duplicatas são descartadas na fila
-    const queued = await this.inbound.enqueue(instanceName, body);
-    if (queued) this.logger.log(`Webhook enfileirado: ${instanceName} ${body?.data?.key?.id}`);
     return { ok: true };
   }
 }

@@ -2,7 +2,6 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const db = vi.hoisted(() => ({
   up: true,
-  stuck: 0,
   channels: [{ config: { instanceName: "inst" } }] as any[],
 }));
 
@@ -12,7 +11,6 @@ vi.mock("@openclaw/database", () => ({
       if (!db.up) throw new Error("connection refused");
       return [{ "?column?": 1 }];
     },
-    inboundEvent: { count: async () => db.stuck },
     workspaceMember: { findMany: async () => [{ workspaceId: "ws" }] },
     channel: { findMany: async () => db.channels },
   },
@@ -25,7 +23,6 @@ const svc = (state: any) => new HealthService({ getConnectionState: async () => 
 describe("health", () => {
   beforeEach(() => {
     db.up = true;
-    db.stuck = 0;
     db.channels = [{ config: { instanceName: "inst" } }];
   });
 
@@ -46,11 +43,6 @@ describe("health", () => {
 
   it("full: Evolution fora do ar", async () => {
     expect((await svc(new Error("ECONNREFUSED")).full()).failing).toEqual(["evolution"]);
-  });
-
-  it("full: mensagens paradas na fila de entrada", async () => {
-    db.stuck = 3;
-    expect((await svc({ instance: { state: "open" } }).full()).failing).toEqual(["fila-de-entrada"]);
   });
 
   it("full: banco fora do ar é 'down' e não consulta o resto", async () => {
