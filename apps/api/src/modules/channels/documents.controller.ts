@@ -121,10 +121,13 @@ export class DocumentsController {
       if (r.reason === "fixed") throw new BadRequestException(`"${NO_CATEGORY}" não pode ser apagada.`);
       throw new NotFoundException("Categoria não encontrada.");
     }
-    // a pasta da categoria apagada fica no Drive; só os PDFs que estavam nela vão para "Sem categoria", até ORGANIZE_BATCH por chamada
-    const lote = r.docs.slice(0, ORGANIZE_BATCH);
-    for (const d of lote) await moveDocumentFile(this.google, ws, d, NO_CATEGORY);
-    return { moved: r.moved, pendentes: r.docs.length - lote.length, categories: await allCategories(this.state, ws) };
+    // a pasta da categoria apagada fica no Drive; só os PDFs que estavam nela vão para "Sem categoria", até ORGANIZE_BATCH por chamada.
+    // Notas antigas (sem arquivo no Drive) são filtradas antes do corte, para não ocupar a vaga dos PDFs.
+    const pdfs = r.docs.filter((d) => d.kind === "pdf");
+    const lote = pdfs.slice(0, ORGANIZE_BATCH);
+    const folders = new Map<string, string>();
+    for (const d of lote) await moveDocumentFile(this.google, ws, d, NO_CATEGORY, folders);
+    return { moved: r.moved, pendentes: pdfs.length - lote.length, categories: await allCategories(this.state, ws) };
   }
 
   @Patch(":id")
@@ -138,7 +141,7 @@ export class DocumentsController {
     return view(d);
   }
 
-  /** Organiza os PDFs nas pastas das categorias, até 50 mudanças por chamada. Chame de novo enquanto `remaining` for maior que zero. Só por pedido. */
+  /** Organiza os PDFs nas pastas das categorias, até 50 mudanças por chamada. Chame de novo enquanto `unchecked` for maior que zero. Só por pedido. */
   @Post("organize")
   async organize(@Request() req: any) {
     return organizeDocumentsBatch(this.google, this.ws(req));

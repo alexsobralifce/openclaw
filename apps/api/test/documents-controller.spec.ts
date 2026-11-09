@@ -268,8 +268,47 @@ describe("categoria nova move o PDF no Drive", () => {
     for (let i = 0; i < 60; i++) seed({ title: `Doc ${i}`, topic: "Contratos" });
     const google = moverOk();
     const r = (await ctrl(google).organize(req())) as any;
-    expect(r).toMatchObject({ moved: 50, remaining: 10 });
+    expect(r).toMatchObject({ moved: 50, unchecked: 10 });
     expect(google.documentMove).toHaveBeenCalledTimes(50);
+  });
+
+  it("organizar pastas: falhas seguidas não prendem a chamada; as 10 válidas depois delas são movidas", async () => {
+    // a lista vem do mais novo para o mais antigo: semeia as válidas primeiro, então as que falham aparecem na frente
+    for (let i = 0; i < 10; i++) seed({ title: `Ok ${i}`, topic: "Contratos", driveFileId: `ok${i}` });
+    for (let i = 0; i < 60; i++) seed({ title: `Ruim ${i}`, topic: "Contratos", driveFileId: `ruim${i}` });
+    const google = { documentMove: vi.fn(async (_ws: string, fileId: string) => { if (fileId.startsWith("ruim")) throw new Error("Google API 403: x"); return true; }) };
+    const r = (await ctrl(google).organize(req())) as any;
+    expect(r).toMatchObject({ moved: 10, failed: 60, unchecked: 0 });
+    expect(google.documentMove.mock.calls.length).toBeLessThanOrEqual(200);
+  });
+
+  it("organizar pastas: nunca visita mais de 200 PDFs por chamada, mesmo que todos falhem", async () => {
+    for (let i = 0; i < 250; i++) seed({ title: `Ruim ${i}`, topic: "Contratos", driveFileId: `ruim${i}` });
+    const google = { documentMove: vi.fn(async () => { throw new Error("Google API 403: x"); }) };
+    const r = (await ctrl(google).organize(req())) as any;
+    expect(google.documentMove).toHaveBeenCalledTimes(200);
+    expect(r).toMatchObject({ moved: 0, failed: 200, unchecked: 50 });
+  });
+
+  it("apagar categoria: 3 notas e 2 PDFs movem os 2 PDFs", async () => {
+    seed({ kind: "nota", title: "Nota A", topic: "Contratos" });
+    seed({ kind: "nota", title: "Nota B", topic: "Contratos" });
+    seed({ kind: "nota", title: "Nota C", topic: "Contratos" });
+    seed({ title: "PDF A", topic: "Contratos" });
+    seed({ title: "PDF B", topic: "Contratos" });
+    const google = moverOk();
+    await ctrl(google).removeCat(req(), "Contratos");
+    expect(google.documentMove).toHaveBeenCalledTimes(2);
+  });
+
+  it("apagar categoria: notas antigas não gastam a vaga do lote de 50; os PDFs depois delas são movidos", async () => {
+    for (let i = 0; i < 50; i++) seed({ kind: "nota", title: `Nota ${i}`, topic: "Contratos" });
+    seed({ title: "PDF A", topic: "Contratos" });
+    seed({ title: "PDF B", topic: "Contratos" });
+    const google = moverOk();
+    const r = (await ctrl(google).removeCat(req(), "Contratos")) as any;
+    expect(google.documentMove).toHaveBeenCalledTimes(2);
+    expect(r.pendentes).toBe(0);
   });
 
   it("apagar categoria com mais de 50 PDFs move só 50, não apaga nenhum e informa quantos ficaram", async () => {

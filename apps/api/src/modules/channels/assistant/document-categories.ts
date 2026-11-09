@@ -36,29 +36,34 @@ export async function moveDocumentFile(
 }
 
 /**
- * Teto de PDFs que mudam (ou falham) por chamada do "organizar pastas": cada um custa ~6 a 7 chamadas ao Drive.
- * Quem já está no lugar não conta para o teto. Cada chamada recomeça do início; como os já organizados não geram
- * movimento, a sequência de chamadas termina quando sobra zero.
+ * Teto de PDFs que mudam por chamada do "organizar pastas": cada mudança custa ~6 a 7 chamadas ao Drive.
+ * Falhas não contam aqui: só as mudanças feitas.
  */
 export const ORGANIZE_BATCH = 50;
 
-/** Organiza os PDFs nas pastas das categorias, até ORGANIZE_BATCH mudanças. `remaining` = PDFs que ficaram sem visita. */
+/**
+ * Teto de PDFs visitados por chamada (mudados, falhos ou já no lugar). Cada visita custa 2 a 3 chamadas ao Drive,
+ * e este teto garante que a chamada termina mesmo quando muitos PDFs falham. Cada chamada recomeça do índice 0.
+ */
+export const ORGANIZE_VISIT_LIMIT = 200;
+
+/** Organiza os PDFs nas pastas das categorias. `unchecked` = PDFs que esta chamada não visitou. */
 export async function organizeDocumentsBatch(
   mover: DocFileMover,
   ws: string,
-): Promise<{ moved: number; failed: number; remaining: number }> {
+): Promise<{ moved: number; failed: number; unchecked: number }> {
   const docs = (await listDocuments(ws, 5000)).filter((d) => d.kind === "pdf");
   const folders = new Map<string, string>();
   let moved = 0;
   let failed = 0;
   let i = 0;
-  while (i < docs.length && moved + failed < ORGANIZE_BATCH) {
+  while (i < docs.length && moved < ORGANIZE_BATCH && i < ORGANIZE_VISIT_LIMIT) {
     const outcome = await moveDocumentFile(mover, ws, docs[i], docs[i].topic, folders);
     i++;
     if (outcome === "moved") moved++;
     else if (outcome === "failed") failed++;
   }
-  return { moved, failed, remaining: docs.length - i };
+  return { moved, failed, unchecked: docs.length - i };
 }
 
 export interface CategoryState {

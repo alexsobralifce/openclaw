@@ -2139,9 +2139,11 @@ _Ou 0 para voltar._`;
   private async categoryDelete(ws: string, name: string): Promise<string> {
     const r = await deleteCategory(this.state, ws, name);
     if (!r.ok) return this.categoriesView(ws, `🤔 Não achei a categoria *${short(name, 30)}*.`);
-    const lote = r.docs.slice(0, ORGANIZE_BATCH); // a pasta da categoria fica no Drive; o resto fica para "organizar pastas"
-    for (const d of lote) await moveDocumentFile(this.google, ws, d, NO_CATEGORY);
-    const sobram = r.docs.length - lote.length;
+    const pdfs = r.docs.filter((d) => d.kind === "pdf"); // notas antigas não têm arquivo no Drive; não gastam a vaga do lote
+    const lote = pdfs.slice(0, ORGANIZE_BATCH); // a pasta da categoria fica no Drive; o resto fica para "organizar pastas"
+    const folders = new Map<string, string>();
+    for (const d of lote) await moveDocumentFile(this.google, ws, d, NO_CATEGORY, folders);
+    const sobram = pdfs.length - lote.length;
     return this.categoriesView(
       ws,
       `✅ *Categoria apagada:* ${short(name, 30)}${r.moved ? `\n📄 ${r.moved} ${r.moved === 1 ? "documento foi" : "documentos foram"} para *${NO_CATEGORY}*.` : ""}${sobram ? `\n⏳ ${sobram} ${sobram === 1 ? "arquivo ainda está" : "arquivos ainda estão"} na pasta antiga. Diga *organizar pastas* para movê-los.` : ""}`,
@@ -2216,8 +2218,8 @@ _Ou 0 para voltar._`;
     const r = await organizeDocumentsBatch(this.google, ws);
     return [
       head("📂", "Documentos"),
-      r.remaining
-        ? `✅ Organizei ${r.moved} PDF(s); faltam ${r.remaining}. Diga *organizar pastas* de novo para continuar.`
+      r.unchecked
+        ? `✅ Organizei ${r.moved} PDF(s); ainda não conferi ${r.unchecked}. Diga *organizar pastas* de novo para continuar.`
         : `✅ Organizei ${r.moved} PDF(s) nas pastas das categorias.`,
       r.failed ? `⚠️ ${r.failed} não puderam ser movidos. Confira no Google Drive.` : "",
       DIV,
