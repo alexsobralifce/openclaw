@@ -77,6 +77,8 @@ describe("guardar um PDF no catálogo", () => {
     expect(google.documentStore).toHaveBeenCalledTimes(1);
     const [ws, bytes, name, mime, account] = google.documentStore.mock.calls[0];
     expect([ws, mime, account]).toEqual(["w1", "application/pdf", "pessoal@gmail.com"]);
+    // o PDF vai para a subpasta da categoria que a IA sugeriu (Documentos/<Categoria>)
+    expect(google.documentStore.mock.calls[0][5]).toBe("Contratos");
     expect(bytes.toString()).toBe("%PDF-1.4 teste");
     expect(name).toMatch(/^\d{4}-\d{2}-\d{2} Contrato de aluguel\.pdf$/);
     expect(rows).toHaveLength(1);

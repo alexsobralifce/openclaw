@@ -2361,7 +2361,7 @@ _Ou 0 para voltar._`;
     }
     const bytes = Buffer.from(file.base64, "base64");
     try {
-      const stored = await this.google.documentStore(ws, bytes, docFileName(dayStamp(new Date(), TZ), plan.doc.title), file.mime || "application/pdf", target);
+      const stored = await this.google.documentStore(ws, bytes, docFileName(dayStamp(new Date(), TZ), plan.doc.title), file.mime || "application/pdf", target, plan.doc.topic);
       const row = await createDocument({ ...plan.doc, workspaceId: ws, driveFileId: stored.id, account: target, mime: file.mime || "application/pdf", sizeBytes: bytes.length, pages: pdfPageCount(bytes) || null, origin });
       return { ok: true, row };
     } catch (e: any) {

@@ -4,7 +4,7 @@ import { isSealed, openToken, sealToken } from "../../webhooks/crypto";
 import { nextDay } from "../../channels/assistant/agenda-events";
 import { DriveKind, KIND_Q, STRICT_KINDS, extQuery, isBook, nameHasExt, needsNameCheck, wordVariants } from "../../channels/assistant/drive";
 import { buildBook, parseAddresses, SeenAddress } from "../../channels/assistant/email-book";
-import { DOCS_FOLDER } from "../../channels/assistant/documents";
+import { DOCS_FOLDER, docFolderName } from "../../channels/assistant/documents";
 import { CONTACTS_FOLDER, Contact, EMAIL_BOOK_FOLDER, fileOfLetter, findContacts, fuzzyCandidates, fromPerson, groupByLetter, parseLetterFile, renderLetterFile } from "../../channels/assistant/contacts";
 import { planOf } from "../../auth/plans";
 import { appendEntry, dailyFileName, dayStamp, formatEntry, NoteDraft, noteFileName, NOTES_FOLDER, renderNote, snippets, storageAccount, TOPICS_FOLDER } from "../../channels/assistant/notes";
@@ -27,6 +27,8 @@ const SCOPES = [
 /** Nota maior que isto não é lida inteira (busca) nem recebe mais linhas. */
 const NOTE_MAX_BYTES = 1024 * 1024;
 const FOLDER_MIME = "application/vnd.google-apps.folder";
+/** Erro único para "o arquivo não está em Documentos": nada é alterado nesse caso. */
+const notInDocs = () => new Error("Esse documento não está na sua pasta de documentos.");
 const CONTACTS_TZ = process.env.ASSISTANT_TZ || "America/Fortaleza";
 /** Quanto tempo a lista de contatos lida do Drive fica em memória (as consultas seguidas não baixam tudo de novo). */
 const CONTACTS_CACHE_MS = 5 * 60_000;
@@ -693,11 +695,12 @@ export class GoogleService implements OnModuleInit {
 
   // ─── Documentos (PDFs) guardados em Assist.IA/Documentos ───────
 
-  /** Guarda o PDF em Assist.IA/Documentos (a pasta é criada se preciso) e devolve o id do arquivo no Drive. */
-  documentStore(workspaceId: string, bytes: Buffer, name: string, mime: string, account?: string): Promise<{ id: string; link?: string }> {
+  /** Guarda o PDF em Assist.IA/Documentos/<Categoria> (as pastas são criadas se preciso) e devolve o id do arquivo no Drive. */
+  documentStore(workspaceId: string, bytes: Buffer, name: string, mime: string, account?: string, category?: string): Promise<{ id: string; link?: string }> {
     return this.serial(`${workspaceId}:${account ?? ""}`, async () => {
       try {
-        const folder = await this.driveEnsureFolder(workspaceId, account, DOCS_FOLDER, await this.noteFolder(workspaceId, account));
+        const docs = await this.driveEnsureFolder(workspaceId, account, DOCS_FOLDER, await this.noteFolder(workspaceId, account));
+        const folder = await this.driveEnsureFolder(workspaceId, account, docFolderName(category), docs);
         const token = await this.accessToken(workspaceId, account);
         const boundary = `oc${Date.now().toString(36)}${Math.random().toString(36).slice(2)}`;
         const head = Buffer.from(`--${boundary}\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n${JSON.stringify({ name, parents: [folder] })}\r\n--${boundary}\r\nContent-Type: ${mime}\r\n\r\n`);
@@ -723,15 +726,58 @@ export class GoogleService implements OnModuleInit {
   async documentTrash(workspaceId: string, fileId: string, account?: string): Promise<void> {
     if (!/^[\w-]{8,100}$/.test(fileId)) throw new Error("Documento inválido.");
     try {
-      const root = await this.driveFirst(workspaceId, account, `name='${NOTES_FOLDER}' and mimeType='${FOLDER_MIME}' and trashed=false`);
-      const docs = root && (await this.driveFirst(workspaceId, account, `name='${DOCS_FOLDER}' and mimeType='${FOLDER_MIME}' and '${root}' in parents and trashed=false`));
+      const docs = await this.documentsFolder(workspaceId, account);
       const f = await this.g<any>(workspaceId, account, `https://www.googleapis.com/drive/v3/files/${encodeURIComponent(fileId)}?fields=parents,trashed,mimeType`);
-      if (!docs || f.trashed || f.mimeType === FOLDER_MIME || !(f.parents ?? []).includes(docs)) throw new Error("Esse documento não está na sua pasta de documentos.");
+      if (!docs || f.trashed || f.mimeType === FOLDER_MIME || !(await this.inDocuments(workspaceId, account, f.parents ?? [], docs))) throw notInDocs();
       await this.g(workspaceId, account, `https://www.googleapis.com/drive/v3/files/${encodeURIComponent(fileId)}`, { method: "PATCH", body: JSON.stringify({ trashed: true }) });
     } catch (e: any) {
       if (/Google API 40[34]\b/.test(String(e?.message))) throw new Error("Não tenho permissão para apagar esse arquivo (só apago os que eu mesmo guardei). Apague pelo Google Drive.");
       throw this.noteError(e);
     }
+  }
+
+  /**
+   * Muda o PDF para a subpasta da categoria dentro de Documentos. Só mexe em arquivo que já está em Documentos (raiz ou
+   * subpasta); mover para a pasta em que ele já está não faz nada. Usa a mesma fila do upload.
+   */
+  documentMove(workspaceId: string, fileId: string, category: string | undefined, account?: string): Promise<void> {
+    if (!/^[\w-]{8,100}$/.test(fileId)) return Promise.reject(new Error("Documento inválido."));
+    return this.serial(`${workspaceId}:${account ?? ""}`, async () => {
+      try {
+        const docs = await this.documentsFolder(workspaceId, account);
+        const f = await this.g<any>(workspaceId, account, `https://www.googleapis.com/drive/v3/files/${encodeURIComponent(fileId)}?fields=parents,trashed,mimeType`);
+        if (!docs || f.trashed || f.mimeType === FOLDER_MIME || !(await this.inDocuments(workspaceId, account, f.parents ?? [], docs))) throw notInDocs();
+        const target = await this.driveEnsureFolder(workspaceId, account, docFolderName(category), docs);
+        const parents: string[] = f.parents ?? [];
+        if (parents.includes(target)) return;
+        const q = new URLSearchParams({ addParents: target, removeParents: parents.join(","), fields: "id,parents" });
+        await this.g(workspaceId, account, `https://www.googleapis.com/drive/v3/files/${encodeURIComponent(fileId)}?${q}`, { method: "PATCH" });
+      } catch (e: any) {
+        if (/Google API 40[34]\b/.test(String(e?.message))) throw new Error("Não tenho permissão para mover esse arquivo (só mexo nos que eu mesmo guardei). Confira no Google Drive.");
+        throw this.noteError(e);
+      }
+    });
+  }
+
+  /** Id da pasta Assist.IA/Documentos, ou null se ainda não existe. */
+  private async documentsFolder(workspaceId: string, account?: string): Promise<string | null> {
+    const root = await this.driveFirst(workspaceId, account, `name='${NOTES_FOLDER}' and mimeType='${FOLDER_MIME}' and trashed=false`);
+    return root ? this.driveFirst(workspaceId, account, `name='${DOCS_FOLDER}' and mimeType='${FOLDER_MIME}' and '${root}' in parents and trashed=false`) : null;
+  }
+
+  /** O arquivo está em Documentos (pai direto) ou numa subpasta de categoria (avô). */
+  private async inDocuments(workspaceId: string, account: string | undefined, parents: string[], docs: string): Promise<boolean> {
+    if (parents.includes(docs)) return true;
+    for (const p of parents) {
+      let parent: any;
+      try {
+        parent = await this.g<any>(workspaceId, account, `https://www.googleapis.com/drive/v3/files/${encodeURIComponent(p)}?fields=parents,mimeType`);
+      } catch {
+        continue; // pasta que o app não enxerga: não é uma subpasta de Documentos
+      }
+      if (parent?.mimeType === FOLDER_MIME && (parent.parents ?? []).includes(docs)) return true;
+    }
+    return false;
   }
 
   // ─── Contatos do Google → Markdown por letra no Drive ─────────

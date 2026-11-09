@@ -13,6 +13,7 @@ import {
   topCategories,
   cleanTag,
   docFileName,
+  docFolderName,
   docQuery,
   DocLike,
   docScore,
@@ -224,5 +225,14 @@ describe("criar e apagar categorias (texto)", () => {
   it("junta as categorias dos documentos com as criadas à mão, sem repetir", () => {
     const merged = mergeCategories([{ name: "Saúde", count: 2 }], ["saude", "Faculdade"]);
     expect(merged).toEqual([{ name: "Saúde", count: 2 }, { name: "Faculdade", count: 0 }]);
+  });
+});
+
+describe("pasta da categoria no Drive", () => {
+  it("usa o nome da categoria sem barra; sem categoria vai para Sem categoria; tamanho limitado", () => {
+    expect(docFolderName("saúde/exames")).toBe("Saúde exames");
+    expect(docFolderName("  ")).toBe("Sem categoria");
+    expect(docFolderName(undefined)).toBe("Sem categoria");
+    expect(docFolderName("x".repeat(200)).length).toBeLessThanOrEqual(60);
   });
 });

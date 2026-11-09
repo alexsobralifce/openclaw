@@ -163,6 +163,11 @@ export function cleanCategory(raw: unknown): string {
   return t ? t[0].toUpperCase() + t.slice(1) : "";
 }
 
+/** Nome da subpasta da categoria no Drive (Documentos/<Categoria>): sem "/" e sem categoria vai para "Sem categoria". */
+export function docFolderName(topic: unknown): string {
+  return cleanCategory(topic).replace(/[\\/]+/g, " ").replace(/\s+/g, " ").trim() || NO_CATEGORY;
+}
+
 /** Onde ficam os documentos de uma categoria apagada (apagar a categoria nunca apaga o documento). */
 export const NO_CATEGORY = "Sem categoria";
 

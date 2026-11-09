@@ -91,7 +91,8 @@ describe("GoogleService: PDFs no Drive", () => {
     s.g = vi.fn();
     s.accessToken = async () => "tok";
     s.noteFolder = async () => "assist1234";
-    s.driveEnsureFolder = vi.fn(async () => "docs00001");
+    // a pasta da categoria (subpasta de Documentos) tem outro id
+    s.driveEnsureFolder = vi.fn(async (_ws: string, _acc: string | undefined, name: string) => (name === "Documentos" ? "docs00001" : "sub0001"));
     return s;
   };
 
@@ -103,12 +104,13 @@ describe("GoogleService: PDFs no Drive", () => {
       const pdf = Buffer.from("%PDF-1.4 conteudo");
       expect(await s.documentStore("w1", pdf, "2026-10-04 Contrato.pdf", "application/pdf", "a@gmail.com")).toEqual({ id: "file0099", link: "https://drive/x" });
       expect(s.driveEnsureFolder).toHaveBeenCalledWith("w1", "a@gmail.com", "Documentos", "assist1234");
+      expect(s.driveEnsureFolder).toHaveBeenCalledWith("w1", "a@gmail.com", "Sem categoria", "docs00001");
       const [url, init] = fetchMock.mock.calls[0] as any;
       expect(url).toContain("uploadType=multipart");
       expect(init.headers.Authorization).toBe("Bearer tok");
       const body = (init.body as Buffer).toString("latin1");
       expect(body).toContain('"name":"2026-10-04 Contrato.pdf"');
-      expect(body).toContain('"parents":["docs00001"]');
+      expect(body).toContain('"parents":["sub0001"]');
       expect(body).toContain("Content-Type: application/pdf");
       expect(body).toContain("%PDF-1.4 conteudo");
     } finally {
@@ -141,11 +143,49 @@ describe("GoogleService: PDFs no Drive", () => {
     for (const meta of [{ parents: ["outra"], mimeType: "application/pdf" }, { parents: ["docs00001"], trashed: true }, { parents: ["docs00001"], mimeType: "application/vnd.google-apps.folder" }]) {
       const s = svc();
       s.driveFirst = vi.fn().mockResolvedValueOnce("assist1234").mockResolvedValueOnce("docs00001");
-      s.g.mockResolvedValueOnce(meta);
+      s.g.mockResolvedValueOnce(meta).mockResolvedValueOnce({ parents: ["avo-fora"] });
       await expect(s.documentTrash("w1", "file0099")).rejects.toThrow("não está na sua pasta de documentos");
-      expect(s.g).toHaveBeenCalledTimes(1);
+      const patches = s.g.mock.calls.filter((c: any[]) => c[3]?.method === "PATCH");
+      expect(patches).toHaveLength(0);
     }
     await expect(svc().documentTrash("w1", "../x")).rejects.toThrow("inválido");
+  });
+
+  it("documentTrash: apaga também a partir de uma subpasta de categoria", async () => {
+    const s = svc();
+    s.driveFirst = vi.fn().mockResolvedValueOnce("assist1234").mockResolvedValueOnce("docs00001");
+    // o arquivo está em Documentos/Saúde: o avô é Documentos
+    s.g.mockResolvedValueOnce({ parents: ["sub-saude"], mimeType: "application/pdf" }).mockResolvedValueOnce({ parents: ["docs00001"], mimeType: "application/vnd.google-apps.folder" }).mockResolvedValueOnce({});
+    await s.documentTrash("w1", "file0099", "a@gmail.com");
+    const patch = s.g.mock.calls.find((c: any[]) => c[3]?.method === "PATCH");
+    expect(patch?.[2]).toContain("/files/file0099");
+    expect(JSON.parse(patch[3].body)).toEqual({ trashed: true });
+  });
+
+  it("documentMove: manda o arquivo para a subpasta da categoria, tirando a pasta antiga", async () => {
+    const s = svc();
+    s.driveFirst = vi.fn().mockResolvedValueOnce("assist1234").mockResolvedValueOnce("docs00001");
+    s.g.mockResolvedValueOnce({ parents: ["docs00001"], mimeType: "application/pdf" }).mockResolvedValueOnce({});
+    await s.documentMove("w1", "file0099", "Finanças", "a@gmail.com");
+    expect(s.driveEnsureFolder).toHaveBeenCalledWith("w1", "a@gmail.com", "Finanças", "docs00001");
+    const patch = s.g.mock.calls.find((c: any[]) => c[3]?.method === "PATCH");
+    expect(patch[2]).toContain("/files/file0099");
+    expect(patch[2]).toContain("addParents=sub0001");
+    expect(patch[2]).toContain("removeParents=docs00001");
+  });
+
+  it("documentMove: já na pasta da categoria não faz nada; fora de Documentos nunca é tocado", async () => {
+    const igual = svc();
+    igual.driveFirst = vi.fn().mockResolvedValueOnce("assist1234").mockResolvedValueOnce("docs00001");
+    igual.g.mockResolvedValueOnce({ parents: ["sub0001"], mimeType: "application/pdf" }).mockResolvedValueOnce({ parents: ["docs00001"], mimeType: "application/vnd.google-apps.folder" });
+    await igual.documentMove("w1", "file0099", "Finanças", "a@gmail.com");
+    expect(igual.g.mock.calls.some((c: any[]) => c[3]?.method === "PATCH")).toBe(false);
+
+    const fora = svc();
+    fora.driveFirst = vi.fn().mockResolvedValueOnce("assist1234").mockResolvedValueOnce("docs00001");
+    fora.g.mockResolvedValueOnce({ parents: ["outra"], mimeType: "application/pdf" }).mockResolvedValueOnce({ parents: ["avo-fora"] });
+    await expect(fora.documentMove("w1", "file0099", "Finanças")).rejects.toThrow("não está na sua pasta de documentos");
+    expect(fora.g.mock.calls.some((c: any[]) => c[3]?.method === "PATCH")).toBe(false);
   });
 
   it("documentTrash: 403 vira o aviso de que só apaga o que guardou", async () => {
