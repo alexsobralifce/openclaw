@@ -4,6 +4,7 @@
 import { prisma } from "@magobox/database";
 import { DocFields, sanitizeTags } from "./documents";
 import { cleanTitle, cleanTopic } from "./notes";
+import { DocIndex } from "./document-index";
 
 export interface NewDocument extends DocFields {
   workspaceId: string;
@@ -33,6 +34,7 @@ export async function createDocument(d: NewDocument) {
     origin: d.origin ?? "whatsapp",
   };
   const existing = await prisma.document.findFirst({ where: { workspaceId: d.workspaceId, driveFileId: d.driveFileId } });
+  docIndex.invalidate(d.workspaceId);
   if (existing) return prisma.document.update({ where: { id: existing.id }, data });
   return prisma.document.create({ data: { ...data, workspaceId: d.workspaceId } });
 }
@@ -42,8 +44,21 @@ export const listDocuments = (workspaceId: string, take = 500) => prisma.documen
 
 export const getDocument = (workspaceId: string, id: string) => prisma.document.findFirst({ where: { id, workspaceId } });
 
+/** Impressão digital do catálogo do workspace: quantos documentos e a última alteração. Muda em qualquer escrita, inclusive de outra réplica. */
+export async function documentFingerprint(workspaceId: string): Promise<string> {
+  const r = await prisma.document.aggregate({ where: { workspaceId }, _count: { _all: true }, _max: { updatedAt: true } });
+  return `${r._count._all}:${r._max.updatedAt?.toISOString() ?? ""}`;
+}
+
+/** Grafo de busca por workspace (document-graph.ts). Toda escrita aqui chama invalidate(ws). */
+export const docIndex = new DocIndex<Awaited<ReturnType<typeof listDocuments>>[number]>({
+  fetchDocs: (workspaceId) => listDocuments(workspaceId),
+  fingerprint: documentFingerprint,
+});
+
 /** Troca as tags (sempre limpas, sem repetir, no máximo 8). Devolve a ficha atualizada, ou null se não é deste workspace. */
 export async function setDocumentTags(workspaceId: string, id: string, tags: string[]) {
+  docIndex.invalidate(workspaceId);
   const r = await prisma.document.updateMany({ where: { id, workspaceId }, data: { tags: sanitizeTags(tags) } });
   return r.count ? getDocument(workspaceId, id) : null;
 }
@@ -55,6 +70,7 @@ export async function updateDocument(workspaceId: string, id: string, patch: { t
   if (patch.topic !== undefined) data.topic = cleanTopic(patch.topic);
   if (patch.tags !== undefined) data.tags = sanitizeTags(patch.tags);
   if (!Object.keys(data).length) return getDocument(workspaceId, id);
+  docIndex.invalidate(workspaceId);
   const r = await prisma.document.updateMany({ where: { id, workspaceId }, data });
   return r.count ? getDocument(workspaceId, id) : null;
 }
@@ -62,10 +78,12 @@ export async function updateDocument(workspaceId: string, id: string, patch: { t
 /** Muda a categoria (o campo `topic`) de vários documentos de uma vez; devolve quantos mudaram. */
 export async function setDocumentsTopic(workspaceId: string, ids: string[], topic: string): Promise<number> {
   if (!ids.length) return 0;
+  docIndex.invalidate(workspaceId);
   return (await prisma.document.updateMany({ where: { id: { in: ids }, workspaceId }, data: { topic: cleanTopic(topic) } })).count;
 }
 
 export async function deleteDocument(workspaceId: string, id: string): Promise<boolean> {
+  docIndex.invalidate(workspaceId);
   return (await prisma.document.deleteMany({ where: { id, workspaceId } })).count > 0;
 }
 
