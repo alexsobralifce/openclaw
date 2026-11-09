@@ -80,19 +80,30 @@ export function searchTerms(query: string): string[] {
  * Nota do documento para os termos: tag igual pesa 5, tag que começa com o termo 3, palavra do título ou do assunto 2, do resumo 1.
  * Todos os termos precisam bater em algum lugar; senão o documento não serve (0).
  */
+/** Grupos de palavras que significam o mesmo na biblioteca (sem acento, minúsculas). Acrescente aqui os casos reais. */
+const SINONIMOS: string[][] = [["aluguel", "locacao", "inquilino", "locatario"]];
+
+/** A própria palavra e as que têm o mesmo sentido, para casar a busca. */
+function variantes(t: string): string[] {
+  return SINONIMOS.find((g) => g.includes(t)) ?? [t];
+}
+
 export function docScore(d: DocFields, terms: string[]): number {
   if (!terms.length) return 1;
   const tags = d.tags.map(normalize);
   const title = normalize(d.title).split(" ");
   const topic = normalize(d.topic).split(" ");
   const summary = normalize(d.summary);
+  const nivel = (t: string): number => {
+    if (tags.some((g) => g === t || g.split("-").includes(t))) return 5;
+    if (tags.some((g) => g.startsWith(t))) return 3;
+    if (title.some((w) => w.startsWith(t)) || topic.some((w) => w.startsWith(t))) return 2;
+    if (summary.includes(t)) return 1;
+    return 0;
+  };
   let total = 0;
   for (const t of terms) {
-    let s = 0;
-    if (tags.some((g) => g === t || g.split("-").includes(t))) s = 5;
-    else if (tags.some((g) => g.startsWith(t))) s = 3;
-    else if (title.some((w) => w.startsWith(t)) || topic.some((w) => w.startsWith(t))) s = 2;
-    else if (summary.includes(t)) s = 1;
+    const s = Math.max(...variantes(t).map(nivel));
     if (!s) return 0;
     total += s;
   }

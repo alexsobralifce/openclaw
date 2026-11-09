@@ -94,6 +94,11 @@ describe("busca por tag, título, assunto e resumo", () => {
     expect(searchTerms("documentos com a tag contrato")).toEqual(["contrato"]);
     expect(searchTerms("me mostra os pdfs sobre plano de saúde")).toEqual(["plano", "saude"]);
   });
+  it("acha pelo sinônimo: 'locação' acha o documento de aluguel, e vice-versa", () => {
+    expect(ids("locação")).toEqual(["1"]);
+    expect(ids("inquilino")).toEqual(["1"]);
+    expect(ids("aluguel")).toEqual(["1"]);
+  });
   it("acha pela tag, e o mais novo vem primeiro no empate", () => {
     expect(ids("contrato")).toEqual(["3", "1"]);
     expect(ids("tag aluguel")).toEqual(["1"]);
