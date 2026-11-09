@@ -30,7 +30,6 @@ vi.mock("@magobox/database", () => ({
 }));
 
 import { MenuService } from "../src/modules/channels/assistant/menu.service";
-import { docIndex } from "../src/modules/channels/assistant/documents-store";
 
 const plan = (over: Record<string, any> = {}) => JSON.stringify({ titulo: "Contrato de aluguel", assunto: "Contratos", tags: ["Contrato", "Aluguel", "Imóvel"], resumo: "Aluguel de 12 meses com reajuste anual.", erro: null, ...over });
 
@@ -66,9 +65,6 @@ const seed = (over: Record<string, any> = {}) => {
 beforeEach(() => {
   rows.length = 0;
   seq = 0;
-  // o índice é um singleton; as fixtures mudam a cada teste, então cada teste começa sem cache
-  docIndex.invalidate("w1");
-  docIndex.invalidate("w2");
 });
 
 describe("guardar um PDF no catálogo", () => {
@@ -157,12 +153,12 @@ describe("buscar no catálogo", () => {
     expect(a.intents.pickFile).not.toHaveBeenCalled();
   });
 
-  it("empate entre os dois primeiros: o Jev desempata uma vez", async () => {
+  it("empate entre os dois primeiros: a busca não chama o Jev (a lista mostra os dois)", async () => {
     const a = build({ pick: 1 });
     seed({ title: "Exame de sangue", tags: ["exame"] });
     seed({ title: "Exame de visão", tags: ["exame"] });
     await a.say("documentos sobre exame");
-    expect(a.intents.pickFile).toHaveBeenCalledTimes(1);
+    expect(a.intents.pickFile).not.toHaveBeenCalled();
   });
 
   it("um único resultado abre direto, sem lista", async () => {
@@ -303,7 +299,6 @@ describe("apagar documento", () => {
     expect(rows).toHaveLength(1);
 
     rows.length = 0;
-    docIndex.invalidate("w1"); // o teste mexe no banco direto, sem passar pelo store
     const b = await open();
     b.google.documentTrash.mockRejectedValueOnce(new Error("Esse documento não está na sua pasta de documentos."));
     await b.say("3");

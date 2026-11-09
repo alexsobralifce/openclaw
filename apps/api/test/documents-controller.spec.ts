@@ -29,7 +29,6 @@ vi.mock("@magobox/database", () => ({
 }));
 
 import { DocumentsController } from "../src/modules/channels/documents.controller";
-import { docIndex } from "../src/modules/channels/assistant/documents-store";
 
 const req = (ws = "w1") => ({ user: { workspaces: [{ workspaceId: ws }] } });
 let n = 0;
@@ -54,23 +53,16 @@ beforeEach(() => {
   rows.length = 0;
   kv.clear();
   n = 0;
-  // o índice é um singleton; as fixtures mudam a cada teste, então cada teste começa sem cache
-  docIndex.invalidate("w1");
-  docIndex.invalidate("w2");
 });
 
-describe("biblioteca: busca por grafo", () => {
-  it("'unimed' acha o documento da categoria Saúde com a tag plano-de-saude, com o motivo", async () => {
+describe("biblioteca: busca por tag e título", () => {
+  it("'unimed' acha só o documento com a tag unimed, sem trazer os vizinhos", async () => {
     seed({ title: "Consulta na Unimed", topic: "Saúde", tags: ["unimed", "plano-de-saude"] });
     seed({ title: "Carteirinha", topic: "Saúde", tags: ["plano-de-saude"] });
     seed({ title: "Contrato de aluguel", topic: "Contratos", tags: ["aluguel"] });
     const r = await ctrl().list(req(), "unimed");
-    const titles = r.documents.map((d: any) => d.title);
-    expect(titles).toContain("Carteirinha");
-    expect(titles).not.toContain("Contrato de aluguel");
-    const carteirinha = r.documents.find((d: any) => d.title === "Carteirinha") as any;
-    expect(carteirinha.reasons).toContain("vizinha de tag unimed");
-    expect(carteirinha.topic).toBe("Saúde");
+    expect(r.documents.map((d: any) => d.title)).toEqual(["Consulta na Unimed"]);
+    expect(r.documents[0].topic).toBe("Saúde");
   });
 });
 
@@ -89,10 +81,8 @@ describe("biblioteca: listar e filtrar", () => {
     seed({ title: "Contrato de aluguel", tags: ["contrato", "aluguel"] });
     seed({ title: "Exame de sangue", topic: "Saúde", tags: ["saude", "exame"] });
     seed({ title: "Contrato de estágio", tags: ["contrato", "estagio"] });
-    // o acerto direto vem primeiro; o grafo acrescenta o vizinho por tag ("contrato") com o motivo
     const porEstagio = (await ctrl().list(req(), "estagio")).documents as any[];
-    expect(porEstagio[0].title).toBe("Contrato de estágio");
-    expect(porEstagio[0].reasons).toContain("tag estagio");
+    expect(porEstagio.map((d) => d.title)).toEqual(["Contrato de estágio"]);
     expect((await ctrl().list(req(), undefined, "contrato")).documents).toHaveLength(2);
     expect((await ctrl().list(req(), "estagio", "contrato")).documents.map((d) => d.title)).toContain("Contrato de estágio");
     expect((await ctrl().list(req(), "estagio", "saude")).documents).toHaveLength(0);
