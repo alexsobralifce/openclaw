@@ -22,7 +22,7 @@ export class EmailWatcherService {
 
   constructor(
     private google: GoogleService,
-    private assistant: AssistantService,
+    @Inject(forwardRef(() => AssistantService)) private assistant: AssistantService,
     @Inject(forwardRef(() => MenuService)) private menu: MenuService,
     private webhooks: WebhooksService,
     private state: StateService,
