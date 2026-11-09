@@ -47,21 +47,41 @@ export const ORGANIZE_BATCH = 50;
  */
 export const ORGANIZE_VISIT_LIMIT = 200;
 
-/** Organiza os PDFs nas pastas das categorias. `unchecked` = PDFs que esta chamada não visitou. */
+/** Cursor do "organizar pastas" por workspace: índice do próximo PDF a visitar. */
+const organizeCursorKey = (ws: string) => `docorganize:${ws}`;
+
+const organizeLog = new Logger("Documentos");
+
+/**
+ * Organiza os PDFs nas pastas das categorias. Cada chamada continua do cursor gravado pela anterior, para que PDFs
+ * já no lugar não prendam a fila. `unchecked` = PDFs que faltam visitar até o fim da lista (0 quando terminou).
+ */
 export async function organizeDocumentsBatch(
   mover: DocFileMover,
+  state: CategoryState,
   ws: string,
 ): Promise<{ moved: number; failed: number; unchecked: number }> {
   const docs = (await listDocuments(ws, 5000)).filter((d) => d.kind === "pdf");
+  const saved = (await state.get<{ next: number }>(organizeCursorKey(ws)))?.next;
+  // cursor além do fim (PDFs apagados desde a última chamada) recomeça do início
+  const start = typeof saved === "number" && Number.isInteger(saved) && saved >= 0 && saved < docs.length ? saved : 0;
   const folders = new Map<string, string>();
   let moved = 0;
   let failed = 0;
-  let i = 0;
-  while (i < docs.length && moved < ORGANIZE_BATCH && i < ORGANIZE_VISIT_LIMIT) {
+  let i = start;
+  while (i < docs.length && moved < ORGANIZE_BATCH && i - start < ORGANIZE_VISIT_LIMIT) {
     const outcome = await moveDocumentFile(mover, ws, docs[i], docs[i].topic, folders);
     i++;
     if (outcome === "moved") moved++;
     else if (outcome === "failed") failed++;
+  }
+  // terminou a lista: a próxima chamada recomeça do início, para pegar PDFs novos
+  const next = i >= docs.length ? 0 : i;
+  try {
+    await state.set(organizeCursorKey(ws), { next });
+  } catch (e: any) {
+    // sem o cursor a próxima chamada só refaz trabalho; a organização desta chamada já foi feita
+    organizeLog.warn(`Não consegui gravar o cursor de "organizar pastas": ${e?.message ?? e}`);
   }
   return { moved, failed, unchecked: docs.length - i };
 }

@@ -290,6 +290,35 @@ describe("categoria nova move o PDF no Drive", () => {
     expect(r).toMatchObject({ moved: 0, failed: 200, unchecked: 50 });
   });
 
+  it("organizar pastas: PDFs já no lugar não travam a fila; a chamada seguinte continua de onde a anterior parou", async () => {
+    // a lista vem do mais novo para o mais antigo: semeia os 50 a mover primeiro, para ficarem no fim da lista
+    for (let i = 0; i < 50; i++) seed({ title: `Mover ${i}`, topic: "Contratos", driveFileId: `novo${i}` });
+    for (let i = 0; i < 200; i++) seed({ title: `Ok ${i}`, topic: "Contratos", driveFileId: `ok${i}` });
+    const google = { documentMove: vi.fn(async (_ws: string, fileId: string) => fileId.startsWith("novo")) };
+    const first = (await ctrl(google).organize(req())) as any;
+    expect(first).toMatchObject({ moved: 0, failed: 0, unchecked: 50 });
+    const second = (await ctrl(google).organize(req())) as any;
+    expect(second).toMatchObject({ moved: 50, failed: 0, unchecked: 0 });
+  });
+
+  it("organizar pastas: a chamada que termina a lista recomeça do início na próxima, e pega PDF novo", async () => {
+    const moved = new Set<string>();
+    const google = { documentMove: vi.fn(async (_ws: string, fileId: string) => { if (moved.has(fileId)) return false; moved.add(fileId); return true; }) };
+    for (let i = 0; i < 60; i++) seed({ title: `Doc ${i}`, topic: "Contratos", driveFileId: `d${i}` });
+    expect(await ctrl(google).organize(req())).toMatchObject({ moved: 50, unchecked: 10 });
+    expect(await ctrl(google).organize(req())).toMatchObject({ moved: 10, unchecked: 0 });
+    seed({ title: "Chegou agora", topic: "Contratos", driveFileId: "chegou" });
+    expect(await ctrl(google).organize(req())).toMatchObject({ moved: 1, unchecked: 0 });
+  });
+
+  it("organizar pastas: falha ao gravar o cursor não derruba a organização", async () => {
+    for (let i = 0; i < 5; i++) seed({ title: `Doc ${i}`, topic: "Contratos", driveFileId: `d${i}` });
+    const google = moverOk();
+    const failing: any = { get: async () => null, set: async () => { throw new Error("kv indisponível"); } };
+    const r = (await new DocumentsController(google, failing, undefined as any).organize(req())) as any;
+    expect(r).toMatchObject({ moved: 5, failed: 0, unchecked: 0 });
+  });
+
   it("apagar categoria: 3 notas e 2 PDFs movem os 2 PDFs", async () => {
     seed({ kind: "nota", title: "Nota A", topic: "Contratos" });
     seed({ kind: "nota", title: "Nota B", topic: "Contratos" });

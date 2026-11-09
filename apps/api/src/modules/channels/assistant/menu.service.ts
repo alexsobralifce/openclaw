@@ -2215,7 +2215,7 @@ _Ou 0 para voltar._`;
    */
   /** "organizar pastas": manda todos os PDFs do catálogo para as pastas das categorias, em lotes de 50. Só por pedido. */
   private async docsOrganize(ws: string): Promise<string> {
-    const r = await organizeDocumentsBatch(this.google, ws);
+    const r = await organizeDocumentsBatch(this.google, this.state, ws);
     return [
       head("📂", "Documentos"),
       r.unchecked

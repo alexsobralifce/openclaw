@@ -144,7 +144,7 @@ export class DocumentsController {
   /** Organiza os PDFs nas pastas das categorias, até 50 mudanças por chamada. Chame de novo enquanto `unchecked` for maior que zero. Só por pedido. */
   @Post("organize")
   async organize(@Request() req: any) {
-    return organizeDocumentsBatch(this.google, this.ws(req));
+    return organizeDocumentsBatch(this.google, this.state, this.ws(req));
   }
 
   /** Apaga: o PDF vai para a lixeira do Drive (30 dias) e a ficha sai. Ficha de nota antiga só sai do catálogo. */
