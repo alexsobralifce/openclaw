@@ -14,6 +14,8 @@ import { isGroupOrBroadcast, phoneFromJid, samePhone, senderPhone } from "../wha
 export const BACKOFF_MS = [5_000, 30_000, 120_000, 600_000, 3_600_000];
 export const MAX_ATTEMPTS = BACKOFF_MS.length + 1;
 const TICK_MS = 2_000;
+// Depois de tanto tempo sem mensagem e sem nada pendente, o worker para de rodar em segundo plano
+const IDLE_MS = 5 * 60_000;
 // Tempo reservado para um evento (transcrição + IA podem demorar); se o processo morrer, outro retoma depois
 const CLAIM_MS = 5 * 60_000;
 const BATCH = 20;
@@ -33,6 +35,7 @@ export class InboundService implements OnModuleInit, OnModuleDestroy {
   private running = false;
   private again = false;
   private lastCleanup = 0;
+  private lastActivity = 0;
 
   constructor(
     private assistant: AssistantService,
@@ -40,13 +43,27 @@ export class InboundService implements OnModuleInit, OnModuleDestroy {
     private automations: AutomationRunner,
   ) {}
 
-  onModuleInit() {
-    // DESATIVADO PARA MEDIÇÃO: polling do worker em segundo plano
-    // this.timer = setInterval(() => void this.tick(), TICK_MS);
-  }
+  // Sem timer no boot: o worker acorda na primeira mensagem (ver wake)
+  onModuleInit() {}
 
   onModuleDestroy() {
     if (this.timer) clearInterval(this.timer);
+  }
+
+  /** Acorda o worker: liga o timer se estiver dormindo e zera o contador de ociosidade. */
+  private wake() {
+    this.lastActivity = Date.now();
+    if (!this.timer) this.timer = setInterval(() => void this.tick(), TICK_MS);
+  }
+
+  /** Dorme se passaram IDLE_MS sem atividade e não há nenhum evento pendente (inclusive retentativas). */
+  private async sleepIfIdle() {
+    if (!this.timer || Date.now() - this.lastActivity < IDLE_MS) return;
+    const pending = await prisma.inboundEvent.count({ where: { status: "PENDING" } });
+    if (pending === 0 && this.timer) {
+      clearInterval(this.timer);
+      this.timer = undefined;
+    }
   }
 
   /** Grava o evento na fila. Devolve false se não for uma mensagem ou se já estava na fila. */
@@ -60,7 +77,10 @@ export class InboundService implements OnModuleInit, OnModuleDestroy {
       data: [{ instance, externalId: id, payload: body as Prisma.InputJsonValue }],
       skipDuplicates: true,
     });
-    if (res.count) void this.tick();
+    if (res.count) {
+      this.wake();
+      void this.tick();
+    }
     return res.count > 0;
   }
 
@@ -85,11 +105,15 @@ export class InboundService implements OnModuleInit, OnModuleDestroy {
             where: { id: ev.id, status: "PENDING", nextAttemptAt: ev.nextAttemptAt },
             data: { nextAttemptAt: new Date(Date.now() + CLAIM_MS), attempts: { increment: 1 } },
           });
-          if (claimed.count) await this.run(ev.id, ev.instance, ev.payload, ev.attempts + 1);
+          if (claimed.count) {
+            this.lastActivity = Date.now();
+            await this.run(ev.id, ev.instance, ev.payload, ev.attempts + 1);
+          }
         }
         if (due.length === BATCH) this.again = true;
       } while (this.again);
       await this.cleanup();
+      await this.sleepIfIdle();
     } catch (e: any) {
       this.logger.error(`Fila de entrada falhou: ${e.message}`);
     } finally {
