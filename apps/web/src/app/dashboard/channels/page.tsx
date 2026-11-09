@@ -7,7 +7,7 @@ import { SpotifyCard } from "@/components/channels/SpotifyCard";
 
 // Integração automática com WhatsApp pausada: o usuário junta contatos manualmente.
 // Para religar, mude para true (o código de canais continua no repositório).
-const INTEGRACAO_WA_IG_ATIVA = false;
+const INTEGRACAO_WA_IG_ATIVA = true;
 
 export default function ChannelsPage() {
   const [channels, setChannels] = useState<any[]>([]);
