@@ -1,7 +1,7 @@
 import { Body, Controller, Delete, Get, Param, Post, Request } from "@nestjs/common";
 import { Access } from "../auth/access";
 import { WebhooksService, WEBHOOK_EVENTS } from "./webhooks.service";
-import { CreateWebhookDto } from "../public-api/dto";
+import { CreateWebhookDto } from "./dto";
 
 /** Gestão dos webhooks pelo painel (JWT). A API pública usa o mesmo serviço. */
 @Access("api")

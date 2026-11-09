@@ -11,13 +11,12 @@ total_tokens: 265339
 
 ## Visão geral do sistema
 
-Monorepo pnpm 12.6 + Turborepo: API NestJS 10, painel Next.js 15 (React 19, Tailwind 3), Prisma 6 sobre Postgres. O sistema recebe mensagens de WhatsApp (via Evolution API) e Instagram, guarda tudo em um inbox multi-tenant e oferece um assistente pessoal por WhatsApp (e-mail, agenda, Drive, notas, cofre de senhas, clima). Estado, filas e cache ficam no Postgres (`KvEntry`, `InboundEvent`, `WebhookDelivery`); não há Redis em uso.
+Monorepo pnpm 12.6 + Turborepo: API NestJS 10, painel Next.js 15 (React 19, Tailwind 3), Prisma 6 sobre Postgres. O sistema recebe mensagens de WhatsApp (via Evolution API), guarda tudo em um inbox multi-tenant e oferece um assistente pessoal por WhatsApp (e-mail, agenda, Drive, notas, cofre de senhas, clima). Estado, filas e cache ficam no Postgres (`KvEntry`, `InboundEvent`, `WebhookDelivery`); não há Redis em uso.
 
 ```mermaid
 graph TB
     subgraph Externo
         WA[WhatsApp] --> EVO[Evolution API]
-        IG[Instagram / Meta]
         GOOG[Google: Gmail, Calendar, Drive]
         TS[TypeSafe Jev]
         OAI[OpenAI / Gemini]
@@ -33,14 +32,12 @@ graph TB
         INB[inbox + gateway Socket.IO]
         AUT[automations]
         WH[webhooks de saída]
-        PUB[public-api /api/public/v1]
         VLT[vault]
         GS[integrations/google]
         ST[state KV]
     end
     DB[(Postgres via packages/database)]
     EVO -->|webhook| CH
-    IG -->|webhook| CH
     CH --> AS
     CH --> INB
     AS --> GS
@@ -52,7 +49,6 @@ graph TB
     INB --> WH
     UI -->|JWT /api/v1| API
     UI <-->|Socket.IO /inbox| INB
-    EXT -->|oc_live_ key| PUB
     WH -->|HMAC| EXT
     API --> DB
     API --> ST
@@ -65,14 +61,14 @@ openclaw/
 ├── apps/
 │   ├── api/                 NestJS (src/ 92 arquivos, test/ 27 specs)
 │   │   └── src/modules/     auth, automations, channels, contacts, health, inbox,
-│   │                        integrations/google, public-api, state, users, vault,
+│   │                        integrations/google, state, users, vault,
 │   │                        webhooks, workspace  (ai/, common/, config/ estão VAZIOS)
 │   ├── web/                 Next.js 15 (app/, components/, hooks/, lib/, middleware.ts, public/)
 │   └── widget/              webchat embutível (esqueleto, sem backend)
 ├── packages/
 │   ├── database/            Prisma schema + singleton `prisma`
 │   └── types/               tipos compartilhados (WS events, IncomingMessage)
-├── docs/                    api-publica.md, app-review.md, instagram.md, operacao.md
+├── docs/                    app-review.md, operacao.md
 ├── Dockerfile.api / Dockerfile.web / docker-compose.dev.yml
 ├── .github/workflows/monitor.yml   único workflow (health check a cada 30 min)
 └── .claude/                 commands/railway-ifce.md, skills/composio
@@ -82,8 +78,8 @@ openclaw/
 
 ### channels (o maior módulo, ~74k tokens)
 
-**Propósito:** entrada de mensagens, assistente de WhatsApp, Instagram, Evolution.
-**Entradas:** `POST /channels/webhooks/whatsapp/:instance` (header `x-openclaw-secret`), `POST|GET /channels/webhooks/instagram` (HMAC `x-hub-signature-256`), timers em `onModuleInit`.
+**Propósito:** entrada de mensagens, assistente de WhatsApp, Evolution.
+**Entradas:** `POST /channels/webhooks/whatsapp/:instance` (header `x-openclaw-secret`), timers em `onModuleInit`.
 
 | Arquivo | Papel |
 |---|---|
@@ -99,7 +95,6 @@ openclaw/
 | `assistant/assistant-scheduler.service.ts` | Tick de 20 s: apaga mensagens com senha, volta ao menu por inatividade, limpeza do chat |
 | `assistant/email-watcher.service.ts` | Poll do Gmail (60 s) e aviso por WhatsApp |
 | `evolution/*` | Cliente HTTP do Evolution, `EvolutionError`, filtro 503 |
-| `instagram/*` | OAuth, token de 60 dias cifrado, envio (janela de 24 h), renovação a cada 6 h |
 | `assistant/channel-route.ts` | Canais do assistente (`whatsapp` \| `app` \| `telegram`): instância `"app"`/`"telegram"` no lugar do nome da Evolution, ordem de tentativa e escolha do canal (lógica pura) |
 | `app-chat/*` | Chat do assistente dentro do app: `AppChatService` (mensagens `AppMessage` cifradas com a chave do workspace, retenção `APP_CHAT_RETENTION_DAYS`=30, arquivos do assistente em `KvEntry` por 1 h), `AppChatGateway` (Socket.IO `/chat`, sala por usuário), `PushService` (Web Push, `WEBPUSH_*`), `AppChatController` (`/app-chat`: mensagens, `audio`, `file`, `files/:id`, `drive/:id?account=` = baixar da lista do Drive na hora, `push`, `channel`; tudo `@Access("assistant")`). Lista de arquivos do Drive: `MenuService.driveSearch` guarda os itens em `takeDriveList`, o `handle` entrega em `meta.files` da mensagem e o app mostra um botão de baixar por item (WhatsApp/Telegram ignoram). Arquivo escolhido pelo número vira cartão de download (`meta.fileId`, vale 1 h, `lib/chat-file.ts`) |
 | `telegram/*` | `TelegramService` (envio por HTTP, `setWebhook` no boot com `PUBLIC_API_URL`), `TelegramController` (`POST /channels/telegram/webhook` público com `X-Telegram-Bot-Api-Secret-Token`; `link`/`status` para vincular por `/start CÓDIGO`, válido 10 min), `telegram-format.ts` (marcação do WhatsApp → HTML). O cofre nunca passa por lá (sem E2E) |
@@ -108,7 +103,7 @@ openclaw/
 | `workers/*` | Normalizam payload para `IncomingMessage` e chamam `InboxService.processIncoming` |
 | `whatsapp/parse.ts`, `phone.ts` | Parse Baileys, nono dígito BR, LIDs |
 
-**Depende de:** inbox, google, vault, evolution, automations. **Dependentes:** public-api.
+**Depende de:** inbox, google, vault, evolution, automations. 
 
 ### auth, users, workspace
 
@@ -123,10 +118,6 @@ openclaw/
 - `inbox.service.ts`: `processIncoming` idempotente por `externalId`+canal, find-or-create de contato e conversa OPEN, emite webhook e evento WS. `inbox.gateway.ts`: namespace `/inbox` (`message:new`, `conversation:updated`, `conversation:deleted`, `join:conversation`).
 - `automations/rules.ts` (puro) valida e avalia regras; `automation-runner.service.ts` executa (nunca lança; cooldown em `state`).
 - `webhooks`: fila `WebhookDelivery` (tick 5 s, backoff 1min/5min/30min/2h/12h), assinatura `X-OpenClaw-Signature: t=..,v1=..`, `url-guard.ts` contra SSRF, `crypto.ts` (AES-256-GCM, chaves por HKDF a partir de `ENCRYPTION_KEY` → `WEBHOOK_SECRET` → `JWT_SECRET`; prefixos `enc2:` tokens, `chat2:` textos por workspace, `sec2:` segredos de webhook; os formatos antigos `enc1:`/`chat1:` e o sem prefixo continuam abrindo; `sealField`/`openField` para colunas do banco).
-
-### public-api (`/api/public/v1`, fora do prefixo global)
-
-`ApiKeyGuard` (chave `oc_live_*`, só sha256 guardado) + `@RequireScopes`; a chave herda as restrições do OWNER. Idempotência (`Idempotency-Key`, 24 h), paginação por cursor, limites por plano (`plan-limits.ts`), erros `{error:{code,message}}`. **`openapi.ts` é escrito à mão: atualizar ao criar rota.**
 
 ### vault (cofre de senhas)
 
@@ -206,8 +197,8 @@ Webhook → `InboundEvent` → worker → `InboxService.processIncoming` → `We
 - `magobox.com.br` (Registro.br, DNS `*.sec.dns.br` com DNSSEC): `app.` = painel e login, `www.` = site público, `api.` = API. A raiz sem prefixo não resolve (o Registro.br não aceita CNAME nela; a saída seria a Cloudflare). Passo a passo em `docs/DOMINIO_MAGOBOX.md`.
 - `API_URL` na API é o endereço **interno** do Railway (usado pela Evolution); nunca usar para o que o mundo externo precisa alcançar. O Telegram usa `PUBLIC_API_URL` (ou `RAILWAY_PUBLIC_DOMAIN`).
 - CORS e websockets aceitam `WEB_URL` + `WEB_ORIGINS` (lista separada por vírgula), ver `web-origins.ts`. `WEB_URL` é também o destino dos redirecionamentos (login com Google, link do cofre).
-- **Leitor de JSON:** `app.use(json())` no `main.ts` faz o Nest achar que já há um leitor global e pular o dele: sem o segundo `app.use`, todo POST chega com corpo vazio. Por isso tudo vive em `body-parsers.ts` (25 MB só em `BIG_BODY_PATHS`, e `req.rawBody` para a assinatura do Instagram), com teste em `test/body-parsers.spec.ts`.
-- O redirect do Google (`GOOGLE_REDIRECT_URI`) precisa estar cadastrado no Google Cloud, exatamente igual; o Instagram (`INSTAGRAM_REDIRECT_URI`) ainda usa o endereço do Railway (a Meta não tem a URL nova).
+- **Leitor de JSON:** `app.use(json())` no `main.ts` faz o Nest achar que já há um leitor global e pular o dele: sem o segundo `app.use`, todo POST chega com corpo vazio. Por isso tudo vive em `body-parsers.ts` (25 MB só em `BIG_BODY_PATHS`), com teste em `test/body-parsers.spec.ts`.
+- O redirect do Google (`GOOGLE_REDIRECT_URI`) precisa estar cadastrado no Google Cloud, exatamente igual.
 
 **Spotify e clima do Google (04/10/2026)**
 - Tudo desligado sem `SPOTIFY_CLIENT_ID` e `SPOTIFY_CLIENT_SECRET` (e sem o serviço `spotify` liberado ao usuário): o item some do menu e "tocar" cai no resto do fluxo. Rotas conferidas na documentação: criar playlist `POST /me/playlists`, adicionar `POST /playlists/{id}/items` (o `/tracks` é obsoleto, máx. 100), busca com `limit` de 1 a 10, `PUT /me/player/play` só com Premium. A API de recomendações do Spotify não é usada (descontinuada para apps novos): "música pelo clima" é a IA propondo consultas de busca.
@@ -262,7 +253,7 @@ Webhook → `InboundEvent` → worker → `InboxService.processIncoming` → `We
 **Testes**
 22. Construtores posicionais de `MenuService`/`AssistantService` com `as any` em ~15 specs: mudar a ordem das dependências quebra vários testes.
 23. Sem tarefa `test` no `turbo.json`; `pnpm test` na raiz não roda nada (rodar em `apps/api`).
-24. Lacunas de cobertura (as notas têm spec próprio: `notes`, `google-notes`, `notes-menu`, `notes-tools`, `list-notes`, `notes-list-menu`): public-api, webhooks (url-guard, entrega), inbox além de `deleteConversation`, `StateService` real, integrações Google (exceto `calendarCreate`/`driveSearch`), controllers.
+24. Lacunas de cobertura (as notas têm spec próprio: `notes`, `google-notes`, `notes-menu`, `notes-tools`, `list-notes`, `notes-list-menu`): webhooks (url-guard, entrega), inbox além de `deleteConversation`, `StateService` real, integrações Google (exceto `calendarCreate`/`driveSearch`), controllers.
 
 **Notas no Drive** (`assistant/notes.ts`, `google.service.ts`)
 25. Gravar notas exige o escopo `drive.file`: contas Google conectadas antes dele precisam **reconectar** (Canais → Conectar Google); sem isso o erro orienta a reconexão. Usa o serviço `drive` (não há serviço `notes`).
@@ -311,7 +302,6 @@ Webhook → `InboundEvent` → worker → `InboxService.processIncoming` → `We
 | Nova intenção do Jev | `assistant/intent.service.ts` (tipo `Intent`), gatilho em `MenuService.respond`, `test/intent.spec.ts` |
 | Nova tool da IA livre | `assistant/assistant.service.ts` (`TOOLS`, `runTool`, `toolAllowed`); se sensível, entra em `SENSITIVE` |
 | Novo endpoint do painel | controller com `@Access("<serviço>")`, service filtrando por `workspaceId`, método em `apps/web/src/lib/api.ts` |
-| Nova rota da API pública | `public-api.controller.ts`, `scopes.ts`, `permissions.ts` (`serviceForScope`), **`openapi.ts`**, `docs/api-publica.md` |
 | Novo evento de webhook | `webhooks.service.ts` (`WEBHOOK_EVENTS`) e o ponto de `emit` |
 | Nova condição/ação de automação | `automations/rules.ts` (validação), `automation-runner.service.ts` (execução), UI em `dashboard/automations/page.tsx` |
 | Mudar o chat do app (mensagem, áudio, arquivo) | `app-chat/app-chat.controller.ts`, `AssistantService.transcribeForApp`/`handleMedia`, tela `dashboard/chat/page.tsx`, `lib/api.ts` (`appChat`), `body-parsers.ts` (`BIG_BODY_PATHS`) |

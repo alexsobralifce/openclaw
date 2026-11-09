@@ -3,7 +3,7 @@ import { createHmac, randomBytes } from "crypto";
 import { prisma } from "@openclaw/database";
 import { decryptSecret, encryptSecret } from "./crypto";
 import { assertPublicUrl } from "./url-guard";
-import { limitsFor } from "../public-api/plan-limits";
+import { limitsFor } from "./plan-limits";
 
 export const WEBHOOK_EVENTS = [
   "message.received",

@@ -8,7 +8,7 @@ import { assertQuota, currentInstance, QUOTA_NOTICE, quotaHit, recordUsage, trac
 import { APP_INSTANCE, channelOfInstance, channelOrder, TELEGRAM_INSTANCE } from "./channel-route";
 import { AppChatService, DriveListItem } from "../app-chat/app-chat.service";
 import { TelegramService } from "../telegram/telegram.service";
-import { ForbiddenException, Injectable, Logger } from "@nestjs/common";
+import { Injectable, Logger } from "@nestjs/common";
 import { prisma } from "@openclaw/database";
 import { GoogleService } from "../../integrations/google/google.service";
 import { MenuService } from "./menu.service";
@@ -18,7 +18,7 @@ import { toSpeech } from "./speech";
 import { suspiciousReasons } from "./security";
 import { StateService } from "../../state/state.service";
 import { Service } from "../../auth/permissions";
-import { assistantInstance, can, Commander, ECHO_TTL_MS, echoKey, telegramReady, workspaceCommander } from "./commander";
+import { assistantInstance, Commander, ECHO_TTL_MS, echoKey, telegramReady, workspaceCommander } from "./commander";
 import { WeatherService } from "./weather.service";
 import { isVaultHome, isVaultLock, looksLikeSharedSecret, SECRET_WIPE_MS, vaultQuery } from "./vault-command";
 import { normalize } from "./voice";
@@ -345,9 +345,6 @@ export function toolAllowed(services: Service[], name: string) {
 /** Resposta no lugar de qualquer coisa do cofre quando o pedido veio pelo Telegram. */
 export const TELEGRAM_VAULT_NOTICE = "🔒 O cofre de senhas não funciona pelo Telegram: as conversas de lá não têm criptografia de ponta a ponta. Use o app MagoBox ou o WhatsApp.";
 
-// Quantos comandos separados por ";" uma chamada de voz aceita
-const MAX_VOICE_STEPS = 4;
-
 @Injectable()
 export class AssistantService {
   private readonly logger = new Logger(AssistantService.name);
@@ -544,33 +541,6 @@ export class AssistantService {
       if (ch === "telegram" && this.telegram && telegramReady() && c.telegramChatId) return TELEGRAM_INSTANCE;
     }
     return null;
-  }
-
-  /**
-   * Comando por voz vindo da API pública (MacroDroid, atalhos): roda o mesmo menu do WhatsApp, sempre em modo carro,
-   * e devolve o texto já no formato falado. Só o menu responde: pedido livre à IA não roda por aqui, porque ela
-   * pode agir (enviar mensagens) e a chave da API fica num celular.
-   */
-  async voice(workspaceId: string, text: string): Promise<{ fala: string }> {
-    const owner = await workspaceCommander(workspaceId);
-    if (!owner || !can(owner, "assistant")) throw new ForbiddenException("O assistente não está liberado para esta conta.");
-    trackUser({ userId: owner.userId, workspaceId, exempt: owner.role === "ROOT" || owner.role === "ADMIN", limitUsd: planOf(owner.plan)?.aiUsd });
-    await this.menu.enterCar(workspaceId);
-    // Vários comandos numa chamada só, separados por ";" (ex.: "ler e-mails; Pessoal"): o menu avança uma tela por comando
-    // e a resposta é a do último. Poupa ações na macro e evita errar a tela.
-    const steps = text.split(";").map((s) => s.trim()).filter(Boolean).slice(0, MAX_VOICE_STEPS);
-    let answer: string | null = null;
-    try {
-      for (const step of steps.length ? steps : [text]) answer = await this.menu.respond(workspaceId, step);
-    } catch (err: any) {
-      this.logger.error(`Comando de voz falhou: ${err.message}`);
-      if (quotaHit()) answer = "Você atingiu o limite mensal de uso de IA. Fale com o administrador.";
-    }
-    // Nada daqui vai para o WhatsApp: limpa as marcas de "segredo" e "código digitado" para não vazarem no próximo envio
-    await this.menu.takeSecret(workspaceId);
-    await this.menu.takeRedact(workspaceId);
-    this.logger.log(`[AUDIT] ws=${workspaceId} voice_command chars=${text.length}`);
-    return { fala: toSpeech(answer ?? "Não entendi. Diga, por exemplo, agenda de hoje ou ler e-mails.") };
   }
 
   /** Baixa o áudio do WhatsApp e o envia ao modelo para virar texto (Gemini; Whisper como reserva). */

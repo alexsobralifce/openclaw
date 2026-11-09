@@ -11,16 +11,6 @@ export interface MenuItem {
   locked: boolean;
 }
 
-export interface BugReport {
-  id: string;
-  userName: string;
-  userEmail: string;
-  message: string;
-  page: string | null;
-  status: "NOVO" | "EM_ANALISE" | "RESOLVIDO";
-  createdAt: string;
-}
-
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const res = await fetch(`${API}/api/v1${path}`, {
     ...init,
@@ -238,11 +228,6 @@ export const api = {
     sync: () => request<{ plan: string | null; planUntil: string | null; billingStatus: string | null; expired: boolean }>("/billing/sync", { method: "POST" }),
     checkout: (plan: string, method: "card" | "pix") => request<{ url: string }>("/billing/checkout", { method: "POST", body: JSON.stringify({ plan, method }) }),
   },
-  bugReports: {
-    create: (message: string, page: string) => request<{ id: string }>("/bug-reports", { method: "POST", body: JSON.stringify({ message, page }) }),
-    list: (status?: string) => request<BugReport[]>(`/bug-reports${status ? `?status=${status}` : ""}`),
-    setStatus: (id: string, status: string) => request<BugReport>(`/bug-reports/${encodeURIComponent(id)}`, { method: "PATCH", body: JSON.stringify({ status }) }),
-  },
   usage: {
     report: (days: number) => request<UsageReport>(`/usage?days=${days}`),
     mine: () => request<{ plan: PlanInfo | null; limitUsd: number; monthUsd: number; since: string }>("/usage/me"),
@@ -319,13 +304,6 @@ export const api = {
   },
   google: {
     authUrl: () => request<{ url: string; connected: boolean }>("/integrations/google/auth-url"),
-  },
-  apiKeys: {
-    scopes: () => request<string[]>("/api-keys/scopes"),
-    list: () => request<any[]>("/api-keys"),
-    create: (data: { name: string; scopes: string[]; expiresAt?: string }) =>
-      request<any>("/api-keys", { method: "POST", body: JSON.stringify(data) }),
-    revoke: (id: string) => request<any>(`/api-keys/${id}`, { method: "DELETE" }),
   },
   webhooks: {
     events: () => request<string[]>("/webhooks/events"),

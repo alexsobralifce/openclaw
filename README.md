@@ -1,6 +1,6 @@
 # openclaw
 
-Plataforma de atendimento multi-tenant: **inbox de conversas do WhatsApp**, **automações**, **API pública com webhooks** e um **assistente pessoal no WhatsApp** que lê e responde e-mails, consulta a agenda e atende clientes por texto ou voz, inclusive no carro (Android Auto e CarPlay).
+Plataforma de atendimento multi-tenant: **inbox de conversas do WhatsApp**, **automações**, **webhooks de saída** e um **assistente pessoal no WhatsApp** que lê e responde e-mails, consulta a agenda e atende clientes por texto ou voz, inclusive no carro (Android Auto e CarPlay).
 
 > **Status:** projeto em fase de testes, sem clientes reais. Veja [Limitações conhecidas](#limitações-conhecidas) e [docs/operacao.md](docs/operacao.md).
 
@@ -13,7 +13,6 @@ Plataforma de atendimento multi-tenant: **inbox de conversas do WhatsApp**, **au
 | **Assistente no WhatsApp** | O dono conversa com o próprio WhatsApp conectado: menu por número ou palavra, IA para pedidos livres, transcrição de áudio (Gemini, com Whisper de reserva), resposta falada, memória de preferências. Ações que mudam o mundo (enviar e-mail, criar evento, responder cliente) sempre pedem confirmação. Guia completo: [`apps/web/public/comandos.html`](apps/web/public/comandos.html). |
 | **E-mail e agenda** | Gmail e Google Agenda de várias contas. Novos e-mails entram numa **fila em ordem de chegada**; "próximo" trata um a um. |
 | **Modo carro** | Respostas em texto curto e falável, com escolha por voz ("a segunda", "a da Maria"). Liga com "modo carro" e desliga sozinho. |
-| **API pública** | `/api/public/v1`: chaves com escopos, contatos, conversas, mensagens, e-mail e agenda, idempotência, limites por plano, [OpenAPI](#api-pública). |
 | **Webhooks de saída** | Entrega assinada (HMAC), com fila, tentativas com espera crescente, proteção contra SSRF e desativação automática de endpoints com falha. |
 | **Usuários e permissões** | Cada cadastro tem o próprio workspace e fica **pendente** até um root/admin aprovar e liberar os serviços. Quem administra não vê o conteúdo dos workspaces. |
 
@@ -107,19 +106,9 @@ Modelo completo em [`.env.example`](.env.example). As principais:
 
 Em produção a API se recusa a subir sem `DATABASE_URL`, `JWT_SECRET` e `WEBHOOK_SECRET`.
 
-## API pública
-
-Base: `/api/public/v1` · autenticação `Authorization: Bearer <chave>` · chaves criadas em **API** no painel.
-
-- Especificação: `GET /api/public/v1/openapi.json`
-- Escopos: `contacts:*`, `conversations:*`, `messages:*`, `email:*`, `calendar:*`, `webhooks:manage`
-- Envios aceitam `Idempotency-Key`
-- Limites por plano (`FREE`, `STARTER`, `GROWTH`, `ENTERPRISE`): chaves, webhooks e requisições por minuto
-- Uma chave só vale se o **dono do workspace** tem o serviço liberado
+## Webhooks de saída
 
 **Webhooks de saída:** eventos `message.received`, `message.sent`, `conversation.created`, `conversation.status_changed`, `contact.created`, `contact.updated`, `email.received`. Cada entrega leva o cabeçalho `X-OpenClaw-Signature: t=<unix>,v1=<hmac-sha256>`, calculado sobre `"<t>.<corpo>"` com o segredo do endpoint.
-
-Mais detalhes em [docs/api-publica.md](docs/api-publica.md) e na página `/api-publica.html` do painel.
 
 ## Deploy (Railway)
 
@@ -145,7 +134,6 @@ railway up --service web --detach    # Dockerfile.web
 ## Limitações conhecidas
 
 - **Sem backup automático do banco.** Obrigatório antes de haver clientes reais; o checklist está em [docs/operacao.md](docs/operacao.md) (a API avisa no log ao passar de 5 usuários ativos).
-- Instagram (DMs de texto, com envio e recebimento) está implementado, mas depende da aprovação do App Review da Meta para atender contas de terceiros; setup em [docs/instagram.md](docs/instagram.md). O envio de mídia e a resposta a comentários não existem (mídia recebida vira só texto + link). Facebook e webchat existem no schema, mas **não têm implementação**; Stripe e Resend estão só no `.env.example`.
 - Áudios e anexos de clientes não são baixados nem transcritos (só os comandos do dono).
 - Listas do inbox sem paginação e sem busca.
 - Migrações via `prisma db push`, sem histórico versionado.
