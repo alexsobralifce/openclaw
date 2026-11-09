@@ -5,6 +5,7 @@ import { EvolutionService } from "../channels/evolution/evolution.service";
 const CHECK_TIMEOUT_MS = 5_000;
 const CACHE_MS = 30_000;
 // Mensagem recebida que segue sem ser processada por mais que isto é sinal de problema
+const STUCK_INBOUND_MS = 10 * 60_000;
 
 export interface HealthReport {
   status: "ok" | "degraded" | "down";
@@ -27,7 +28,7 @@ export class HealthService {
   }
 
   /**
-   * Verificação completa para o monitor externo: banco e WhatsApp do root.
+   * Verificação completa para o monitor externo: banco, Evolution, WhatsApp do root e fila de entrada.
    * Resultado guardado por 30 s para que o endpoint público não vire uma forma de sobrecarregar os serviços.
    */
   async full(): Promise<HealthReport> {
@@ -36,6 +37,7 @@ export class HealthService {
 
     if (!(await this.db())) failing.push("db");
     else {
+      if (await this.inboundStuck()) failing.push("fila-de-entrada");
       failing.push(...(await this.whatsapp()));
     }
 
@@ -50,6 +52,17 @@ export class HealthService {
       return true;
     } catch (e: any) {
       this.logger.error(`Banco indisponível: ${e.message}`);
+      return false;
+    }
+  }
+
+  private async inboundStuck() {
+    try {
+      const n = await prisma.inboundEvent.count({
+        where: { status: { in: ["PENDING", "FAILED"] }, createdAt: { lt: new Date(Date.now() - STUCK_INBOUND_MS) } },
+      });
+      return n > 0;
+    } catch {
       return false;
     }
   }

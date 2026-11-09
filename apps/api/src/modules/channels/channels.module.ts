@@ -19,6 +19,7 @@ import { VaultModule } from "../vault/vault.module";
 import { InboxModule } from "../inbox/inbox.module";
 import { EvolutionModule } from "./evolution/evolution.module";
 import { AutomationsModule } from "../automations/automations.module";
+import { InboundService } from "./inbound/inbound.service";
 import { TelegramService } from "./telegram/telegram.service";
 import { TelegramController } from "./telegram/telegram.controller";
 import { SpotifyController } from "./spotify/spotify.controller";
@@ -40,7 +41,7 @@ import { PushService } from "./app-chat/push.service";
     }),
   ],
   controllers: [ChannelsController, AssistantSettingsController, TelegramController, AppChatController, DocumentsController, NotesController, SpotifyController],
-  providers: [SpotifyService, TelegramService, AppChatService, AppChatGateway, PushService, ChannelsService, WhatsappWorker, AssistantService, MenuService, MemoryService, GeminiService, IntentService, EmailWatcherService, WeatherService, AssistantSchedulerService],
+  providers: [SpotifyService, TelegramService, AppChatService, AppChatGateway, PushService, ChannelsService, WhatsappWorker, InboundService, AssistantService, MenuService, MemoryService, GeminiService, IntentService, EmailWatcherService, WeatherService, AssistantSchedulerService],
   exports: [ChannelsService, EvolutionModule, AssistantService],
 })
 export class ChannelsModule {}

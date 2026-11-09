@@ -79,7 +79,7 @@ export async function whatsappInstance(workspaceId: string): Promise<string | nu
   return (wa?.config as any)?.instanceName ?? (sharedInstance() || null);
 }
 
-/** Último estado de conexão registrado para a instância (ver o evento connection.update do Evolution). */
+/** Último estado de conexão registrado para a instância (ver o evento connection.update no InboundService). */
 async function connectionOf(instance: string): Promise<ConnState | null> {
   try {
     const row = await prisma.kvEntry.findUnique({ where: { key: connKey(instance) } });
