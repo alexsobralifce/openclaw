@@ -16,7 +16,6 @@ export class ChannelsService {
         createdAt: c.createdAt,
         workspaceId: c.workspaceId,
         config: { ...(cfg.provider ? { provider: cfg.provider } : {}), ...(cfg.email ? { email: cfg.email } : {}), ...(cfg.instanceName ? { instanceName: cfg.instanceName } : {}),
-          ...(cfg.provider === "instagram" ? { provider: "instagram", username: cfg.username, needsReconnect: !!cfg.needsReconnect || !!cfg.disconnected } : {}),
         },
       };
     });

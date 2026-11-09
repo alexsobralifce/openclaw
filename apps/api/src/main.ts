@@ -16,7 +16,7 @@ function assertProductionConfig() {
 
 async function bootstrap() {
   assertProductionConfig();
-  const app = await NestFactory.create<NestExpressApplication>(AppModule, { rawBody: true }); // rawBody: a assinatura do webhook do Instagram é do corpo cru
+  const app = await NestFactory.create<NestExpressApplication>(AppModule);
 
   // Webhook do WhatsApp com arquivo (PDF, foto) passa de 100 KB: limite maior só nessa rota, o resto segue com o padrão
   configureBodyParsers(app);

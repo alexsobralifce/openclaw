@@ -348,14 +348,6 @@ export const api = {
       request<any>(`/channels/whatsapp/${channelId}/status`),
     deleteWhatsapp: (channelId: string) =>
       request<any>(`/channels/whatsapp/${channelId}`, { method: "DELETE" }),
-    instagramAuthUrl: () => request<{ url: string }>("/channels/instagram/auth-url"),
-    disconnectInstagram: (channelId: string) =>
-      request<any>(`/channels/instagram/${channelId}`, { method: "DELETE" }),
-    sendInstagram: (channelId: string, text: string, conversationId: string) =>
-      request<any>(`/channels/instagram/${channelId}/send`, {
-        method: "POST",
-        body: JSON.stringify({ text, conversationId }),
-      }),
     sendWhatsapp: (channelId: string, to: string, text: string, conversationId: string) =>
       request<any>(`/channels/whatsapp/${channelId}/send`, {
         method: "POST",

@@ -5,7 +5,7 @@ import { api } from "@/lib/api";
 import { WhatsappSetup } from "@/components/channels/WhatsappSetup";
 import { SpotifyCard } from "@/components/channels/SpotifyCard";
 
-// Integração automática com WhatsApp e Instagram pausada: o usuário junta contatos manualmente.
+// Integração automática com WhatsApp pausada: o usuário junta contatos manualmente.
 // Para religar, mude para true (o código de canais continua no repositório).
 const INTEGRACAO_WA_IG_ATIVA = false;
 
@@ -40,9 +40,6 @@ export default function ChannelsPage() {
     if (sp === "ok") setGoogleMsg("Spotify conectado com sucesso.");
     if (sp === "error") setGoogleMsg("Não foi possível conectar o Spotify. Tente novamente.");
     if (sp === "limit") setGoogleMsg("O Spotify só libera contas cadastradas neste app (até 5 por enquanto) e a sua ainda não foi liberada. Peça ao administrador para cadastrar o seu e-mail do Spotify.");
-    const ig = new URLSearchParams(window.location.search).get("instagram");
-    if (ig === "ok") setGoogleMsg("Instagram conectado com sucesso.");
-    if (ig === "error") setGoogleMsg("Não foi possível conectar o Instagram. Tente novamente.");
   }, []);
 
   return (
@@ -81,7 +78,7 @@ export default function ChannelsPage() {
             <span className="text-2xl">📱</span>
           </div>
           <p className="text-sm font-medium text-gray-400">Nenhum canal conectado</p>
-          <p className="text-xs text-gray-600 mt-1">Adicione WhatsApp, Instagram ou Email para começar</p>
+          <p className="text-xs text-gray-600 mt-1">Adicione WhatsApp ou Email para começar</p>
         </div>
       ) : (
         <div className="space-y-3">
@@ -99,35 +96,25 @@ export default function ChannelsPage() {
   );
 }
 
-/** Manda o cliente para o login do Instagram; ele autoriza e volta para cá já conectado. */
-async function connectInstagram() {
-  const { url } = await api.channels.instagramAuthUrl();
-  window.location.href = url;
-}
-
 function ChannelCard({ channel, onDelete }: { channel: any; onDelete: () => void }) {
   const [status, setStatus] = useState<string>("checking");
   const [showQr, setShowQr] = useState(false);
   const [actionError, setActionError] = useState("");
 
-  const isInstagram = channel.type === "INSTAGRAM";
-  const igNeedsReconnect = isInstagram && (!channel.isActive || channel.config?.needsReconnect);
-
   useEffect(() => {
-    if (isInstagram) { setStatus(igNeedsReconnect ? "reconnect" : "open"); return; }
     if (channel.type !== "WHATSAPP") return;
     api.channels.whatsappStatus(channel.id)
       .then((s: any) => setStatus(s.state ?? "unknown"))
       .catch(() => setStatus("error"));
-  }, [channel.id, channel.type, isInstagram, igNeedsReconnect]);
+  }, [channel.id, channel.type]);
 
   const STATE_LABEL: Record<string, string> = {
     open: "Conectado", close: "Desconectado", connecting: "Conectando...",
-    checking: "Verificando...", error: "Sem resposta do serviço", unknown: "Desconhecido", reconnect: "Precisa reconectar",
+    checking: "Verificando...", error: "Sem resposta do serviço", unknown: "Desconhecido",
   };
   const STATE_COLOR: Record<string, string> = {
     open: "text-violet-400", close: "text-red-400", connecting: "text-amber-400",
-    checking: "text-gray-500", error: "text-red-400", unknown: "text-gray-500", reconnect: "text-amber-400",
+    checking: "text-gray-500", error: "text-red-400", unknown: "text-gray-500",
   };
 
   return (
@@ -135,7 +122,7 @@ function ChannelCard({ channel, onDelete }: { channel: any; onDelete: () => void
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:gap-4">
        <div className="flex flex-1 min-w-0 items-start sm:items-center gap-3 sm:gap-4">
         <div className="w-10 h-10 rounded-xl bg-green-500/15 border border-green-500/20 flex items-center justify-center text-xl flex-shrink-0">
-          {channel.type === "WHATSAPP" ? "🟢" : channel.type === "INSTAGRAM" ? "🟣" : channel.type === "EMAIL" ? "📧" : "💬"}
+          {channel.type === "WHATSAPP" ? "🟢" : channel.type === "EMAIL" ? "📧" : "💬"}
         </div>
         <div className="flex-1 min-w-0">
           {/* O nome quebra em várias linhas (e-mails longos) e o selo desce para junto do status */}
@@ -159,20 +146,11 @@ function ChannelCard({ channel, onDelete }: { channel: any; onDelete: () => void
               Ver QR Code
             </button>
           )}
-          {isInstagram && igNeedsReconnect && (
-            <button
-              onClick={() => connectInstagram().catch((e: any) => setActionError(e?.message ?? "Não foi possível abrir o login do Instagram"))}
-              className="px-3 py-1.5 text-xs font-medium bg-violet-500/10 text-violet-400 hover:bg-violet-500/20 rounded-lg transition-colors"
-            >
-              Reconectar
-            </button>
-          )}
           <button
             onClick={async () => {
               setActionError("");
               try {
-                if (isInstagram) await api.channels.disconnectInstagram(channel.id);
-                else await api.channels.deleteWhatsapp(channel.id);
+                await api.channels.deleteWhatsapp(channel.id);
                 onDelete();
               } catch (e: any) {
                 setActionError(e?.message ?? "Não foi possível remover o canal");
@@ -261,10 +239,6 @@ function AddChannelModal({ onClose, onCreated }: { onClose: () => void; onCreate
   const options = [
     { type: "WHATSAPP", label: "WhatsApp", icon: "🟢", desc: "via Evolution API", action: () => setStep("whatsapp") },
     { type: "EMAIL", label: "Email", icon: "📧", desc: "IMAP + SMTP", action: () => {} },
-    {
-      type: "INSTAGRAM", label: "Instagram", icon: "🟣", desc: "Entrar com o Instagram",
-      action: () => connectInstagram().catch((e: any) => setError(e.message)),
-    },
     { type: "WEBCHAT", label: "Webchat", icon: "💬", desc: "Widget embeddável", action: () => {} },
   ];
 
@@ -280,7 +254,7 @@ function AddChannelModal({ onClose, onCreated }: { onClose: () => void; onCreate
             <button
               key={opt.type}
               onClick={opt.action}
-              disabled={opt.type !== "WHATSAPP" && opt.type !== "INSTAGRAM"}
+              disabled={opt.type !== "WHATSAPP"}
               className="flex flex-col items-center gap-2 p-4 rounded-xl border border-gray-800 bg-gray-950 hover:border-violet-500/40 hover:bg-violet-500/5 disabled:opacity-40 disabled:cursor-not-allowed transition-all"
             >
               <span className="text-2xl">{opt.icon}</span>

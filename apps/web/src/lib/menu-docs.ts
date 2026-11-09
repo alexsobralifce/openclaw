@@ -76,14 +76,14 @@ export const MENU_DOCS: DocNode[] = [
     id: "clients",
     icon: "💬",
     title: "Conversas de clientes",
-    summary: "Acompanhar e responder as conversas de clientes que chegam pelo WhatsApp ou Instagram conectados.",
+    summary: "Acompanhar e responder as conversas de clientes que chegam pelo WhatsApp conectado.",
     needs: "Canal conectado em Canais e o serviço Conversas de clientes liberado.",
     children: [
       { id: "clients-ver", icon: "📋", title: "Ver e abrir conversas", summary: "Lista as conversas abertas e pendentes com a última mensagem; o número abre e mostra as últimas mensagens." },
       { id: "clients-responder", icon: "↩️", title: "Responder", summary: "Diga em poucas palavras o que responder: a IA escreve e você confirma com “1 enviar”.", say: ["responder", "confirmo presença, obrigado"] },
       { id: "clients-resolver", icon: "✅", title: "Marcar como resolvida", summary: "Fecha a conversa e volta à lista.", say: ["resolver"] },
     ],
-    add: "Conversas novas aparecem sozinhas quando o cliente escreve para o número ou conta do Instagram conectados.",
+    add: "Conversas novas aparecem sozinhas quando o cliente escreve para o número do WhatsApp conectado.",
     remove: "Excluir uma conversa é no painel web: Inbox › abra a conversa › Excluir (dá para apagar também o contato). Não dá para desfazer.",
   },
   {

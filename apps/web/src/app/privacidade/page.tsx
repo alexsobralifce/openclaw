@@ -18,8 +18,7 @@ export default function PrivacyPage() {
       <section className="space-y-2">
         <h2 className={h2}>O que é o MagoBox</h2>
         <p>
-          O MagoBox é uma plataforma com duas partes: (1) uma caixa de entrada que reúne as mensagens que empresas recebem em canais como WhatsApp e
-          Instagram, e (2) um assistente pessoal, usado pelo WhatsApp e pelo painel, que ajuda o próprio usuário com e-mails, agenda, arquivos, notas,
+          O MagoBox é uma plataforma com duas partes: (1) uma caixa de entrada que reúne as mensagens que empresas recebem em canais como WhatsApp, e (2) um assistente pessoal, usado pelo WhatsApp e pelo painel, que ajuda o próprio usuário com e-mails, agenda, arquivos, notas,
           contatos e um cofre de senhas. Esta política explica quais dados tratamos, para quê, e como você controla tudo isso.
         </p>
       </section>
@@ -29,9 +28,8 @@ export default function PrivacyPage() {
         <ul className="list-disc pl-6 space-y-1">
           <li><strong>Conta:</strong> nome, e-mail, senha (guardada apenas como hash, nunca em texto) e o telefone de WhatsApp que você informa para falar com o assistente.</li>
           <li><strong>Mensagens do assistente:</strong> o que você escreve, fala (áudio) ou envia (PDF, foto) ao assistente, e as respostas dele.</li>
-          <li><strong>Caixa de entrada de clientes:</strong> mensagens recebidas e enviadas nos canais conectados (WhatsApp, Instagram), com o nome e o identificador de quem escreveu.</li>
+          <li><strong>Caixa de entrada de clientes:</strong> mensagens recebidas e enviadas nos canais conectados (WhatsApp), com o nome e o identificador de quem escreveu.</li>
           <li><strong>Dados da sua conta Google</strong>, quando você a conecta (detalhados abaixo).</li>
-          <li><strong>Dados do Instagram</strong>, quando uma empresa conecta sua conta profissional (detalhados abaixo).</li>
           <li><strong>Cofre de senhas:</strong> o que você mesmo cadastra, guardado cifrado.</li>
           <li><strong>Memória e rotina do assistente:</strong> preferências e hábitos que você pede para ele lembrar.</li>
           <li><strong>Consumo de IA:</strong> quantidade de chamadas e de tokens por usuário e por dia (apenas números, sem o conteúdo), para controle de custo e de limites de uso.</li>
@@ -77,21 +75,6 @@ export default function PrivacyPage() {
       </section>
 
       <section className="space-y-2">
-        <h2 className={h2}>Dados do Instagram</h2>
-        <p>
-          Quando uma empresa conecta sua conta profissional do Instagram, ela autoriza o MagoBox, pelo login oficial do Instagram, a ler e responder as
-          mensagens diretas dessa conta. Tratamos apenas:
-        </p>
-        <ul className="list-disc pl-6 space-y-1">
-          <li>identificador, nome de usuário e nome da conta profissional conectada;</li>
-          <li>mensagens diretas enviadas à conta e as respostas enviadas por ela (texto e links de anexos);</li>
-          <li>identificador e nome público de quem escreveu, para montar a conversa;</li>
-          <li>um token de acesso, guardado cifrado, usado para receber e enviar mensagens em nome da empresa.</li>
-        </ul>
-        <p>Não acessamos senha do Instagram, nem publicamos, curtimos ou seguimos em nome de ninguém.</p>
-      </section>
-
-      <section className="space-y-2">
         <h2 className={h2}>Inteligência artificial</h2>
         <p>
           Para entender seus pedidos, transcrever áudios, ler PDFs e fotos, resumir e redigir rascunhos, enviamos o texto ou o arquivo necessário a
@@ -113,7 +96,7 @@ export default function PrivacyPage() {
       <section className="space-y-2">
         <h2 className={h2}>Onde ficam e como protegemos</h2>
         <p>
-          Os dados ficam em servidores de nuvem que podem estar fora do Brasil (hoje, nos Estados Unidos). Tokens de acesso do Google e do Instagram e o
+          Os dados ficam em servidores de nuvem que podem estar fora do Brasil (hoje, nos Estados Unidos). Tokens de acesso do Google e o
           cofre de senhas são guardados cifrados; a comunicação usa HTTPS; cada conta só enxerga os dados do próprio workspace; e administradores da plataforma
           gerenciam usuários e permissões sem ver o conteúdo dos workspaces.
         </p>
@@ -122,7 +105,7 @@ export default function PrivacyPage() {
       <section className="space-y-2">
         <h2 className={h2}>Por quanto tempo guardamos</h2>
         <p>
-          Enquanto sua conta estiver ativa. Ao desconectar o Google ou o Instagram, apagamos o token e paramos de acessar os dados. A fila de e-mails novos
+          Enquanto sua conta estiver ativa. Ao desconectar o Google, apagamos o token e paramos de acessar os dados. A fila de e-mails novos
           dura até 48 horas. Arquivos criados no seu Drive (notas e contatos) continuam seus: ficam lá até você apagá-los. Registros técnicos e de consumo
           podem ser mantidos por prazo limitado para segurança e auditoria.
         </p>

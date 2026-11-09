@@ -1,13 +1,13 @@
 import "reflect-metadata";
-import { Body, Controller, Post, Req, ValidationPipe } from "@nestjs/common";
+import { Body, Controller, Post, ValidationPipe } from "@nestjs/common";
 import { Test } from "@nestjs/testing";
 import { describe, expect, it } from "vitest";
 import { BIG_BODY_PATHS, configureBodyParsers, WHATSAPP_WEBHOOK_PATH } from "../src/body-parsers";
 
 @Controller("x")
 class EchoController {
-  @Post() echo(@Body("a") a: unknown, @Req() req: any) {
-    return { a, raw: req.rawBody?.toString() ?? null };
+  @Post() echo(@Body("a") a: unknown) {
+    return { a };
   }
   @Post("form") form(@Body("a") a: unknown) {
     return { a };
@@ -22,7 +22,7 @@ class WhatsappController {
 
 async function start() {
   const mod = await Test.createTestingModule({ controllers: [EchoController, WhatsappController] }).compile();
-  const app = mod.createNestApplication({ rawBody: true });
+  const app = mod.createNestApplication();
   configureBodyParsers(app as any);
   app.setGlobalPrefix("api/v1");
   app.useGlobalPipes(new ValidationPipe({ whitelist: true, transform: true }));
@@ -33,10 +33,10 @@ async function start() {
 const post = (url: string, body: string, type = "application/json") => fetch(url, { method: "POST", headers: { "Content-Type": type }, body });
 
 describe("leitores de corpo da API", () => {
-  it("lê JSON nas rotas comuns e guarda o corpo cru (assinatura do Instagram)", async () => {
+  it("lê JSON nas rotas comuns", async () => {
     const { app, base } = await start();
     const r = await (await post(`${base}/x`, JSON.stringify({ a: 1 }))).json();
-    expect(r).toEqual({ a: 1, raw: '{"a":1}' });
+    expect(r).toEqual({ a: 1 });
     await app.close();
   });
 

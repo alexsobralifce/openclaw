@@ -73,7 +73,7 @@ export function decryptSecret(stored: string): string {
   return openWith(stored, legacyKey(""));
 }
 
-// ─── Tokens de terceiros (Google, Instagram, Spotify) ─────────────────────────────
+// ─── Tokens de terceiros (Google, Spotify) ─────────────────────────────
 
 const TOKEN_V1 = "enc1:";
 const TOKEN_V2 = "enc2:";

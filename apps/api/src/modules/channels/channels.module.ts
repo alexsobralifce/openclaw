@@ -20,7 +20,6 @@ import { InboxModule } from "../inbox/inbox.module";
 import { EvolutionModule } from "./evolution/evolution.module";
 import { AutomationsModule } from "../automations/automations.module";
 import { InboundService } from "./inbound/inbound.service";
-import { InstagramService } from "./instagram/instagram.service";
 import { TelegramService } from "./telegram/telegram.service";
 import { TelegramController } from "./telegram/telegram.controller";
 import { SpotifyController } from "./spotify/spotify.controller";
@@ -31,19 +30,18 @@ import { AppChatController } from "./app-chat/app-chat.controller";
 import { AppChatService } from "./app-chat/app-chat.service";
 import { AppChatGateway } from "./app-chat/app-chat.gateway";
 import { PushService } from "./app-chat/push.service";
-import { InstagramWorker } from "./workers/instagram.worker";
 
 @Module({
   imports: [
     InboxModule, GoogleModule, VaultModule, EvolutionModule, AutomationsModule,
-    // Assina o `state` do OAuth do Instagram (mesmo esquema do Google)
+    // Assina os JWT usados pelo Spotify e pelo chat do app
     JwtModule.registerAsync({
       useFactory: (config: ConfigService) => ({ secret: jwtSecret(config.get("JWT_SECRET")) }),
       inject: [ConfigService],
     }),
   ],
   controllers: [ChannelsController, AssistantSettingsController, TelegramController, AppChatController, DocumentsController, NotesController, SpotifyController],
-  providers: [SpotifyService, TelegramService, AppChatService, AppChatGateway, PushService, ChannelsService, WhatsappWorker, InstagramWorker, InstagramService, InboundService, AssistantService, MenuService, MemoryService, GeminiService, IntentService, EmailWatcherService, WeatherService, AssistantSchedulerService],
+  providers: [SpotifyService, TelegramService, AppChatService, AppChatGateway, PushService, ChannelsService, WhatsappWorker, InboundService, AssistantService, MenuService, MemoryService, GeminiService, IntentService, EmailWatcherService, WeatherService, AssistantSchedulerService],
   exports: [ChannelsService, EvolutionModule, AssistantService],
 })
 export class ChannelsModule {}

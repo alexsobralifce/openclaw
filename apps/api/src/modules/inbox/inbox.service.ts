@@ -169,7 +169,6 @@ export class InboxService {
 
   /** Contato pelo telefone (único por workspace); tolera duas mensagens simultâneas do mesmo número. */
   private async findOrCreateContact(msg: IncomingMessage) {
-    if (msg.externalContactId) return this.findOrCreateContactByExternalId(msg, msg.externalContactId);
     const where = { workspaceId_phone: { workspaceId: msg.workspaceId, phone: msg.from } };
     const existing = await prisma.contact.findUnique({ where });
     if (existing) {
@@ -186,19 +185,6 @@ export class InboxService {
       if (e?.code !== "P2002") throw e;
       return { contact: await prisma.contact.findUniqueOrThrow({ where }), created: false };
     }
-  }
-
-  /** Contato de canal sem telefone (Instagram): o id do canal fica em externalId e o telefone fica vazio. */
-  private async findOrCreateContactByExternalId(msg: IncomingMessage, externalId: string) {
-    const existing = await prisma.contact.findFirst({ where: { workspaceId: msg.workspaceId, externalId } });
-    if (existing) {
-      if (msg.name && existing.name === externalId) {
-        return { contact: await prisma.contact.update({ where: { id: existing.id }, data: { name: msg.name } }), created: false };
-      }
-      return { contact: existing, created: false };
-    }
-    const contact = await prisma.contact.create({ data: { workspaceId: msg.workspaceId, name: msg.name || externalId, externalId } });
-    return { contact, created: true };
   }
 }
 

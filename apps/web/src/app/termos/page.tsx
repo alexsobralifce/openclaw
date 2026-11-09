@@ -15,8 +15,8 @@ export default function TermsPage() {
       <section className="space-y-2">
         <h2 className="text-base font-semibold text-gray-200">1. O serviço</h2>
         <p>
-          O MagoBox é uma plataforma de atendimento que reúne, em uma caixa de entrada, as mensagens que uma empresa recebe em canais como WhatsApp,
-          e-mail e Instagram, e permite que a equipe responda, organize conversas e automatize tarefas. Inclui também um assistente pessoal, usado pelo
+          O MagoBox é uma plataforma de atendimento que reúne, em uma caixa de entrada, as mensagens que uma empresa recebe em canais como WhatsApp e
+          e-mail, e permite que a equipe responda, organize conversas e automatize tarefas. Inclui também um assistente pessoal, usado pelo
           WhatsApp e pelo painel, que ajuda o usuário com e-mails, agenda, arquivos, notas, contatos e um cofre de senhas. Ao criar uma conta ou conectar um canal, você
           concorda com estes termos.
         </p>
@@ -26,7 +26,7 @@ export default function TermsPage() {
         <h2 className="text-base font-semibold text-gray-200">2. Conta e responsabilidades</h2>
         <ul className="list-disc pl-6 space-y-1">
           <li>Você é responsável pelas informações da conta, por manter suas credenciais em segredo e pelo que a sua equipe faz no sistema.</li>
-          <li>Você declara ter autorização para conectar as contas e os números que cadastrar (por exemplo, a conta profissional do Instagram da sua empresa).</li>
+          <li>Você declara ter autorização para conectar as contas e os números que cadastrar.</li>
           <li>Você é o responsável pelo conteúdo das mensagens que envia e pelo atendimento prestado aos seus clientes.</li>
         </ul>
       </section>
@@ -36,7 +36,7 @@ export default function TermsPage() {
         <p>É proibido usar o serviço para:</p>
         <ul className="list-disc pl-6 space-y-1">
           <li>enviar spam, mensagens em massa não solicitadas ou conteúdo enganoso, ilegal ou ofensivo;</li>
-          <li>violar os termos e políticas das plataformas conectadas (Meta/Instagram, WhatsApp e Google), incluindo a janela de resposta de 24 horas do Instagram;</li>
+          <li>violar os termos e políticas das plataformas conectadas (WhatsApp e Google);</li>
           <li>tentar acessar dados de outras empresas, contornar limites técnicos ou comprometer a segurança do serviço.</li>
         </ul>
         <p>Podemos limitar ou suspender contas que violem estas regras.</p>
@@ -76,7 +76,7 @@ export default function TermsPage() {
       <section className="space-y-2">
         <h2 className="text-base font-semibold text-gray-200">7. Canais de terceiros</h2>
         <p>
-          O MagoBox depende de serviços de terceiros (como a API do Instagram e o WhatsApp). Eles têm regras próprias, podem mudar ou ficar
+          O MagoBox depende de serviços de terceiros (como o WhatsApp e o Google). Eles têm regras próprias, podem mudar ou ficar
           indisponíveis, e podem suspender contas. Não controlamos esses serviços e não garantimos que estarão sempre disponíveis. Você pode
           desconectar um canal a qualquer momento, em Canais.
         </p>

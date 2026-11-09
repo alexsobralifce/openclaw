@@ -1,8 +1,7 @@
 import {
-  BadRequestException, Body, Controller, Delete, Get, HttpCode, Param, Query,
-  Post, RawBodyRequest, Req, Request, Res, Headers, Logger, ForbiddenException, UseFilters,
+  Body, Controller, Delete, Get, HttpCode, Param,
+  Post, Request, Headers, Logger, ForbiddenException, UseFilters,
 } from "@nestjs/common";
-import { JwtService } from "@nestjs/jwt";
 import { Access } from "../auth/access";
 import { timingSafeEqual } from "crypto";
 import { ChannelsService } from "./channels.service";
@@ -10,7 +9,6 @@ import { EvolutionService } from "./evolution/evolution.service";
 import { EvolutionExceptionFilter } from "./evolution/evolution.filter";
 import { InboundService } from "./inbound/inbound.service";
 import { InboxService } from "../inbox/inbox.service";
-import { InstagramApiError, InstagramService, REPLY_WINDOW_MS } from "./instagram/instagram.service";
 import { prisma } from "@openclaw/database";
 
 @Controller("channels")
@@ -23,8 +21,6 @@ export class ChannelsController {
     private evolution: EvolutionService,
     private inbound: InboundService,
     private inbox: InboxService,
-    private instagram: InstagramService,
-    private jwt: JwtService,
   ) {}
 
   // ─── Autenticado ──────────────────────────────────────────────
@@ -119,102 +115,6 @@ export class ChannelsController {
     if (body.conversationId) await this.inbox.recordOutbound(workspaceId, body.conversationId, body.text, result?.key?.id, req.user.id);
 
     return result;
-  }
-
-  // ─── Instagram ────────────────────────────────────────────────
-
-  /** Endereço de login do Instagram: o cliente só clica em "Conectar" e autoriza, sem colar chave nenhuma. */
-  @Access("channels")
-  @Get("instagram/auth-url")
-  instagramAuthUrl(@Request() req: any) {
-    if (!this.instagram.isConfigured()) {
-      throw new BadRequestException("INSTAGRAM_APP_ID/INSTAGRAM_APP_SECRET não configurados no .env");
-    }
-    const workspaceId: string = req.user.workspaces[0]?.workspaceId;
-    const state = this.jwt.sign({ workspaceId, purpose: "instagram-oauth" }, { expiresIn: "10m" });
-    return { url: this.instagram.authUrl(state) };
-  }
-
-  @Get("instagram/callback")
-  async instagramCallback(@Query("code") code: string, @Query("state") state: string, @Query("error") error: string, @Res() res: any) {
-    const web = process.env.WEB_URL || "http://localhost:3000";
-    if (error || !code || !state) return res.redirect(`${web}/dashboard/channels?instagram=error`);
-    try {
-      const payload: any = this.jwt.verify(state);
-      if (payload.purpose !== "instagram-oauth") throw new Error("state inválido");
-      await this.instagram.connect(payload.workspaceId, code);
-      return res.redirect(`${web}/dashboard/channels?instagram=ok`);
-    } catch (e: any) {
-      this.logger.error(`Conexão do Instagram falhou: ${e.message}`);
-      return res.redirect(`${web}/dashboard/channels?instagram=error`);
-    }
-  }
-
-  @Access("channels")
-  @Delete("instagram/:channelId")
-  async disconnectInstagram(@Request() req: any, @Param("channelId") channelId: string) {
-    await this.instagram.disconnect(req.user.workspaces[0]?.workspaceId, channelId);
-    return { ok: true };
-  }
-
-  @Access("inbox")
-  @Post("instagram/:channelId/send")
-  async sendInstagram(
-    @Request() req: any,
-    @Param("channelId") channelId: string,
-    @Body() body: { text: string; conversationId: string },
-  ) {
-    const workspaceId: string = req.user.workspaces[0]?.workspaceId;
-    const text = body?.text?.trim();
-    if (!text || !body.conversationId) throw new BadRequestException("text e conversationId são obrigatórios");
-    const channel = await prisma.channel.findFirstOrThrow({ where: { id: channelId, workspaceId, type: "INSTAGRAM" } });
-    const conversation = await prisma.conversation.findFirstOrThrow({
-      where: { id: body.conversationId, workspaceId, channelId: channel.id },
-      include: { contact: true },
-    });
-    if (!conversation.contact.externalId) throw new BadRequestException("Contato sem id do Instagram");
-
-    // A Meta só deixa responder até 24 h depois da última mensagem do cliente
-    const last = await prisma.message.findFirst({
-      where: { conversationId: conversation.id, direction: "INBOUND" },
-      orderBy: { createdAt: "desc" },
-      select: { createdAt: true },
-    });
-    if (!last || Date.now() - last.createdAt.getTime() > REPLY_WINDOW_MS) {
-      throw new BadRequestException("Passaram mais de 24 h desde a última mensagem do cliente: o Instagram não permite mais responder.");
-    }
-
-    let mid: string | undefined;
-    try {
-      mid = await this.instagram.sendText(channel, conversation.contact.externalId, text);
-    } catch (e: any) {
-      if (e instanceof InstagramApiError) throw new BadRequestException(`Instagram recusou o envio: ${e.message}`);
-      throw e;
-    }
-    await this.inbox.recordOutbound(workspaceId, conversation.id, text, mid, req.user.id);
-    return { ok: true, id: mid };
-  }
-
-  // ─── Webhook público do Instagram (Meta → openclaw) ────────────
-
-  /** Verificação inicial: a Meta manda hub.challenge e espera receber o mesmo valor de volta. */
-  @Get("webhooks/instagram")
-  instagramVerify(@Query("hub.mode") mode: string, @Query("hub.verify_token") token: string, @Query("hub.challenge") challenge: string) {
-    const expected = this.instagram.verifyToken;
-    const a = Buffer.from(token ?? "");
-    const b = Buffer.from(expected);
-    if (mode !== "subscribe" || !expected || a.length !== b.length || !timingSafeEqual(a, b)) throw new ForbiddenException("verify token inválido");
-    return challenge;
-  }
-
-  /** Confere a assinatura, grava na fila e responde: o processamento acontece no InboundService. */
-  @Post("webhooks/instagram")
-  @HttpCode(200)
-  async instagramWebhook(@Req() req: RawBodyRequest<any>, @Body() body: any, @Headers("x-hub-signature-256") signature?: string) {
-    if (!this.instagram.verifySignature(req.rawBody, signature)) throw new ForbiddenException("assinatura inválida");
-    const queued = await this.inbound.enqueueInstagram(body);
-    if (queued) this.logger.log(`Webhook do Instagram enfileirado: ${queued} mensagem(ns)`);
-    return { ok: true };
   }
 
   // ─── Webhook público (Evolution API → openclaw) ────────────────

@@ -34,8 +34,6 @@ export interface IncomingMessage {
   workspaceId: string;
   externalId: string;
   from: string;
-  /** Canais sem telefone (Instagram): id do remetente no canal; o contato é achado por ele em vez do telefone */
-  externalContactId?: string;
   /** Nome exibido pelo remetente (pushName no WhatsApp) */
   name?: string;
   body: string;

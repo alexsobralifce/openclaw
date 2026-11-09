@@ -5,7 +5,7 @@ import Link from "next/link";
 import { api } from "@/lib/api";
 import { useInboxSocket } from "@/hooks/useInboxSocket";
 
-const CHANNEL_ICON: Record<string, string> = { WHATSAPP: "🟢", INSTAGRAM: "🟣", FACEBOOK: "🔵", EMAIL: "📧", WEBCHAT: "💬" };
+const CHANNEL_ICON: Record<string, string> = { WHATSAPP: "🟢", FACEBOOK: "🔵", EMAIL: "📧", WEBCHAT: "💬" };
 const STATUS_COLOR: Record<string, string> = { OPEN: "bg-violet-500", PENDING: "bg-amber-500", RESOLVED: "bg-gray-600" };
 const STATUS_LABEL: Record<string, string> = { OPEN: "Aberto", PENDING: "Pendente", RESOLVED: "Resolvido" };
 

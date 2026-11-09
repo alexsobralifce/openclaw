@@ -87,11 +87,7 @@ export function ConversationPanel({ conversationId }: Props) {
     setMessages((prev) => [...prev, optimistic]);
     setText("");
     try {
-      if (data.channel.type === "INSTAGRAM") {
-        await api.channels.sendInstagram(data.channel.id, body, conversationId);
-      } else {
-        await api.channels.sendWhatsapp(data.channel.id, data.contact.phone, body, conversationId);
-      }
+      await api.channels.sendWhatsapp(data.channel.id, data.contact.phone, body, conversationId);
     } catch (e: any) {
       setSendError(e?.message ?? "Não foi possível enviar a mensagem");
       setMessages((prev) => prev.filter((m) => m.id !== optimisticId));
