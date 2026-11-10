@@ -1,0 +1,75 @@
+# Deploy do OpenClaw numa VM e2-micro do Google Cloud (1 GB de RAM + 2 GB de swap).
+# Sem Redis: o Postgres guarda estado, filas e cache (ver CLAUDE.md).
+# Limites de memória calibrados para caber em 1 GB com folga para o sistema.
+
+services:
+  postgres:
+    image: postgres:18-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: openclaw
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?defina POSTGRES_PASSWORD no .env}
+      POSTGRES_DB: openclaw
+    volumes:
+      # A partir do Postgres 18 a imagem espera o volume no diretório pai (ela cria a
+      # subpasta sozinha, para o pg_upgrade funcionar); montar em /data direto não inicia.
+      - postgres_data:/var/lib/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U openclaw"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    deploy:
+      resources:
+        limits:
+          memory: 300M
+
+  api:
+    image: us-central1-docker.pkg.dev/valued-night-509616-b7/openclaw/api:latest
+    restart: unless-stopped
+    env_file: .env
+    depends_on:
+      postgres:
+        condition: service_healthy
+    expose:
+      - "3001"
+    deploy:
+      resources:
+        limits:
+          memory: 400M
+
+  web:
+    image: us-central1-docker.pkg.dev/valued-night-509616-b7/openclaw/web:latest
+    restart: unless-stopped
+    expose:
+      - "3000"
+    depends_on:
+      - api
+    deploy:
+      resources:
+        limits:
+          memory: 300M
+
+  # HTTPS automático (Let's Encrypt). Precisa das portas 80 e 443 abertas e do DNS apontado.
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      - api
+      - web
+    deploy:
+      resources:
+        limits:
+          memory: 100M
+
+volumes:
+  postgres_data:
+  caddy_data:
+  caddy_config:

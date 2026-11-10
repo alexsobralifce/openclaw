@@ -1,0 +1,44 @@
+# Constrói as imagens no Cloud Build (máquinas rápidas) em vez da e2-micro,
+# onde o `pnpm install` levava mais de 20 minutos e falhava por timeout de rede.
+# A VM só baixa a imagem pronta do Artifact Registry.
+#
+#   gcloud builds submit --region=us-central1 --config=cloudbuild.yaml \
+#     --substitutions=_API_URL=http://34.133.1.75,_SITE_URL=http://34.133.1.75 .
+#
+# _API_URL é só a ORIGEM: o front monta `${API}/api/v1${path}` por conta própria.
+
+substitutions:
+  _API_URL: http://34.133.1.75
+  _SITE_URL: http://34.133.1.75
+
+options:
+  # A cota do projeto não libera máquinas high-CPU nesta região; a padrão já
+  # resolve, porque o gargalo na VM era a rede, não a CPU.
+  logging: CLOUD_LOGGING_ONLY
+
+timeout: 2400s
+
+steps:
+  - id: api
+    name: gcr.io/cloud-builders/docker
+    env: ["DOCKER_BUILDKIT=1"]
+    args: ["build", "-f", "Dockerfile.api", "-t", "us-central1-docker.pkg.dev/$PROJECT_ID/openclaw/api:latest", "."]
+
+  - id: web
+    name: gcr.io/cloud-builders/docker
+    env: ["DOCKER_BUILDKIT=1"]
+    args:
+      - build
+      - -f
+      - Dockerfile.web
+      - --build-arg
+      - NEXT_PUBLIC_API_URL=${_API_URL}
+      - --build-arg
+      - NEXT_PUBLIC_SITE_URL=${_SITE_URL}
+      - -t
+      - us-central1-docker.pkg.dev/$PROJECT_ID/openclaw/web:latest
+      - .
+
+images:
+  - us-central1-docker.pkg.dev/$PROJECT_ID/openclaw/api:latest
+  - us-central1-docker.pkg.dev/$PROJECT_ID/openclaw/web:latest

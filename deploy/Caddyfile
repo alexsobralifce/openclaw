@@ -1,0 +1,32 @@
+# Mesma origem para front e API: evita bloqueio de conteúdo misto no navegador
+# e dispensa CORS. O HTTPS entra sozinho quando o DNS apontar para a VM.
+
+api.magobox.com.br {
+	reverse_proxy api:3001
+	encode zstd gzip
+}
+
+(roteamento) {
+	handle /api/* {
+		reverse_proxy api:3001
+	}
+	handle /socket.io/* {
+		reverse_proxy api:3001
+	}
+	handle /chat/* {
+		reverse_proxy api:3001
+	}
+	handle {
+		reverse_proxy web:3000
+	}
+	encode zstd gzip
+}
+
+www.magobox.com.br, app.magobox.com.br {
+	import roteamento
+}
+
+# Acesso por IP, sem HTTPS: para testar antes de o DNS apontar.
+:80 {
+	import roteamento
+}
